@@ -238,10 +238,38 @@ t7_wait:
 
         ld      hl, msg_t7ok
         call    print
-        jr      done
+        jr      t8
 
 t7_fail:
         ld      hl, msg_t7ng
+        call    print
+        jr      t8
+
+; --- 8. DCSG: the enabler gates the direct port, the tunnel ignores it
+;
+; Nothing here can be read back - the chip is write only - so the checks are
+; made by a probe placed in the DCSG block. The values are distinct so the
+; log shows which write arrived.
+t8:
+        ld      a, 080h                 ; timer on, both DCSG closed
+        ld      (07fffh), a
+        ld      a, 011h
+        out     (03eh), a               ; must not arrive
+
+        ld      a, 084h                 ; timer + DCSG0 (bit 2)
+        ld      (07fffh), a
+        ld      a, 022h
+        out     (03eh), a               ; must arrive on channel 0
+
+        ld      a, 033h
+        out     (03fh), a               ; DCSG1 still closed, must not arrive
+
+        ld      a, 044h
+        ld      (07ff1h), a             ; tunnel to DCSG0, never gated
+        ld      a, 055h
+        ld      (07ff0h), a             ; tunnel to DCSG1, never gated
+
+        ld      hl, msg_t8
         call    print
 
 ; The memory mapped window is not tested here.
@@ -302,3 +330,5 @@ msg_t7ok:
         db      "7 TIMER FLAG: OK", 13, 10, 0
 msg_t7ng:
         db      "7 TIMER FLAG: NG", 13, 10, 0
+msg_t8:
+        db      "8 DCSG SWEPT (SEE PROBE)", 13, 10, 0
