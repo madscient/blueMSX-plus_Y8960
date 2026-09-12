@@ -34,6 +34,7 @@ Y8960 を駆動するファームウェア（madscient/MsxSoundSuiteExtension）
 | §6 SSG の LED が「1Fh の下位 4bit」 | **SSG2 の `2Fh` の下位 4bit** |
 | §8「BIOS ROM イメージが存在しない」 | **`y8960bas.rom` (128KB) が実在する**（Y8960_Cartridge には無い、という意味では今も正しい） |
 | クロックの記載が無い | **SSGS 1.7897725MHz、他 3.579545MHz** |
+| §3 MMIO 窓の条件が `memory_io_en = ~rammode` | **BANK1 に ROM バンクが出ているときだけ表に出る。RAM バンクまたは SCC のときは隠れる** |
 
 ---
 
