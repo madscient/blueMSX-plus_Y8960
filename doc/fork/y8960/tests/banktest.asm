@@ -131,6 +131,15 @@ t4_fail:
         ld      hl, msg_t4ng
         call    print
 
+; The memory mapped window is not tested here.
+;
+; Whether it is present cannot be told apart from the outside. When BANK1
+; holds a RAM bank the window is gone and the page is writable, so writes go
+; straight to RAM without the mapper ever being asked; when it holds a ROM
+; bank the window is there but the write would be refused anyway, for being
+; ROM. Both readings look identical. Confirming the window needs a block that
+; reacts to its enabler being opened.
+
 ; Regions 2 and 3 are not tested here.
 ;
 ; A cartridge's init entry runs with page 1 (4000-7FFF) switched to the

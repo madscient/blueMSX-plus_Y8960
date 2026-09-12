@@ -53,7 +53,35 @@ typedef struct {
     ** 3Fh selects the SCC window instead of a bank. */
     UInt8  bankReg[Y8960_REGIONS];
     UInt8  ramMode;
+    UInt8  ioEnable1;
+    UInt8  ioEnable2;
 } RomMapperY8960Scc;
+
+/* The window is the only way to reach the enablers, and the cartridge is a
+** single card, so the other blocks find it through here. */
+static RomMapperY8960Scc* theY8960Scc = NULL;
+
+int y8960IoEnabled(Y8960IoBlock block)
+{
+    RomMapperY8960Scc* rm = theY8960Scc;
+
+    if (rm == NULL) {
+        return 0;
+    }
+
+    switch (block) {
+    case Y8960_IO_OPLL0: return (rm->ioEnable1 & 0x01) != 0;
+    case Y8960_IO_OPLL1: return (rm->ioEnable1 & 0x02) != 0;
+    case Y8960_IO_OPL20: return (rm->ioEnable2 & 0x01) != 0;
+    case Y8960_IO_OPL21: return (rm->ioEnable2 & 0x02) != 0;
+    case Y8960_IO_DCSG0: return (rm->ioEnable2 & 0x04) != 0;
+    case Y8960_IO_DCSG1: return (rm->ioEnable2 & 0x08) != 0;
+    case Y8960_IO_SSGS:  return (rm->ioEnable2 & 0x10) != 0;
+    case Y8960_IO_TIMER: return (rm->ioEnable2 & 0x80) != 0;
+    }
+
+    return 0;
+}
 
 /* A region shows the SCC registers instead of a bank when its own bank
 ** register holds 3Fh. In RAM mode region 0 is excluded, because that is
@@ -65,6 +93,18 @@ static int sccVisible(RomMapperY8960Scc* rm, int region)
     }
 
     return !(rm->ramMode && region == 0);
+}
+
+/* The window at 7FE0-7FFF lies inside the SCC window at 7800-7FFF, so the two
+** never overlap partially: either BANK1 shows a ROM bank and the window is
+** there, or it does not and the window is gone along with the enablers. */
+static int mmioVisible(RomMapperY8960Scc* rm)
+{
+    if (sccVisible(rm, 1)) {
+        return 0;
+    }
+
+    return (rm->bankReg[1] & 0x1F) < Y8960_ROM_BANKS;
 }
 
 static void bankSwitch(RomMapperY8960Scc* rm, int region)
@@ -94,7 +134,9 @@ static void reset(RomMapperY8960Scc* rm)
 {
     int region;
 
-    rm->ramMode = 0;
+    rm->ramMode   = 0;
+    rm->ioEnable1 = 0;
+    rm->ioEnable2 = 0;
     for (region = 0; region < Y8960_REGIONS; region++) {
         rm->bankReg[region] = (UInt8)region;
     }
@@ -112,6 +154,8 @@ static void saveState(RomMapperY8960Scc* rm)
     saveStateSet(state, "bankReg1", rm->bankReg[1]);
     saveStateSet(state, "bankReg2", rm->bankReg[2]);
     saveStateSet(state, "bankReg3", rm->bankReg[3]);
+    saveStateSet(state, "ioEnable1", rm->ioEnable1);
+    saveStateSet(state, "ioEnable2", rm->ioEnable2);
     saveStateSetBuffer(state, "ram", rm->memory + Y8960_ROM_BANKS * Y8960_BANK_SIZE,
                        (Y8960_BANKS - Y8960_ROM_BANKS) * Y8960_BANK_SIZE);
 
@@ -129,6 +173,8 @@ static void loadState(RomMapperY8960Scc* rm)
     rm->bankReg[1]  = (UInt8)saveStateGet(state, "bankReg1", 1);
     rm->bankReg[2]  = (UInt8)saveStateGet(state, "bankReg2", 2);
     rm->bankReg[3]  = (UInt8)saveStateGet(state, "bankReg3", 3);
+    rm->ioEnable1   = (UInt8)saveStateGet(state, "ioEnable1", 0);
+    rm->ioEnable2   = (UInt8)saveStateGet(state, "ioEnable2", 0);
     saveStateGetBuffer(state, "ram", rm->memory + Y8960_ROM_BANKS * Y8960_BANK_SIZE,
                        (Y8960_BANKS - Y8960_ROM_BANKS) * Y8960_BANK_SIZE);
 
@@ -146,6 +192,8 @@ static void destroy(RomMapperY8960Scc* rm)
 
     free(rm->memory);
     free(rm);
+
+    theY8960Scc = NULL;
 }
 
 static void setBank(RomMapperY8960Scc* rm, int region, UInt8 value)
@@ -196,6 +244,22 @@ static void write(RomMapperY8960Scc* rm, UInt16 address, UInt8 value)
 
     if ((address & 0x1800) == 0x1800 && sccVisible(rm, region)) {
         sccWrite(rm->scc, (UInt8)(address & 0xFF), value);
+        return;
+    }
+
+    /* 7FE0-7FFF: the enablers, and the tunnels to the other blocks. */
+    if (region == 1 && (address & 0x1FE0) == 0x1FE0 && mmioVisible(rm)) {
+        switch (address & 0x1F) {
+        case 0x16:
+            rm->ioEnable1 = value;
+            break;
+        case 0x1F:
+            rm->ioEnable2 = value;
+            break;
+        default:
+            /* 7FEA-7FF5 tunnel into the sound blocks; not wired up yet. */
+            break;
+        }
         return;
     }
 
@@ -254,6 +318,8 @@ int romMapperY8960SccCreate(const char* filename, UInt8* romData,
         }
         memcpy(rm->memory, romData, romSize);
     }
+
+    theY8960Scc = rm;
 
     reset(rm);
 

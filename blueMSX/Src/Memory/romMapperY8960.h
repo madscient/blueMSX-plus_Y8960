@@ -26,6 +26,27 @@
 
 #include "MsxTypes.h"
 
+/* The I/O enablers sit in the memory mapped window, which belongs to the SCC
+** block. Every other block asks whether its own ports are open before
+** answering, the way Panasonic's FM-PAC does.
+**
+** Reset leaves all of them closed. The cartridge has no direct I/O port for
+** the enablers, so software has to reach them through the window. */
+typedef enum {
+    Y8960_IO_OPLL0,     /* 7CH-7DH, enabler 1 bit 0 */
+    Y8960_IO_OPLL1,     /* 7AH-7BH, enabler 1 bit 1 */
+    Y8960_IO_OPL20,     /* C0H-C1H, enabler 2 bit 0 */
+    Y8960_IO_OPL21,     /* C2H-C3H, enabler 2 bit 1 */
+    Y8960_IO_DCSG0,     /* 3EH,     enabler 2 bit 2 */
+    Y8960_IO_DCSG1,     /* 3FH,     enabler 2 bit 3 */
+    Y8960_IO_SSGS,      /* A0H-A2H, enabler 2 bit 4 */
+    Y8960_IO_TIMER      /* B0H-B3H, enabler 2 bit 7 */
+} Y8960IoBlock;
+
+/* Zero when the SCC block is absent, so a block placed on its own in a
+** machine configuration stays silent rather than answering unconditionally. */
+int y8960IoEnabled(Y8960IoBlock block);
+
 /* One block per RomType, so a machine configuration can carry them
 ** independently while the cartridge hardware is still being designed. */
 int romMapperY8960OpllexCreate(void);
