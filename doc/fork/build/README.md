@@ -72,6 +72,21 @@ Configuration は `Debug` / `Release` / `Final` の 3 つ、Platform は `x64` /
 `tail` のものになるので、ビルドが失敗しても後続の `&&` が通ってしまう。
 ログはファイルにリダイレクトして、終了コードを直接見る。
 
+### ビルドは追跡ファイルを 2 本書き換える
+
+`blueMSX/Src/BuildInfo/build_info.txt` と `build_number.h` は**ビルドのたびに
+番号が上がり、`build_number.h` には日時が焼かれる**。どちらも追跡されており、
+上流ではリリース時にしか動かない。
+
+**コミットの前に戻す。**
+
+```sh
+git checkout -- blueMSX/Src/BuildInfo/build_info.txt blueMSX/Src/BuildInfo/build_number.h
+```
+
+放っておくと、上流と衝突する差分とローカルのビルド時刻が成果物に混ざる。
+`git add -A` を使うなら特に効く。
+
 ### 出力先
 
 | | |
