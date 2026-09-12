@@ -208,6 +208,15 @@ Y8960 の実装で上流のファイルに手が入ることが分かってい�
 `SoundChips/AudioMixer.h`、`Win32/Win32machineConfig.c`、
 ビルド定義 3 系統。一覧と内容は `y8960/implementation-plan.md` の Phase 0。
 
+**上流の修正を 1 本取り込んだ**（2026-09-12）。`AY8910.c` の PSG
+アドレスデコード修正（上流 `be45fc46`、PR #75）。`git cherry-pick -x` で
+元のコミットへの参照を残してある。
+
+**上流の枝を先に見る。** 本フォークの分岐点は上流 `develop` より古く、
+**直したい不具合が上流で既に直っていることがある**
+（`git merge-base --is-ancestor <修正> <ref>` で ref ごとに確かめられる）。
+自分で直す前に 1 度見る。
+
 **`MSX2++` の機種を足すのに 6 本触った**（2026-09-12）。
 `Board/Machine.{h,c}`、`Board/Board.c`、`Board/MSX.c`、
 `SoundChips/MsxPsg.{h,c}`、`Win32/Win32machineConfig.c`。
