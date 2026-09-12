@@ -28,6 +28,11 @@ OPL20D  equ     0c1h            ; OPL2 circuit 1: data
 OPL21A  equ     0c2h            ; OPL2 circuit 2
 OPL21D  equ     0c3h
 
+TUNGA   equ     07feah          ; tunnel to the SSGS, register
+TUNGD   equ     07febh          ; tunnel to the SSGS, value
+SSGSA   equ     0a0h            ; SSGS register select; the machine's PSG too
+SSGSD   equ     0a1h            ; SSGS data; likewise
+
         org     04000h
 
         db      "AB"
@@ -480,6 +485,70 @@ t11:
         ld      hl, opl2_off
         call    sendt
 
+; --- 12. SSGS: the pan pot is the part the machine's PSG cannot copy
+;
+; A0h and A1h belong to the machine's own PSG as well, and it masks the
+; register number to four bits, so anything written there lands on both chips.
+; The tunnel at 7FEAh reaches only the Y8960, so the tone is set up through it
+; and the machine's PSG stays silent throughout.
+;
+; That makes panning the proof of which chip is sounding: the machine's PSG
+; has no pan pot, so a tone that moves is the Y8960's.
+t12:
+        ld      hl, msg_t12
+        call    print
+
+; A: a tone on the second core, centred, entirely through the tunnel
+        ld      hl, msg_t12a
+        call    print
+        ld      a, 010h                 ; enabler 2 bit 4 = SSGS
+        ld      (ENA2), a
+        ld      hl, ssgs_tone2
+        call    sendg
+        call    delay
+
+; B: hard left, still through the tunnel
+        ld      hl, msg_t12b
+        call    print
+        ld      hl, ssgs_left2
+        call    sendg
+        call    delay
+
+; C: the gate shut, the same kind of write on the direct port
+;
+; The pan register number is 30h, which the machine's PSG reads as its own
+; register 0; that chip is silent, so nothing is heard from it either way.
+        ld      hl, msg_t12c
+        call    print
+        xor     a
+        ld      (ENA2), a
+        ld      a, 030h
+        out     (SSGSA), a
+        ld      a, 00fh                 ; hard right, if it arrives
+        out     (SSGSD), a
+        call    delay
+
+; D: the gate open, the same write
+        ld      hl, msg_t12d
+        call    print
+        ld      a, 010h
+        ld      (ENA2), a
+        ld      a, 030h
+        out     (SSGSA), a
+        ld      a, 00fh
+        out     (SSGSD), a
+        call    delay
+
+; E: both cores at once, on opposite sides
+        ld      hl, msg_t12e
+        call    print
+        ld      hl, ssgs_tone1
+        call    sendg
+        call    delay
+
+        ld      hl, ssgs_off
+        call    sendg
+
 ; Regions 2 and 3 are not tested here.
 ;
 ; A cartridge's init entry runs with page 1 (4000-7FFF) switched to the
@@ -529,6 +598,47 @@ opl2_half:
 opl2_off:
         db      0b0h, 011h
         db      0ffh
+
+; --- register lists for the SSGS, sent through its tunnel
+;
+; The second core sits at 20h and up, the first at 00h. Channel A only, full
+; volume, tone on and everything else off.
+ssgs_tone2:
+        db      020h, 040h              ; second core, channel A period
+        db      021h, 000h
+        db      027h, 03eh              ; channel A tone on
+        db      028h, 00fh              ; full volume
+        db      030h, 008h              ; pan centre
+        db      0ffh
+
+ssgs_left2:
+        db      030h, 000h              ; second core, channel A hard left
+        db      0ffh
+
+ssgs_tone1:
+        db      000h, 060h              ; first core, a different pitch
+        db      001h, 000h
+        db      007h, 03eh
+        db      008h, 00fh
+        db      010h, 000h              ; first core hard left
+        db      030h, 00fh              ; second core hard right
+        db      0ffh
+
+ssgs_off:
+        db      008h, 000h
+        db      028h, 000h
+        db      0ffh
+
+sendg:
+        ld      a, (hl)
+        cp      0ffh
+        ret     z
+        ld      (TUNGA), a
+        inc     hl
+        ld      a, (hl)
+        ld      (TUNGD), a
+        inc     hl
+        jr      sendg
 
 ; HL -> a register list. The two ports of each circuit are adjacent, but the
 ; tunnel is written as memory, so the three cannot share one routine.
@@ -712,3 +822,15 @@ msg_t11c:
         db      " C 2ND CIRCUIT: TONE", 13, 10, 0
 msg_t11d:
         db      " D TUNNEL, SHUT: TONE", 13, 10, 0
+msg_t12:
+        db      "12 SSGS (LISTEN):", 13, 10, 0
+msg_t12a:
+        db      " A TUNNEL TONE: CENTRE", 13, 10, 0
+msg_t12b:
+        db      " B PAN 0: MOVES LEFT", 13, 10, 0
+msg_t12c:
+        db      " C SHUT, PAN F: NO MOVE", 13, 10, 0
+msg_t12d:
+        db      " D OPEN, PAN F: MOVES RIGHT", 13, 10, 0
+msg_t12e:
+        db      " E BOTH CORES: LEFT+RIGHT", 13, 10, 0

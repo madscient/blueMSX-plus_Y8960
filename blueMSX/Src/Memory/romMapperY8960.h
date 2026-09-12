@@ -31,7 +31,10 @@
 ** answering, the way Panasonic's FM-PAC does.
 **
 ** Reset leaves all of them closed. The cartridge has no direct I/O port for
-** the enablers, so software has to reach them through the window. */
+** the enablers, so software has to reach them through the window.
+**
+** A Y8960 built into a machine has neither window nor enablers, and every
+** block answers there without being opened. */
 typedef enum {
     Y8960_IO_OPLL0,     /* 7CH-7DH, enabler 1 bit 0 */
     Y8960_IO_OPLL1,     /* 7AH-7BH, enabler 1 bit 1 */
@@ -43,8 +46,9 @@ typedef enum {
     Y8960_IO_TIMER      /* B0H-B3H, enabler 2 bit 7 */
 } Y8960IoBlock;
 
-/* Zero when the SCC block is absent, so a block placed on its own in a
-** machine configuration stays silent rather than answering unconditionally. */
+/* True when the SCC block is absent: the enablers live in that block's window,
+** and a Y8960 built into a machine has no window, so every block answers
+** unconditionally there. */
 int y8960IoEnabled(Y8960IoBlock block);
 
 /* The window also tunnels writes straight into the sound blocks, at

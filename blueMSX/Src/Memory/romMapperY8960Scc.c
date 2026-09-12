@@ -97,8 +97,12 @@ int y8960IoEnabled(Y8960IoBlock block)
 {
     RomMapperY8960Scc* rm = theY8960Scc;
 
+    /* The enablers live in the memory mapped window, and a Y8960 built into a
+    ** machine has no window at all: there is nothing to gate with, so every
+    ** block answers. The SCC block is what carries the window, so its absence
+    ** is what that case looks like from here. */
     if (rm == NULL) {
-        return 0;
+        return 1;
     }
 
     switch (block) {
