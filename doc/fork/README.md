@@ -124,7 +124,10 @@ Y8960 の実装で上流のファイルに手が入ることが分かってい�
 `Src/Media/MediaDb.{h,cpp}`、`Src/Board/Machine.c`、
 `Src/SoundChips/AudioMixer.h`、`Src/Emulator/Properties.c`、
 `Src/Win32/Win32machineConfig.c`、ビルド定義 3 系統、`Src/SoundChips/SN76489.{c,h}`。
-`Src/Memory/IoPort.c` も入る可能性がある（implementation-plan §9.1）。
+**`Src/Memory/IoPort.{c,h}` は 2026-09-12 に実際に変更した**（1 ポートに
+複数デバイスを登録できるようにし、`ioPortUnregister` に `ref` を足した）。
+`ioPortUnregister` の呼び出し 200 箇所を持つ **53 ファイル**にも手が入っている。
+経緯は `y8960/implementation-plan.md` §4.2。
 
 ## ビルドと実行
 
