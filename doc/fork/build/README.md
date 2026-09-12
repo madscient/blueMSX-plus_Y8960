@@ -42,11 +42,15 @@ MSBUILD=$("$VSWHERE" -products '*' -version '[17.0,18.0)' \
           -requires Microsoft.Component.MSBuild \
           -find 'MSBuild/**/Bin/MSBuild.exe' | head -1)
 
+# スイッチはダッシュ形式で書く。Git Bash が `/nologo` をパスに変換する（§3.5）。
+# ログは作業ツリーの外へ。`.gitignore` は `*.log` を無視しないので、
+# 作業ツリーに落とすと未追跡ファイルとして残る。
+LOG="$TMPDIR/bluemsx-build.log"
 cd blueMSX/Make/msvc2022
-"$MSBUILD" blueMSX.sln /nologo /m \
-  '/t:blueMSX;TraceWindow;Trainer;SimpleDebugger' \
-  '/p:Configuration=Release;Platform=x64;BlueMsxPackUpx=false' \
-  /p:VcpkgEnabled=false > build.log
+"$MSBUILD" blueMSX.sln -nologo -m \
+  '-t:blueMSX;TraceWindow;Trainer;SimpleDebugger' \
+  '-p:Configuration=Release;Platform=x64;BlueMsxPackUpx=false' \
+  -p:VcpkgEnabled=false > "$LOG"
 ```
 
 **`-p:PlatformToolset` は渡していない。** `msvc2022` の vcxproj が v143 を
@@ -168,6 +172,41 @@ ls -la --time-style=full-iso blueMSX/Make/msvc2022/x64/Release/<file>.obj
 **判別力を確かめるために実装をわざと壊すときは、必ずこれを踏む。**
 壊す・戻すのどちらも `Copy-Item` でやりがちなので、
 **戻した後に「壊れたままの結果」が出たら、まず時刻を疑う。**
+
+### 3.5 Bash ツールから msbuild を呼ぶと `/nologo` がパスに化ける
+
+**症状**: `MSBUILD : error MSB1008: 1 つのプロジェクトのみを指定できます。`
+と出て、続けて `スイッチ: <Git のインストール先>/nologo` が表示される。
+
+**原因**: Git Bash (MSYS2) は `/` で始まる引数を Windows のパスだと見なして
+変換する。`/nologo` が Git のインストール先の下のパスになり、
+msbuild は 2 つ目のプロジェクト指定として受け取る。
+
+**対処**: ダッシュ形式で渡す。msbuild はどちらも受ける。
+
+```sh
+"$MSBUILD" blueMSX.sln -nologo -m \
+  '-t:blueMSX;TraceWindow;Trainer;SimpleDebugger' \
+  '-p:Configuration=Release;Platform=x64;BlueMsxPackUpx=false' \
+  -p:VcpkgEnabled=false > build.log
+```
+
+**PowerShell から呼ぶときはこの変換が無い**ので `/nologo` のままでよい。
+§2 のコマンドもダッシュ形式に直してある。
+
+### 3.6 `strings` がこの環境に無い
+
+`strings <exe> | grep -c <語>` は `command not found` を出したうえで
+**grep が 0 を返す**。「語が無かった」と見分けがつかない。
+
+**バイナリは `grep -a` で直接見る。**
+
+```sh
+grep -qa "y8960scc" x64/Release/blueMSX+.exe && echo FOUND
+```
+
+**ビルドが実際に効いているかの確認にこれを使う。** 実行ファイルの更新時刻だけでは
+リンクが走ったことしか分からない。
 
 ## 4. 動かす
 
