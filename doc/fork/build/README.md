@@ -351,6 +351,50 @@ BASIC からコマンドを打つ必要がある検証は、**人の手を借り
 `Src/SoundChips/AudioMixer.c:630`、UI からは `Src/Emulator/Actions.c:406`）。
 **コマンドラインから開始する手段は見当たらない。**
 
+### 5.1 画面に出た結果は自動で読める
+
+**スクリーンショットのコマンドラインオプションは無い**（**確認済み(読解)**:
+`Src/Emulator/CommandLine.c` の `cmdLineOptions`）。
+PowerShell から窓の矩形を取って画面を写す。
+
+```powershell
+$env:LIB = ""; $env:INCLUDE = ""   # §3.1。空でないと Add-Type が止まる
+Add-Type -AssemblyName System.Drawing
+$sig = @'
+[DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+public struct RECT { public int Left, Top, Right, Bottom; }
+'@
+Add-Type -MemberDefinition $sig -Name Win -Namespace Cap | Out-Null
+
+$p = Start-Process -FilePath "$dir\blueMSX+.exe" `
+     -ArgumentList '/machine','"<機種名>"' -WorkingDirectory $dir -PassThru
+while ($p.MainWindowHandle -eq 0) { Start-Sleep -Milliseconds 500; $p.Refresh() }
+Start-Sleep -Seconds 14        # 起動が終わるまで。速度 50% ならもっと要る
+
+$r = New-Object Cap.Win+RECT
+[void][Cap.Win]::GetWindowRect($p.MainWindowHandle, [ref]$r)
+$bmp = New-Object System.Drawing.Bitmap ($r.Right-$r.Left), ($r.Bottom-$r.Top)
+$g = [System.Drawing.Graphics]::FromImage($bmp)
+$g.CopyFromScreen($r.Left, $r.Top, 0, 0, $bmp.Size)
+$bmp.Save($shot, [System.Drawing.Imaging.ImageFormat]::Png)
+$g.Dispose(); $bmp.Dispose(); Stop-Process -Id $p.Id -Force
+```
+
+**`Add-Type` は `$env:LIB` が実在しないディレクトリを指していると止まる。**
+vcpkg のグローバル統合（§3.1）がそれを置いていく。空にしてから呼ぶ
+（**確認済み**: 空にしない実行が「`LIB 環境変数` で指定された無効な検索パス」で
+落ち、空にした実行が通った）。
+
+**`-PassThru` は型の配列を返す。** `$w::GetWindowRect` は
+`MethodNotFound` になる。`[Cap.Win]::` と型名で呼ぶこと。
+
+**他のウィンドウが重なっていると、その画素が写る**（**確認済み**:
+取得した画像の上部に別アプリが写り込んだ）。MSX の画面自体は読めたが、
+確実にするなら手前に出してから写す（**未検証**）。
+
+**これで自動で読めるのは「画面に出る結果」までである。**
+音は依然として人の耳が要る。MSX 側のキー操作も送れない（上記）。
+
 ## 6. 別のマシンで再開するとき
 
 §1 と §3 は**実際に踏んだことの記録**であって、どのマシンでも同じとは限らない。
