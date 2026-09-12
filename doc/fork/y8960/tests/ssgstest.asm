@@ -7,7 +7,7 @@
 ; Y8960's SSGS answers A0h-A2h. Checks 1 and 2 therefore fail on a machine
 ; where the SSGS is absent, and check 2 fails if the GPIO is not wired.
 ;
-; Checks 3 and 4 are for the ear, and 4 is for the eye as well.
+; Checks 3 and 4 are for the ear, 5 for the eye.
 
 CHPUT   equ     000a2h
 
@@ -103,8 +103,8 @@ t2_fail:
 
 ; --- 3. a tone through the ordinary PSG registers
 ;
-; The pan pots reset to 0, which the SSGS reads as hard left, so this comes
-; out of the left side only.
+; Nothing here writes a pan pot, which is how every tune written for a PSG
+; behaves. The pots reset to centre so that such a tune reaches both sides.
 t3:
         ld      hl, msg_t3
         call    print
@@ -128,14 +128,14 @@ t3:
 
         call    delay
 
-; --- 4. the same tone with the pan pots moved to centre
+; --- 4. the same tone sent hard over, to show the pot reaches the output
 t4:
         ld      hl, msg_t4
         call    print
 
         ld      a, 010h         ; channel A pan, first core
         out     (PSGADDR), a
-        ld      a, 008h         ; centre
+        xor     a               ; 0: hard left
         out     (PSGDATA), a
 
         call    delay
@@ -193,8 +193,8 @@ msg_t2ok:
 msg_t2ng:
         db      "2 GPIO ANSWERS: NG", 13, 10, 0
 msg_t3:
-        db      "3 TONE: EXPECT LEFT ONLY", 13, 10, 0
+        db      "3 TONE, NO PAN: EXPECT BOTH", 13, 10, 0
 msg_t4:
-        db      "4 PAN 8: EXPECT CENTRE", 13, 10, 0
+        db      "4 PAN 0: EXPECT LEFT ONLY", 13, 10, 0
 msg_t5:
         db      "5 KANA LED: EXPECT LIT", 13, 10, 0

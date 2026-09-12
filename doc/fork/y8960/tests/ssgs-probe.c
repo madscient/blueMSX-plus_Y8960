@@ -161,6 +161,24 @@ int main(void)
         }
     }
 
+    /* ---- reset leaves the pots at centre -------------------------------- */
+    {
+        /* Zero is hard left under this law, and on an MSX2++ this chip is the
+        ** machine's own PSG, so a tune that never writes a pot has to come out
+        ** of both sides. */
+        double lc, rc;
+
+        y8960SsgsReset(chip);
+        wr(chip, 0x00, 0x40);
+        wr(chip, 0x01, 0x00);
+        wr(chip, 0x07, 0x3E);
+        wr(chip, 0x08, 0x0F);       /* no pan written at all */
+        render(&lc, &rc);
+        printf("  untouched pots: L=%.1f R=%.1f\n", lc, rc);
+        check("a channel sounds on both sides until a pot is written",
+              lc > 1 && fabs(lc - rc) < 1e-9);
+    }
+
     /* ---- the second core is its own chip ------------------------------- */
     {
         double l1, r1;

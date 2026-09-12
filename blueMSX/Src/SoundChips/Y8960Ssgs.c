@@ -363,12 +363,13 @@ void y8960SsgsReset(Y8960SsgsChip* chip)
         for (i = 0; i < 14; i++) {
             updateRegister(chip, (UInt8)((core << 5) | i), 0);
         }
-        /* Pan resets to 0, which this law reads as hard left. The reset value
-        ** is not documented either; EPSGemuEngine leaves it at 0 and so does
-        ** this, on the reading that the register clears like the others.
-        ** Confirmed as the wanted behaviour on 2026-09-12. */
+        /* Centre, not the zero the other registers clear to. Nothing
+        ** documents the reset value, and zero is hard left under this law; on
+        ** an MSX2++ the SSGS is the machine's own PSG, so that would send
+        ** every tune written for a PSG to the left speaker alone.
+        ** Provisional until the hardware settles (2026-09-12 user decision). */
         for (i = Y8960_SSGS_PAN_FIRST; i <= Y8960_SSGS_PAN_LAST; i++) {
-            updateRegister(chip, (UInt8)((core << 5) | i), 0);
+            updateRegister(chip, (UInt8)((core << 5) | i), Y8960_SSGS_PAN_CENTER);
         }
 
         /* The GPIO is cleared the way the PSG this stands in for clears it, so
