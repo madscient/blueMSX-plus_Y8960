@@ -1296,11 +1296,6 @@ int machineInitialize(Machine* machine, UInt8** mainRam, UInt32* mainRamSize, UI
             continue;
         }
 
-        if (machine->slotInfo[i].romType == ROM_Y8960SCC) {
-            success &= romMapperY8960SccCreate();
-            continue;
-        }
-
         if (machine->slotInfo[i].romType == ROM_Y8960DCSG) {
             success &= romMapperY8960DcsgCreate();
             continue;
@@ -1771,6 +1766,10 @@ int machineInitialize(Machine* machine, UInt8** mainRam, UInt32* mainRamSize, UI
             success &= romMapperFMPACCreate(romName, buf, size, slot, subslot, startPage);
             break;
             
+        case ROM_Y8960SCC:
+            success &= romMapperY8960SccCreate(romName, buf, size, slot, subslot, startPage);
+            break;
+
         case ROM_MSXMUSIC:
             success &= romMapperMsxMusicCreate(romName, buf, size, slot, subslot, startPage);
             break;

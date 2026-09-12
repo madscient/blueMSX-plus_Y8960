@@ -40,11 +40,23 @@ Y8960 対応は upstream には存在しない、このフォーク固有の機�
 
 **テスト用マシン構成がある。** `tests/MSX2+ - C-BIOS + Y8960/` を
 ビルド出力の `Machines/` にコピーすると、7 ブロックを置いた構成で起動できる。
-C-BIOS MSX2+ に 7 行足しただけで、ROM は C-BIOS のものを相対パスで参照する。
+C-BIOS MSX2+ に 7 行足したもので、本体の ROM は C-BIOS のものを相対パスで参照する。
+
+**Y8960 SCC には `y8960bas.rom` が要る。** マッパーが ROM を伴うため、
+無いとこの構成は `/listmachines` に出ない。
+ROM は madscient/MsxSoundSuiteExtension から各自で用意し、**コピー先**の
+構成フォルダに置く。**リポジトリには置かないこと**（再配布に許諾が要る。
+`doc/fork/README.md` の「持ち込んではいけないもの」）。
 
 ```sh
-cp -r "doc/fork/y8960/tests/MSX2+ - C-BIOS + Y8960"       blueMSX/Make/msvc2022/x64/Release/Machines/
+DEST=blueMSX/Make/msvc2022/x64/Release/Machines
+cp -r "doc/fork/y8960/tests/MSX2+ - C-BIOS + Y8960" "$DEST/"
+cp "<y8960bas.rom のパス>" "$DEST/MSX2+ - C-BIOS + Y8960/"
 ```
+
+**起動すると C-BIOS が `Init ROM in slot: 1` を 2 回出す。**
+バンク0 と バンク1 の ROM ヘッダが両方見えている印で、
+マッパーが動いていることの最も手軽な確認になる。
 
 **自動で判定できるのはここまで**（`implementation-plan.md` §8）。
 

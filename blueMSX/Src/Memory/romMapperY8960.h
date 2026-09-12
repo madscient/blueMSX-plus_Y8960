@@ -24,6 +24,8 @@
 #ifndef ROM_MAPPER_Y8960_H
 #define ROM_MAPPER_Y8960_H
 
+#include "MsxTypes.h"
+
 /* One block per RomType, so a machine configuration can carry them
 ** independently while the cartridge hardware is still being designed. */
 int romMapperY8960OpllexCreate(void);
@@ -31,7 +33,10 @@ int romMapperY8960Opl2exCreate(void);
 int romMapperY8960SsgsCreate(void);
 int romMapperY8960TimerCreate(void);
 int romMapperY8960MixerCreate(void);
-int romMapperY8960SccCreate(void);
+/* The SCC block carries the cartridge ROM and the bank mapper, so unlike the
+** others it is created from the slot entry. */
+int romMapperY8960SccCreate(const char* filename, UInt8* romData,
+                            int size, int slot, int sslot, int startPage);
 int romMapperY8960DcsgCreate(void);
 
 #endif
