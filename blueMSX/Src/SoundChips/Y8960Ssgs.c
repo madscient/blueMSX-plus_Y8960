@@ -104,6 +104,12 @@ struct Y8960SsgsChip {
     Int32  handle;
     Int32  debugHandle;
 
+    /* Null on a cartridge, where the first core's 0Eh and 0Fh carry nothing. */
+    Y8960SsgsReadCb  ioPortReadCb;
+    Y8960SsgsReadCb  ioPortPollCb;
+    Y8960SsgsWriteCb ioPortWriteCb;
+    void*            ioPortRef;
+
     UInt8  address;
     UInt8  led;
 
@@ -207,7 +213,17 @@ static void updateRegister(Y8960SsgsChip* chip, UInt8 address, UInt8 data)
         return;
     }
 
-    /* 0Eh and 0Fh held the I/O ports of a YM2149; 13h-1Fh are undefined. */
+    /* 0Eh and 0Fh are the YM2149's I/O ports. They exist only while something
+    ** is wired to them, which is the case when the Y8960 is built into a
+    ** machine and stands in for its PSG. 13h-1Fh are undefined either way. */
+    if (sub == 0x0E || sub == 0x0F) {
+        if (core == 0 && chip->ioPortWriteCb != NULL) {
+            c->regs[sub] = data;
+            chip->ioPortWriteCb(chip->ioPortRef, (UInt16)(sub - 0x0E), data);
+        }
+        return;
+    }
+
     if (sub >= 14) {
         return;
     }
@@ -266,6 +282,51 @@ void y8960SsgsWriteData(Y8960SsgsChip* chip, UInt8 data)
     updateRegister(chip, chip->address, data);
 }
 
+/* Registers the chip does not have read as all ones rather than as zero: the
+** bus ANDs what every device drives, so ones are how a device says it is not
+** answering. The registers it does have read back what was written, as the
+** PSG this is built from does. */
+UInt8 y8960SsgsReadData(Y8960SsgsChip* chip)
+{
+    int core = Y8960_SSGS_CORE_OF(chip->address);
+    int sub  = Y8960_SSGS_SUB_OF(chip->address);
+
+    if (chip->address >= 0x40) {
+        return 0xFF;
+    }
+
+    if (sub == Y8960_SSGS_LED_REG && core == 1) {
+        return (UInt8)(0xF0 | chip->led);
+    }
+
+    if (sub == 0x0E || sub == 0x0F) {
+        if (core == 0 && chip->ioPortReadCb != NULL) {
+            chip->core[0].regs[sub] = chip->ioPortReadCb(chip->ioPortRef, (UInt16)(sub - 0x0E));
+            return chip->core[0].regs[sub];
+        }
+        return 0xFF;
+    }
+
+    if (sub < 14) {
+        return chip->core[core].regs[sub];
+    }
+
+    if (sub >= Y8960_SSGS_PAN_FIRST && sub <= Y8960_SSGS_PAN_LAST) {
+        return (UInt8)(0xF0 | chip->core[core].regs[sub]);
+    }
+
+    return 0xFF;
+}
+
+void y8960SsgsSetIoPort(Y8960SsgsChip* chip, Y8960SsgsReadCb readCb,
+                        Y8960SsgsReadCb pollCb, Y8960SsgsWriteCb writeCb, void* ref)
+{
+    chip->ioPortReadCb  = readCb;
+    chip->ioPortPollCb  = pollCb;
+    chip->ioPortWriteCb = writeCb;
+    chip->ioPortRef     = ref;
+}
+
 UInt8 y8960SsgsGetLed(Y8960SsgsChip* chip)
 {
     return chip->led;
@@ -304,10 +365,17 @@ void y8960SsgsReset(Y8960SsgsChip* chip)
         }
         /* Pan resets to 0, which this law reads as hard left. The reset value
         ** is not documented either; EPSGemuEngine leaves it at 0 and so does
-        ** this, on the reading that the register clears like the others. */
+        ** this, on the reading that the register clears like the others.
+        ** Confirmed as the wanted behaviour on 2026-09-12. */
         for (i = Y8960_SSGS_PAN_FIRST; i <= Y8960_SSGS_PAN_LAST; i++) {
             updateRegister(chip, (UInt8)((core << 5) | i), 0);
         }
+
+        /* The GPIO is cleared the way the PSG this stands in for clears it, so
+        ** that whatever hangs off it starts in the same state. It does nothing
+        ** when no GPIO is attached. */
+        updateRegister(chip, (UInt8)((core << 5) | 0x0E), 0);
+        updateRegister(chip, (UInt8)((core << 5) | 0x0F), 0);
     }
 }
 

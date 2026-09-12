@@ -38,15 +38,31 @@
 
 typedef struct Y8960SsgsChip Y8960SsgsChip;
 
+/* Same shape as the PSG's, so whatever wires the machine's joystick ports,
+** cassette and kana LED can drive this chip without knowing which it is. */
+typedef UInt8 (*Y8960SsgsReadCb)(void* ref, UInt16 port);
+typedef void  (*Y8960SsgsWriteCb)(void* ref, UInt16 port, UInt8 data);
+
 Y8960SsgsChip* y8960SsgsCreate(Mixer* mixer, const char* name);
 void y8960SsgsDestroy(Y8960SsgsChip* chip);
 
 void y8960SsgsReset(Y8960SsgsChip* chip);
 
-/* Write only: the cartridge does not drive a read port. The address covers
-** both cores, 00h-1Fh for the first and 20h-3Fh for the second. */
+/* The address covers both cores, 00h-1Fh for the first and 20h-3Fh for the
+** second. */
 void y8960SsgsWriteAddress(Y8960SsgsChip* chip, UInt8 address);
 void y8960SsgsWriteData(Y8960SsgsChip* chip, UInt8 data);
+
+/* Only a Y8960 built into a machine drives a read port; as a cartridge the
+** SSGS shares its addresses with the machine's own PSG, which drives it. The
+** block decides which of the two it is, not the chip. */
+UInt8 y8960SsgsReadData(Y8960SsgsChip* chip);
+
+/* Attaches a GPIO to the first core's 0Eh and 0Fh. A cartridge has none, and
+** those two registers then do nothing; a Y8960 built into a machine stands in
+** for the PSG and carries what the PSG's pins carry. */
+void y8960SsgsSetIoPort(Y8960SsgsChip* chip, Y8960SsgsReadCb readCb,
+                        Y8960SsgsReadCb pollCb, Y8960SsgsWriteCb writeCb, void* ref);
 
 /* The four LED bits the second core's 2Fh carries. Nothing drives them yet;
 ** they are kept so the debugger can show what software asked for. */
