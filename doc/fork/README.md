@@ -102,7 +102,8 @@ blueMSX+ 自身が [blueMSX](https://msxblue.com/bluemsx/) の非公式フォー
 上流の `IoPort` を直して解決済み。経緯は `y8960/implementation-plan.md` §4.2。
 
 詳細と残作業は `y8960/implementation-plan.md`。
-**着手の前に決めるべきことは同 §9。**
+**現在地・確かめずに残してあること・次の一手は同 §0。**
+着手の前に決めるべきことは同 §9。
 
 **ハードウェア仕様は `y8960/hardware-notes.md` だけを見ないこと。**
 写しより新しい情報が `y8960/implementation-plan.md` §3.3 にある。

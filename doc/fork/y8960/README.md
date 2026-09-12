@@ -3,9 +3,10 @@
 Y8960 カートリッジのエミュレーションを blueMSX+ に追加する作業のための文書。
 Y8960 対応は upstream には存在しない、このフォーク固有の機能である。
 
-作業時の規則とフォーク全体の事実関係は `doc/fork/README.md` にある
-（ルートの `CLAUDE.md` は追跡されないローカルファイルなので、
-残す規則はそちらに置かない）。
+作業時の規則は `doc/fork/ai/README.md`、フォーク全体の事実関係は
+`doc/fork/README.md` にある。**ルートの `CLAUDE.md` は索引だけ**で、
+規則の中身は置かない（追跡されてはいる。`.gitignore` が上流の除外を
+打ち消している）。
 
 ## 文書一覧
 
@@ -14,22 +15,34 @@ Y8960 対応は upstream には存在しない、このフォーク固有の機�
 | `README.md` (本書) | 文書の役割の記録・索引 |
 | `hardware-notes.md` | Y8960 ハードウェア仕様の調査結果。**madscient/openMSX_Y8960 からの写し**（情報リソース。blueMSX+ の成果物ではない） |
 | `implementation-plan.md` | blueMSX+ 側の実装計画・決定事項・実行経緯 |
-| `tests/MSX2+ - C-BIOS + Y8960/` | 7 ブロックを置いたテスト用マシン構成 |
+| `tests/MSX2+ - C-BIOS + Y8960/` | 7 ブロックを置いたテスト用マシン構成。**`y8960bas.rom` が要る** |
+| `tests/MSX2+ - C-BIOS + Y8960 (banktest)/` | 同じ構成で、Y8960 SCC に `banktest.rom` を載せたもの。**外部 ROM は要らない** |
+| `tests/banktest.asm` | バンクマッパーと MSX-TIMER の回帰テスト（MSX 側で走る） |
+| `tests/make-banktest.py` | 上を pasmo でアセンブルして ROM にする |
 
 `implementation-plan.md` が**作業計画と経緯を記録する文書**である。
 セッションをまたぐ引き継ぎ情報・見送った判断・訂正はすべてここに書く。
+**引き継ぎの入口は同 §0。**
 
 ## 状態（2026-09-12）
 
-**Phase 0 が完了した。** 7 ブロックが `RomType` を持ち、
-マシン構成に置いて起動できる（C-BIOS 0.29+ の起動を確認）。
-**中身はどれも空**で、I/O ポートも取らず音も出ない。
+**Phase 0 と Phase 1 が完了し、Phase 2 は DCSG まで進んだ。**
+
+| | |
+|---|---|
+| 中身が入っている | Y8960 SCC + バンクマッパー、I/O イネーブラ、MMIO 窓、トンネル、MSX-TIMER、DCSG ×2 |
+| 器だけ | OPLLEX、OPL2EX、SSGS、MSX-MIXER |
+
+**次の一手と、確かめずに残してあることは `implementation-plan.md` §0。**
+セッションをまたぐときはそこを最初に読む。残る未決は同 §9。
 
 前提として**上流の I/O ポートを重ね合わせ対応に直した**
 （`implementation-plan.md` §4.2）。書き込みが複数デバイスへ配られることは
 実測で確かめてある。
 
-**次は Phase 1**（SCC とマッパー、MSX-TIMER）。残る未決は同 §9。
+**カートリッジ内の音源ブロックは等価回路であって、本体のチップではない。**
+だから本体のコアを共有せず、フォークとして実装する
+（`Y8960Scc.c` / `Y8960Dcsg.c`。同 §11 の 2026-09-12 (10)）。
 
 **ハードウェア仕様は `hardware-notes.md` だけを見ないこと。**
 写しより新しい情報が `implementation-plan.md` §3.3 にある。Y8960 を駆動する
@@ -64,8 +77,10 @@ C-BIOS でも動く（ROM の init から走るため、スロット切り替え
 py "doc/fork/y8960/tests/make-banktest.py" <pasmo.exe> <出力先>/banktest.rom
 ```
 
-出来た ROM を `tests/MSX2+ - C-BIOS + Y8960 (banktest)/` の構成に置いて起動する。
-画面に 3 行出る。**どれか 1 つでも `NG` なら回帰している。**
+出来た ROM を `banktest.rom` という名前で、コピー先の
+`Machines/MSX2+ - C-BIOS + Y8960 (banktest)/` に置いて起動する
+（構成がその名前で参照している）。**この構成に `y8960bas.rom` は要らない。**
+画面に 7 行出る。**どれか 1 つでも `NG` なら回帰している。**
 
 ```
 1 ROM BANKS: OK
