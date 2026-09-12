@@ -72,6 +72,9 @@ py "doc/fork/y8960/tests/make-banktest.py" <pasmo.exe> <出力先>/banktest.rom
 2 RAM WRITE: OK
 3 ROM PROTECT: OK
 4 SCC WINDOW: OK
+5 TIMER ENABLER: OK
+6 TIMER COUNTS: OK
+7 TIMER FLAG: OK
 ```
 
 **BANK2 と BANK3 は試せない。** カートリッジの init はページ1

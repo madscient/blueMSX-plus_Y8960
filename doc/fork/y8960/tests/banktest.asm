@@ -125,7 +125,7 @@ t4:
 
         ld      hl, msg_t4ok
         call    print
-        jr      tunnels
+        jr      t5
 
 t4_fail:
         ld      hl, msg_t4ng
@@ -138,7 +138,6 @@ t4_fail:
 ; only be read off a probe placed in tunnelWrite. It is kept so the sweep is
 ; reproducible when a probe is needed. BANK1 holds a ROM bank at this point,
 ; so the window is open.
-tunnels:
         ld      hl, 07feah
         ld      b, 12
         ld      c, 0a0h
@@ -147,6 +146,103 @@ tun_loop:
         inc     hl
         inc     c
         djnz    tun_loop
+
+; --- 5. the timer answers only once its enabler is opened
+;
+; This is also the first check on the enablers themselves: nothing else so
+; far reacts to being enabled, so the window could not be told from the
+; outside. BANK1 holds a ROM bank here, so the window is present.
+t5:
+        in      a, (0b2h)               ; interrupt flags
+        cp      0ffh
+        jr      nz, t5_fail             ; closed: the port must not answer
+
+        ld      a, 080h
+        ld      (07fffh), a             ; enabler 2, bit 7 = MSX-TIMER
+        in      a, (0b2h)
+        cp      0ffh
+        jr      z, t5_fail              ; open: it must answer now
+
+        ld      hl, msg_t5ok
+        call    print
+        jr      t6
+
+t5_fail:
+        ld      hl, msg_t5ng
+        call    print
+
+; --- 6. the counter advances
+t6:
+        xor     a                       ; counter 0, register 0
+        out     (0b0h), a
+        ld      a, 001h                 ; repeat, resolution 0, no interrupt
+        out     (0b1h), a
+        ld      a, 001h                 ; register 1
+        out     (0b0h), a
+        ld      a, 0ffh                 ; terminal value 255
+        out     (0b1h), a
+        ld      a, 002h                 ; register 2
+        out     (0b0h), a
+        ld      a, 003h                 ; enable and clear
+        out     (0b1h), a
+
+        xor     a
+        out     (0b3h), a               ; select counter 0
+        in      a, (0b3h)
+        ld      c, a
+
+        ld      b, 0                    ; about 1ms, well short of a wrap
+t6_wait:
+        djnz    t6_wait
+
+        in      a, (0b3h)
+        cp      c
+        jr      z, t6_fail              ; it must have moved
+
+        ld      hl, msg_t6ok
+        call    print
+        jr      t7
+
+t6_fail:
+        ld      hl, msg_t6ng
+        call    print
+
+; --- 7. reaching the terminal value raises the flag
+t7:
+        xor     a
+        out     (0b0h), a
+        xor     a                       ; one shot, resolution 0
+        out     (0b1h), a
+        ld      a, 001h
+        out     (0b0h), a
+        ld      a, 004h                 ; terminal value 4, a few tens of us
+        out     (0b1h), a
+        ld      a, 002h
+        out     (0b0h), a
+        ld      a, 003h                 ; enable and clear
+        out     (0b1h), a
+
+        ld      b, 0
+t7_wait:
+        djnz    t7_wait
+
+        in      a, (0b2h)
+        and     001h
+        jr      z, t7_fail
+
+        ld      a, 001h                 ; clear it again
+        out     (0b2h), a
+        in      a, (0b2h)
+        and     001h
+        jr      nz, t7_fail
+
+        ld      hl, msg_t7ok
+        call    print
+        jr      done
+
+t7_fail:
+        ld      hl, msg_t7ng
+        call    print
 
 ; The memory mapped window is not tested here.
 ;
@@ -194,3 +290,15 @@ msg_t4ok:
         db      "4 SCC WINDOW: OK", 13, 10, 0
 msg_t4ng:
         db      "4 SCC WINDOW: NG", 13, 10, 0
+msg_t5ok:
+        db      "5 TIMER ENABLER: OK", 13, 10, 0
+msg_t5ng:
+        db      "5 TIMER ENABLER: NG", 13, 10, 0
+msg_t6ok:
+        db      "6 TIMER COUNTS: OK", 13, 10, 0
+msg_t6ng:
+        db      "6 TIMER COUNTS: NG", 13, 10, 0
+msg_t7ok:
+        db      "7 TIMER FLAG: OK", 13, 10, 0
+msg_t7ng:
+        db      "7 TIMER FLAG: NG", 13, 10, 0
