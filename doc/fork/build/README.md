@@ -159,6 +159,29 @@ cp -r "<インストール済み blueMSX+ の Machines>"/* "$DEST/Machines/"
 このマシンでは 253 機種のうち **96 機種**が通った（**確認済み**）。
 残りは ROM が揃っていない。
 
+### Y8960 のファームウェア ROM
+
+**Y8960 を駆動する拡張BASIC と BIOS が実在する。**
+madscient/MsxSoundSuiteExtension の `y8960bas.rom`、128KB。
+Y8960 SCC のマッパーが動けば、これを載せて起動できる
+（`../y8960/implementation-plan.md` §8.3）。
+
+**リポジトリに入れてはいけない。** 再配布には MSX ライセンシング
+コーポレーションの許諾が要る（`../README.md` の「持ち込んではいけないもの」）。
+実機の BIOS ROM と同じく、**gitignore 済みのビルド出力に置く**。
+
+置き場所はマシンごとに違うのでこの文書には書かない。
+マッパーを実装したら、カートリッジとして挿す形で使えるはず（**未検証** —
+`ROM_Y8960SCC` がまだ無い）。
+
+```sh
+blueMSX+.exe /rom1 "<y8960bas.rom のパス>" /romtype1 Y8960SCC
+```
+
+`/romtype1` が受けるのは `romTypeToShortString` が返す短縮名である
+（**確認済み(読解)**: `Src/Emulator/CommandLine.c` の `romTypeFromShortString`）。
+値は `../y8960/implementation-plan.md` §6.1。
+
 ### マシン構成は作業ツリーを直接指せる。ただし ROM は付いてこない
 
 `/machinedir` にパスを渡すと、コピーではなく**作業ツリーの

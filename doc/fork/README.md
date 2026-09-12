@@ -53,6 +53,9 @@ blueMSX+ 自身が [blueMSX](https://msxblue.com/bluemsx/) の非公式フォー
 詳細と残作業は `y8960/implementation-plan.md`。
 **着手の前に決めるべきことは同 §9。**
 
+**ハードウェア仕様は `y8960/hardware-notes.md` だけを見ないこと。**
+写しより新しい情報が `y8960/implementation-plan.md` §3.3 にある。
+
 ## ライセンスと帰属
 
 blueMSX+ 全体は **GPLv2**（ルートの `README.md` §License）。
@@ -63,6 +66,15 @@ blueMSX+ 全体は **GPLv2**（ルートの `README.md` §License）。
 そのライセンスは条項 3 で「書面による事前の許可なしに販売、および
 商業的な製品や活動に使用しないこと」を課しており、
 **非商用制限は GPL と両立しない**。コードもデータも取り込まない。
+
+**MsxSoundSuiteExtension の ROM イメージ**（`y8960bas.rom` など）。
+**再配布には MSX ライセンシングコーポレーションの許諾が別途必要**で、
+許諾されているのは個人利用に限られる。blueMSX+ は GPLv2 で配布されるので、
+同梱すれば配布物に再配布制限付きのバイナリが入ることになる。
+
+**どちらも、ローカルで検証に使うことは妨げられない。** 実機の BIOS ROM と
+同じく gitignore 済みのビルド出力に置く（`build/README.md` §4）。
+`ReleaseFiles/` の側には置かないこと。そちらは追跡され、配布物に入る。
 
 `y8960/hardware-notes.md` は**読解した事実の記述**であって、コードや文章の
 複製ではない。仕様を参照するのは構わないが、この線を越えない。
@@ -160,3 +172,4 @@ Y8960 の実装で上流のファイルに手が入ることが分かってい�
 | [madscient/openMSX_Y8960](https://github.com/madscient/openMSX_Y8960) | openMSX 側の Y8960 実装。全ブロック実装済み・実測済み。GPL-2.0 | **移植元**。設計判断と確定値の出所 |
 | [madscient/Y8960emu](https://github.com/madscient/Y8960emu) | OPLLEX / OPL2EX の別実装（ymfm ベース）。MIT | 設計の参照と挙動の突き合わせ用。コアは移植しない |
 | [madscient/EPSGemuEngine](https://github.com/madscient/EPSGemuEngine) | YMZ705/732/771 系 SSG の実装。MIT + BSD-3 | SSGS のレジスタ配置とパンポット則の出所 |
+| [madscient/MsxSoundSuiteExtension](https://github.com/madscient/MsxSoundSuiteExtension) | **Y8960 を駆動する拡張BASIC と BIOS**。開発中 | **ファームウェアが前提にしている仕様の出所。** `y8960bas.rom` は検証に使えるが、**ROM をリポジトリに入れてはいけない** |
