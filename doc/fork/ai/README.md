@@ -208,6 +208,21 @@ Y8960 の実装で上流のファイルに手が入ることが分かってい�
 `SoundChips/AudioMixer.h`、`Win32/Win32machineConfig.c`、
 ビルド定義 3 系統。一覧と内容は `y8960/implementation-plan.md` の Phase 0。
 
+**`MSX2++` の機種を足すのに 6 本触った**（2026-09-12）。
+`Board/Machine.{h,c}`、`Board/Board.c`、`Board/MSX.c`、
+`SoundChips/MsxPsg.{h,c}`、`Win32/Win32machineConfig.c`。
+内容は `y8960/implementation-plan.md` §9.9。
+
+#### 板種別を足したら、板種別を並べている箇所を全部数える
+
+**`Board.c` の生成分岐に足し忘れると、機種定義は読めるのに機種が作れない。**
+`config.ini` の読み書きだけ足しても `/listmachines` には出てしまうので、
+**一覧に出たことは動く証拠にならない。**
+
+足す前に `grep` で既存の板種別を 1 つ選び、**それが現れる場所を全部挙げる。**
+2026-09-12 の時点では読み書き・生成分岐・CPU フラグ・構成エディタの 4 種類、
+6 ファイルだった。
+
 ## ヒアドキュメントにバックスラッシュを書かない
 
 **この作業ツリーでは、Bash ツールのヒアドキュメントがバックスラッシュを
