@@ -16,6 +16,10 @@ REG_MOD equ     04ffbh          ; RAM mode register, visible in both modes
 REG_B1R equ     04ffdh          ; BANK1 register, RAM mode
 SCC_B1  equ     07800h          ; SCC window inside BANK1
 
+ENA1    equ     07ff6h          ; I/O enabler 1: b0 = OPLL1, b1 = OPLL2
+TUN0A   equ     07ff4h          ; tunnel to OPLL circuit 1, address
+TUN0D   equ     07ff5h          ; tunnel to OPLL circuit 1, data
+
         org     04000h
 
         db      "AB"
@@ -281,6 +285,71 @@ t8:
 ; ROM. Both readings look identical. Confirming the window needs a block that
 ; reacts to its enabler being opened.
 
+; --- 9. OPLLEX: five tones, judged by ear
+;
+; The block is write only, so none of this can be checked from the MSX side.
+; Each step names what should be heard before it plays, so a listener can say
+; which one was wrong. A and B differ only in the enabler, so hearing A means
+; the gate is not shut; hearing B and C alike means the bank register did
+; nothing.
+;
+; BANK1 still holds a ROM bank from test 4, so the window and the enablers
+; are reachable.
+t9:
+        ld      hl, msg_t9
+        call    print
+
+; A: enabler shut, so the direct ports must stay silent
+        ld      hl, msg_t9a
+        call    print
+        xor     a
+        ld      (ENA1), a
+        call    note0
+        call    delay
+        call    off0
+
+; B: the same note with 7Ch-7Dh opened
+        ld      hl, msg_t9b
+        call    print
+        ld      a, 001h
+        ld      (ENA1), a
+        call    note0
+        call    delay
+        call    off0
+
+; C: the same note taken out of bank 1 instead
+        ld      hl, msg_t9c
+        call    print
+        ld      a, 040h
+        out     (07ch), a
+        ld      a, 001h
+        out     (07dh), a
+        call    note0
+        call    delay
+        call    off0
+        ld      a, 040h
+        out     (07ch), a
+        xor     a
+        out     (07dh), a
+
+; D: the second circuit, on 7Ah-7Bh, with the first one shut
+        ld      hl, msg_t9d
+        call    print
+        ld      a, 002h
+        ld      (ENA1), a
+        call    note1
+        call    delay
+        call    off1
+
+; E: the tunnel, which the enabler does not gate
+        ld      hl, msg_t9e
+        call    print
+        xor     a
+        ld      (ENA1), a
+        call    notet
+        call    delay
+        call    offt
+
 ; Regions 2 and 3 are not tested here.
 ;
 ; A cartridge's init entry runs with page 1 (4000-7FFF) switched to the
@@ -290,6 +359,87 @@ t8:
 ; needs ENASLT first.
 
 done:
+        ret
+
+; One sustained note on channel 0: preset 1, full volume, block 4, F-number
+; 180h. Key-off keeps the block so only the key bit moves.
+note0:
+        ld      a, 030h
+        out     (07ch), a
+        ld      a, 010h
+        out     (07dh), a
+        ld      a, 010h
+        out     (07ch), a
+        ld      a, 080h
+        out     (07dh), a
+        ld      a, 020h
+        out     (07ch), a
+        ld      a, 019h
+        out     (07dh), a
+        ret
+
+off0:
+        ld      a, 020h
+        out     (07ch), a
+        ld      a, 009h
+        out     (07dh), a
+        ret
+
+note1:
+        ld      a, 030h
+        out     (07ah), a
+        ld      a, 010h
+        out     (07bh), a
+        ld      a, 010h
+        out     (07ah), a
+        ld      a, 080h
+        out     (07bh), a
+        ld      a, 020h
+        out     (07ah), a
+        ld      a, 019h
+        out     (07bh), a
+        ret
+
+off1:
+        ld      a, 020h
+        out     (07ah), a
+        ld      a, 009h
+        out     (07bh), a
+        ret
+
+notet:
+        ld      a, 030h
+        ld      (TUN0A), a
+        ld      a, 010h
+        ld      (TUN0D), a
+        ld      a, 010h
+        ld      (TUN0A), a
+        ld      a, 080h
+        ld      (TUN0D), a
+        ld      a, 020h
+        ld      (TUN0A), a
+        ld      a, 019h
+        ld      (TUN0D), a
+        ret
+
+offt:
+        ld      a, 020h
+        ld      (TUN0A), a
+        ld      a, 009h
+        ld      (TUN0D), a
+        ret
+
+; About a second, long enough to tell one tone from the next.
+delay:
+        ld      de, 1300
+d_outer:
+        ld      b, 0
+d_inner:
+        djnz    d_inner
+        dec     de
+        ld      a, d
+        or      e
+        jr      nz, d_outer
         ret
 
 print:
@@ -332,3 +482,15 @@ msg_t7ng:
         db      "7 TIMER FLAG: NG", 13, 10, 0
 msg_t8:
         db      "8 DCSG SWEPT (SEE PROBE)", 13, 10, 0
+msg_t9:
+        db      "9 OPLL (LISTEN):", 13, 10, 0
+msg_t9a:
+        db      " A SHUT: EXPECT SILENCE", 13, 10, 0
+msg_t9b:
+        db      " B 7CH OPEN: EXPECT TONE", 13, 10, 0
+msg_t9c:
+        db      " C BANK 1: OTHER TIMBRE", 13, 10, 0
+msg_t9d:
+        db      " D 7AH 2ND CIRCUIT: TONE", 13, 10, 0
+msg_t9e:
+        db      " E TUNNEL, SHUT: TONE", 13, 10, 0
