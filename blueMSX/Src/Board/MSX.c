@@ -252,12 +252,18 @@ int msxCreate(Machine* machine,
 
     success = machineInitialize(machine, &msxRam, &msxRamSize, &msxRamStart);
 
-    msxPsg = msxPsgCreate(machine->board.type == BOARD_MSX || 
-                          machine->board.type == BOARD_MSX_FORTE_II 
-                          ? PSGTYPE_AY8910 : PSGTYPE_YM2149,
-                          machine->audio.psgstereo,
-                          machine->audio.psgpan,
-                          machine->board.type == BOARD_MSX_FORTE_II ? 1 : 2);
+    /* MSX2++ has the Y8960 built in, and its SSGS is the machine's PSG. */
+    if (machine->board.type == BOARD_MSX2PP) {
+        msxPsg = msxPsgCreateY8960Ssgs(2);
+    }
+    else {
+        msxPsg = msxPsgCreate(machine->board.type == BOARD_MSX || 
+                              machine->board.type == BOARD_MSX_FORTE_II 
+                              ? PSGTYPE_AY8910 : PSGTYPE_YM2149,
+                              machine->audio.psgstereo,
+                              machine->audio.psgpan,
+                              machine->board.type == BOARD_MSX_FORTE_II ? 1 : 2);
+    }
 
     if (machine->board.type == BOARD_MSX_FORTE_II) {
         CoinDevice* coinDevice = coinDeviceCreate(msxPsg);

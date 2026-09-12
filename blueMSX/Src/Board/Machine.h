@@ -43,6 +43,8 @@ typedef enum {
     BOARD_MSX_S1985     = 0x0100 + 0x02,
     BOARD_MSX_T9769B    = 0x0100 + 0x03,
     BOARD_MSX_T9769C    = 0x0100 + 0x04,
+    /* MSX2++ builds the Y8960 in, so its SSGS takes the place of the PSG. */
+    BOARD_MSX2PP        = 0x0100 + 0x05,
     BOARD_SVI           = 0x0200 + 0x00,
     BOARD_COLECO        = 0x0300 + 0x00,
     BOARD_COLECOADAM    = 0x0300 + 0x01,

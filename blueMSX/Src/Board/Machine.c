@@ -261,6 +261,7 @@ static int readMachine(Machine* machine, const char* machineName, const char* fi
     else if (0 == strcmp(buffer, "MSX-S1985"))    machine->board.type = BOARD_MSX_S1985;
     else if (0 == strcmp(buffer, "MSX-T9769B"))   machine->board.type = BOARD_MSX_T9769B;
     else if (0 == strcmp(buffer, "MSX-T9769C"))   machine->board.type = BOARD_MSX_T9769C;
+    else if (0 == strcmp(buffer, "MSX2++"))       machine->board.type = BOARD_MSX2PP;
     else if (0 == strcmp(buffer, "MSX-ForteII"))  machine->board.type = BOARD_MSX_FORTE_II;
     else if (0 == strcmp(buffer, "SVI"))          machine->board.type = BOARD_SVI;
     else if (0 == strcmp(buffer, "ColecoVision")) machine->board.type = BOARD_COLECO;
@@ -526,6 +527,7 @@ void machineSave(Machine* machine)
     case BOARD_MSX_S1985:    iniFileWriteString(configIni, "Board", "type", "MSX-S1985"); break;
     case BOARD_MSX_T9769B:   iniFileWriteString(configIni, "Board", "type", "MSX-T9769B"); break;
     case BOARD_MSX_T9769C:   iniFileWriteString(configIni, "Board", "type", "MSX-T9769C"); break;
+    case BOARD_MSX2PP:       iniFileWriteString(configIni, "Board", "type", "MSX2++"); break;
     case BOARD_MSX_FORTE_II: iniFileWriteString(configIni, "Board", "type", "MSX-ForteII"); break;
     case BOARD_SVI:          iniFileWriteString(configIni, "Board", "type", "SVI"); break;
     case BOARD_COLECO:       iniFileWriteString(configIni, "Board", "type", "ColecoVision"); break;

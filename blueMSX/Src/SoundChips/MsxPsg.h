@@ -38,5 +38,12 @@ typedef UInt8 (*CassetteCb)(void*);
 void msxPsgRegisterCassetteRead(MsxPsg* msxPsg, CassetteCb cb, void* ref);
 MsxPsg* msxPsgCreate(PsgType type, int stereo, int* pan, int maxPorts);
 
+/* A machine with the Y8960 built in has no separate PSG: the cartridge's SSGS
+** takes its place, and its GPIO carries what the PSG's carries. The joystick
+** ports, the cassette and the kana LED are wired here exactly as they are for
+** the PSG, so there is one copy of that wiring rather than two. Panning is the
+** chip's own, so the stereo and pan arguments do not apply. */
+MsxPsg* msxPsgCreateY8960Ssgs(int maxPorts);
+
 #endif // MSX_PSG_H
 

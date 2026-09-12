@@ -1360,6 +1360,7 @@ int boardRun(Machine* machine,
     case BOARD_MSX_S1985:
     case BOARD_MSX_T9769B:
     case BOARD_MSX_T9769C:
+    case BOARD_MSX2PP:
     case BOARD_MSX_FORTE_II:
         success = msxCreate(machine, deviceInfo->video.vdpSyncMode, &boardInfo);
         break;

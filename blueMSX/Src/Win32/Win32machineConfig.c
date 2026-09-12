@@ -225,6 +225,9 @@ static void setBoardDropdown(HWND hDlg) {
     ComboAddStringU(GetDlgItem(hDlg, IDC_CONFBOARD), "SG-1000");
     ComboAddStringU(GetDlgItem(hDlg, IDC_CONFBOARD), "SC-3000");
     ComboAddStringU(GetDlgItem(hDlg, IDC_CONFBOARD), "SF-7000");
+    /* Appended rather than placed with the other MSX entries: the mapping
+    ** below is by position, so inserting would renumber the rest. */
+    ComboAddStringU(GetDlgItem(hDlg, IDC_CONFBOARD), "MSX2++");
 
     switch (machine->board.type) {
     default:
@@ -251,6 +254,10 @@ static void setBoardDropdown(HWND hDlg) {
     case BOARD_MSX_FORTE_II:
         SendDlgItemMessage(hDlg, IDC_CONFBOARD, CB_SETCURSEL, 5, 0);
         setSubSlotsEnable(hDlg, 0);
+        break;
+    case BOARD_MSX2PP:
+        SendDlgItemMessage(hDlg, IDC_CONFBOARD, CB_SETCURSEL, 12, 0);
+        setSubSlotsEnable(hDlg, 1);
         break;
     case BOARD_SVI:
         SendDlgItemMessage(hDlg, IDC_CONFBOARD, CB_SETCURSEL, 6, 0);
@@ -332,6 +339,10 @@ static int getBoardDropDown(HWND hDlg) {
     case 11:
         machine->board.type = BOARD_SF7000;
         setSubSlotsEnable(hDlg, 0);
+        break;
+    case 12:
+        machine->board.type = BOARD_MSX2PP;
+        setSubSlotsEnable(hDlg, 1);
         break;
     }
 

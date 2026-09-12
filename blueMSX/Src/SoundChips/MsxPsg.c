@@ -31,6 +31,8 @@
 #include "MsxPsg.h"
 #include "Board.h"
 #include "AY8910.h"
+#include "Y8960Ssgs.h"
+#include "IoPort.h"
 #include "JoystickPort.h"
 #include "SaveState.h"
 #include "DeviceManager.h"
@@ -53,7 +55,9 @@
 
 struct MsxPsg {
     int deviceHandle;
+    /* Exactly one of these is set. */
     AY8910* ay8910;
+    Y8960SsgsChip* ssgs;
     int currentPort;
     int maxPorts;
     CassetteCb casCb;
@@ -205,7 +209,12 @@ static void saveState(MsxPsg* msxPsg)
 	    msxPsg->devFun[1]->saveState(msxPsg->devFun[1]);
     }
 
-    ay8910SaveState(msxPsg->ay8910);
+    if (msxPsg->ssgs != NULL) {
+        y8960SsgsSaveState(msxPsg->ssgs);
+    }
+    else {
+        ay8910SaveState(msxPsg->ay8910);
+    }
 }
 
 static void loadState(MsxPsg* msxPsg)
@@ -224,7 +233,12 @@ static void loadState(MsxPsg* msxPsg)
 	    msxPsg->devFun[1]->loadState(msxPsg->devFun[1]);
     }
 
-    ay8910LoadState(msxPsg->ay8910);
+    if (msxPsg->ssgs != NULL) {
+        y8960SsgsLoadState(msxPsg->ssgs);
+    }
+    else {
+        ay8910LoadState(msxPsg->ay8910);
+    }
 }
 
 static void reset(MsxPsg* msxPsg)
@@ -242,13 +256,27 @@ static void reset(MsxPsg* msxPsg)
 	    msxPsg->devFun[1]->reset(msxPsg->devFun[1]);
     }
 
-    ay8910Reset(msxPsg->ay8910);
+    if (msxPsg->ssgs != NULL) {
+        y8960SsgsReset(msxPsg->ssgs);
+    }
+    else {
+        ay8910Reset(msxPsg->ay8910);
+    }
 }
 
 static void destroy(MsxPsg* msxPsg) 
 {
-    ay8910SetIoPort(msxPsg->ay8910, NULL, NULL, NULL, NULL);
-    ay8910Destroy(msxPsg->ay8910);
+    if (msxPsg->ssgs != NULL) {
+        ioPortUnregister(0xa0, msxPsg);
+        ioPortUnregister(0xa1, msxPsg);
+        ioPortUnregister(0xa2, msxPsg);
+        y8960SsgsSetIoPort(msxPsg->ssgs, NULL, NULL, NULL, NULL);
+        y8960SsgsDestroy(msxPsg->ssgs);
+    }
+    else {
+        ay8910SetIoPort(msxPsg->ay8910, NULL, NULL, NULL, NULL);
+        ay8910Destroy(msxPsg->ay8910);
+    }
     joystickPortUpdateHandlerUnregister();
     deviceManagerUnregister(msxPsg->deviceHandle);
     if (msxPsg->devFun[0] != NULL && msxPsg->devFun[0]->destroy != NULL) {
@@ -275,6 +303,45 @@ MsxPsg* msxPsgCreate(PsgType type, int stereo, int* pan, int maxPorts)
     msxPsg->maxPorts = maxPorts;
 
     ay8910SetIoPort(msxPsg->ay8910, read, peek, write, msxPsg);
+
+    joystickPortUpdateHandlerRegister(joystickPortHandler, msxPsg);
+
+    msxPsg->deviceHandle = deviceManagerRegister(ROM_UNKNOWN, &callbacks, msxPsg);
+
+    return msxPsg;
+}
+
+/* The SSGS does not claim its own addresses the way the AY8910 does, because
+** as a cartridge it is a slot device and the block there decides. Standing in
+** for the PSG, it takes the PSG's: A0h and A1h to write, A2h to read. */
+static void ssgsWriteAddress(MsxPsg* msxPsg, UInt16 ioPort, UInt8 value)
+{
+    y8960SsgsWriteAddress(msxPsg->ssgs, value);
+}
+
+static void ssgsWriteData(MsxPsg* msxPsg, UInt16 ioPort, UInt8 value)
+{
+    y8960SsgsWriteData(msxPsg->ssgs, value);
+}
+
+static UInt8 ssgsReadData(MsxPsg* msxPsg, UInt16 ioPort)
+{
+    return y8960SsgsReadData(msxPsg->ssgs);
+}
+
+MsxPsg* msxPsgCreateY8960Ssgs(int maxPorts)
+{
+    DeviceCallbacks callbacks = { destroy, reset, saveState, loadState };
+    MsxPsg* msxPsg = (MsxPsg*)calloc(1, sizeof(MsxPsg));
+
+    msxPsg->ssgs = y8960SsgsCreate(boardGetMixer(), "Y8960 SSGS");
+    msxPsg->maxPorts = maxPorts;
+
+    y8960SsgsSetIoPort(msxPsg->ssgs, read, peek, write, msxPsg);
+
+    ioPortRegister(0xa0, NULL,         ssgsWriteAddress, msxPsg);
+    ioPortRegister(0xa1, NULL,         ssgsWriteData,    msxPsg);
+    ioPortRegister(0xa2, ssgsReadData, NULL,             msxPsg);
 
     joystickPortUpdateHandlerRegister(joystickPortHandler, msxPsg);
 
