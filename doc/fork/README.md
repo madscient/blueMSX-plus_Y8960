@@ -73,18 +73,22 @@ blueMSX+ 自身が [blueMSX](https://msxblue.com/bluemsx/) の非公式フォー
 
 ## Y8960 の実装状況
 
-**2026-09-12 時点で、コードは一行も書かれていない。**
+**2026-09-12 時点で、器だけができている。** 7 ブロックが `RomType` を持ち、
+マシン構成に置いて起動できる。**中身はどれも空**で、I/O ポートも取らず音も出ない。
 
 | ブロック | 状態 | 土台 |
 |---|---|---|
-| OPLLEX | 未着手 | `Src/SoundChips/Emu2413/` のフォーク |
-| OPL2EX | 未着手 | `Src/SoundChips/OpenMsxY8950Latest/` のフォーク |
-| SSGS | 未着手（**I/O の重ね合わせが未決**） | `Src/SoundChips/AY8910.c` のフォーク |
-| MSX-TIMER | 未着手 | 新規 |
-| MSX-MIXER | 未着手 | 新規 |
-| Y8960 SCC + マッパー | 未着手 | `Src/SoundChips/SCC.c` + 新規マッパー |
-| DCSG | 未着手 | `Src/SoundChips/SN76489.c`（既存コア） |
+| OPLLEX | **器のみ** | `Src/SoundChips/Emu2413/` のフォーク |
+| OPL2EX | **器のみ** | `Src/SoundChips/OpenMsxY8950Latest/` のフォーク |
+| SSGS | **器のみ** | `Src/SoundChips/AY8910.c` のフォーク |
+| MSX-TIMER | **器のみ** | 新規 |
+| MSX-MIXER | **器のみ** | 新規 |
+| Y8960 SCC + マッパー | **器のみ** | `Src/SoundChips/SCC.c` + 新規マッパー |
+| DCSG | **器のみ** | `Src/SoundChips/SN76489.c`（既存コア） |
 | I/O イネーブラ / MMIO 窓 | 未着手 | SCC のマッパーが持つ |
+
+**I/O ポートの重ね合わせ**（Y8960 の SSGS が本体 PSG に重なるために要る）は
+上流の `IoPort` を直して解決済み。経緯は `y8960/implementation-plan.md` §4.2。
 
 詳細と残作業は `y8960/implementation-plan.md`。
 **着手の前に決めるべきことは同 §9。**
@@ -164,6 +168,11 @@ Y8960 の実装で上流のファイルに手が入ることが分かってい�
 複数デバイスを登録できるようにし、`ioPortUnregister` に `ref` を足した）。
 `ioPortUnregister` の呼び出し 200 箇所を持つ **53 ファイル**にも手が入っている。
 経緯は `y8960/implementation-plan.md` §4.2。
+
+**Phase 0 でさらに 10 本触った**（2026-09-12）。`MediaDb.{h,cpp}`、
+`Board/Machine.c`、`Emulator/RomTypeList.c`、`Emulator/Properties.c`、
+`SoundChips/AudioMixer.h`、`Win32/Win32machineConfig.c`、
+ビルド定義 3 系統。一覧と内容は `y8960/implementation-plan.md` の Phase 0。
 
 ## ビルドと実行
 

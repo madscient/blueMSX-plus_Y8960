@@ -101,6 +101,7 @@
 #include "romMapperF4device.h"
 #include "romMapperBunsetu.h"
 #include "romMapperTurboRTimer.h"
+#include "romMapperY8960.h"
 #include "romMapperTurboRPcm.h"
 #include "TurboRIO.h"
 #include "romMapperSonyHBI55.h"
@@ -1267,6 +1268,41 @@ int machineInitialize(Machine* machine, UInt8** mainRam, UInt32* mainRamSize, UI
 
         if (machine->slotInfo[i].romType == ROM_TURBORTIMER) {
             success &= romMapperTurboRTimerCreate(0);
+            continue;
+        }
+
+        if (machine->slotInfo[i].romType == ROM_Y8960OPLLEX) {
+            success &= romMapperY8960OpllexCreate();
+            continue;
+        }
+
+        if (machine->slotInfo[i].romType == ROM_Y8960OPL2EX) {
+            success &= romMapperY8960Opl2exCreate();
+            continue;
+        }
+
+        if (machine->slotInfo[i].romType == ROM_Y8960SSGS) {
+            success &= romMapperY8960SsgsCreate();
+            continue;
+        }
+
+        if (machine->slotInfo[i].romType == ROM_Y8960TIMER) {
+            success &= romMapperY8960TimerCreate();
+            continue;
+        }
+
+        if (machine->slotInfo[i].romType == ROM_Y8960MIXER) {
+            success &= romMapperY8960MixerCreate();
+            continue;
+        }
+
+        if (machine->slotInfo[i].romType == ROM_Y8960SCC) {
+            success &= romMapperY8960SccCreate();
+            continue;
+        }
+
+        if (machine->slotInfo[i].romType == ROM_Y8960DCSG) {
+            success &= romMapperY8960DcsgCreate();
             continue;
         }
 

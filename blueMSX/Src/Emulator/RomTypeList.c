@@ -115,6 +115,7 @@ static const RomTypeMapper mapperList[] = {
     { ROM_MUPACK,                ROMCAT_SOUND         },
     { ROM_YAMAHASFG01,           ROMCAT_SOUND         },
     { ROM_YAMAHASFG05,           ROMCAT_SOUND         },
+    { ROM_Y8960SCC,              ROMCAT_SOUND         },
 
     { ROM_BEERIDE,               ROMCAT_STORAGE       },
     { ROM_GOUDASCSI,             ROMCAT_STORAGE       },

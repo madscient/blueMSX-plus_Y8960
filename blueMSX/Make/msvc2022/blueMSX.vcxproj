@@ -820,6 +820,13 @@
     <ClCompile Include="..\..\Src\Memory\romMapperTC8566AF.c" />
     <ClCompile Include="..\..\Src\Memory\romMapperTurboRPcm.c" />
     <ClCompile Include="..\..\Src\Memory\romMapperTurboRTimer.c" />
+    <ClCompile Include="..\..\Src\Memory\romMapperY8960Opllex.c" />
+    <ClCompile Include="..\..\Src\Memory\romMapperY8960Opl2ex.c" />
+    <ClCompile Include="..\..\Src\Memory\romMapperY8960Ssgs.c" />
+    <ClCompile Include="..\..\Src\Memory\romMapperY8960Timer.c" />
+    <ClCompile Include="..\..\Src\Memory\romMapperY8960Mixer.c" />
+    <ClCompile Include="..\..\Src\Memory\romMapperY8960Scc.c" />
+    <ClCompile Include="..\..\Src\Memory\romMapperY8960Dcsg.c" />
     <ClCompile Include="..\..\Src\Memory\romMapperYamanooto.c" />
     <ClCompile Include="..\..\Src\Memory\SlotManager.c" />
     <ClCompile Include="..\..\Src\Memory\sramLoader.c" />
@@ -1165,6 +1172,7 @@
     <ClInclude Include="..\..\Src\Memory\romMapperTC8566AF.h" />
     <ClInclude Include="..\..\Src\Memory\romMapperTurboRPcm.h" />
     <ClInclude Include="..\..\Src\Memory\romMapperTurboRTimer.h" />
+    <ClInclude Include="..\..\Src\Memory\romMapperY8960.h" />
     <ClInclude Include="..\..\Src\Memory\romMapperYamanooto.h" />
     <ClInclude Include="..\..\Src\Memory\SlotManager.h" />
     <ClInclude Include="..\..\Src\Memory\sramLoader.h" />

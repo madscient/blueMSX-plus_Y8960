@@ -55,6 +55,9 @@ typedef enum {
     /* Keep after MIDI: mixerRecalculateType indexes the channel array with
     ** the MIDI type value, so anything inserted before it breaks that. */
     MIXER_CHANNEL_CASSETTE,
+    /* Every Y8960 block shares this one type, so the cartridge can be
+    ** balanced against the machine with a single control. */
+    MIXER_CHANNEL_Y8960,
     MIXER_CHANNEL_TYPE_COUNT
 } MixerAudioType;
 

@@ -14,18 +14,22 @@ Y8960 対応は upstream には存在しない、このフォーク固有の機�
 | `README.md` (本書) | 文書の役割の記録・索引 |
 | `hardware-notes.md` | Y8960 ハードウェア仕様の調査結果。**madscient/openMSX_Y8960 からの写し**（情報リソース。blueMSX+ の成果物ではない） |
 | `implementation-plan.md` | blueMSX+ 側の実装計画・決定事項・実行経緯 |
+| `tests/MSX2+ - C-BIOS + Y8960/` | 7 ブロックを置いたテスト用マシン構成 |
 
 `implementation-plan.md` が**作業計画と経緯を記録する文書**である。
 セッションをまたぐ引き継ぎ情報・見送った判断・訂正はすべてここに書く。
 
 ## 状態（2026-09-12）
 
-**Y8960 のデバイスはまだ 1 つも無い。** ビルド環境は通っており、
-その前提として**上流の I/O ポートを重ね合わせ対応に直した**
-（`implementation-plan.md` §4.2）。**起動しての確認は未了。**
+**Phase 0 が完了した。** 7 ブロックが `RomType` を持ち、
+マシン構成に置いて起動できる（C-BIOS 0.29+ の起動を確認）。
+**中身はどれも空**で、I/O ポートも取らず音も出ない。
 
-着手の前に決めるべきことは `implementation-plan.md` §9。
-**Phase 0 の入口を塞いでいたもの（§9.1）は片付いた。**
+前提として**上流の I/O ポートを重ね合わせ対応に直した**
+（`implementation-plan.md` §4.2）。書き込みが複数デバイスへ配られることは
+実測で確かめてある。
+
+**次は Phase 1**（SCC とマッパー、MSX-TIMER）。残る未決は同 §9。
 
 **ハードウェア仕様は `hardware-notes.md` だけを見ないこと。**
 写しより新しい情報が `implementation-plan.md` §3.3 にある。Y8960 を駆動する
@@ -34,7 +38,15 @@ Y8960 対応は upstream には存在しない、このフォーク固有の機�
 
 ## テストの回し方
 
-**まだ無い。実装がまだ無いため。**
+**テスト用マシン構成がある。** `tests/MSX2+ - C-BIOS + Y8960/` を
+ビルド出力の `Machines/` にコピーすると、7 ブロックを置いた構成で起動できる。
+C-BIOS MSX2+ に 7 行足しただけで、ROM は C-BIOS のものを相対パスで参照する。
+
+```sh
+cp -r "doc/fork/y8960/tests/MSX2+ - C-BIOS + Y8960"       blueMSX/Make/msvc2022/x64/Release/Machines/
+```
+
+**自動で判定できるのはここまで**（`implementation-plan.md` §8）。
 
 ただし**検証の経路は分かっている**（`implementation-plan.md` §8）。
 `/listromtypes` と `/listmachines` はウィンドウを出さずに終わるので、
