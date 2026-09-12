@@ -15,4 +15,7 @@ x64/
 # Claude Code local state and per-session working files.
 .claude/
 CLAUDE.md
+# This fork keeps its AI-facing rules in the repository, unlike upstream.
+# Only the root index is tracked; the rules themselves are in doc/fork/ai/.
+!CLAUDE.md
 tmp/

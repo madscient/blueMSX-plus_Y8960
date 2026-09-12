@@ -7,10 +7,11 @@ blueMSX+ 自身が [blueMSX](https://msxblue.com/bluemsx/) の非公式フォー
 ここには blueMSX+ に存在しない、**このフォークの作業に関する文書**を置く。
 対象読者は開発者。エンドユーザー向けではない。
 
-**作業時に守る規則は本書に書く。** ルートの `CLAUDE.md` は上流の `.gitignore` が
-除外しており（`# Claude Code local state and per-session working files.`）、
-**追跡されないローカルファイル**である。したがって他の環境や他の人には届かない。
-残す規則は本書の「ライセンスと帰属」以降に置くこと。
+**本書は人間向けの事実と索引である。** 作業の規則（AI 向け）は `ai/` に分けてある。
+
+上流は `.gitignore` で `CLAUDE.md` を除外しており、AI 向け文書をリポジトリに
+置かない方針だが、**このフォークでは場所を限定して置く**（2026-09-12 ユーザー判断）。
+限定した場所はルートの `CLAUDE.md`（**索引のみ**）と `doc/fork/ai/` の 2 か所。
 
 ## 文書一覧
 
@@ -21,6 +22,7 @@ blueMSX+ 自身が [blueMSX](https://msxblue.com/bluemsx/) の非公式フォー
 | `y8960/hardware-notes.md` | Y8960 のハードウェア仕様。madscient/openMSX_Y8960 からの写し |
 | `y8960/implementation-plan.md` | blueMSX+ 側の実装計画・決定・実行経緯 |
 | `build/README.md` | ビルド環境。このマシンの事情と手順、ヘッドレスで確かめられること |
+| `ai/README.md` | **AI 向けの作業規則。** 確度・コミットの分け方・出す前の点検 |
 
 ## 上流との関係
 
@@ -140,39 +142,12 @@ blueMSX+ のファイルは冒頭に帰属を持つ。**どれも消さない。
 "Copyright free OPLL(x) ROM patches" (David Viens / Hubert Lamontagne) は
 **CC BY-SA なので帰属表示が要る**。詳細は `y8960/implementation-plan.md` §5.2。
 
-## 作業の記録と確度
+## 作業の規則は `ai/` にある
 
-主題ごとに作業計画と実行経緯の文書を持ち、決定・却下・訂正はその都度書く。
-Y8960 なら `y8960/implementation-plan.md`。口頭で終えない。
-
-主張には確度を併記する。走らせて確かめたなら**確認済み**とその手段を、
-読んだだけなら**確認済み(読解)** とファイル名と行を、作っただけなら**未検証**、
-出典を示せないなら**推測**と根拠を一行。
-
-**外に出る値を決める直前に一声かける。** `RomType` の数値、ミキサー種別の
-識別子、I/O アドレス、設定ファイルのキー、セーブステートの節名。
-これらは後から変えると利用者のファイルに波及する。確定したものは
-`y8960/implementation-plan.md` §6 にだけ書く（二重に持つと片方が古くなる）。
-
-### 上流のファイルに触ったら記録する
-
-**衝突面はできるだけ小さく保つ。** 上流のファイルを触ったまま放置すると、
-上流がそこに手を入れた瞬間に解決の手間になる。触ったファイルと理由は
-`y8960/implementation-plan.md` に書く。
-
-Y8960 の実装で上流のファイルに手が入ることが分かっているのは、
-`Src/Media/MediaDb.{h,cpp}`、`Src/Board/Machine.c`、
-`Src/SoundChips/AudioMixer.h`、`Src/Emulator/Properties.c`、
-`Src/Win32/Win32machineConfig.c`、ビルド定義 3 系統、`Src/SoundChips/SN76489.{c,h}`。
-**`Src/Memory/IoPort.{c,h}` は 2026-09-12 に実際に変更した**（1 ポートに
-複数デバイスを登録できるようにし、`ioPortUnregister` に `ref` を足した）。
-`ioPortUnregister` の呼び出し 200 箇所を持つ **53 ファイル**にも手が入っている。
-経緯は `y8960/implementation-plan.md` §4.2。
-
-**Phase 0 でさらに 10 本触った**（2026-09-12）。`MediaDb.{h,cpp}`、
-`Board/Machine.c`、`Emulator/RomTypeList.c`、`Emulator/Properties.c`、
-`SoundChips/AudioMixer.h`、`Win32/Win32machineConfig.c`、
-ビルド定義 3 系統。一覧と内容は `y8960/implementation-plan.md` の Phase 0。
+**AI 向けの作業規則は `doc/fork/ai/README.md` に分けてある。**
+確度の付け方、コミットの分け方、上流のファイルを触ったときの記録、
+出す前の点検はそちら。**上流はこの種の文書をリポジトリに置かない方針だが、
+このフォークでは場所を限定して置く**（ルートの `CLAUDE.md` は索引のみ）。
 
 ## ビルドと実行
 
@@ -198,17 +173,6 @@ Y8960 の実装で上流のファイルに手が入ることが分かってい�
 （**確認済み**: 実行してもプロセスもウィンドウも残らず、終了コード 0 と
 出力が返った）。RomType の登録とマシン構成の妥当性はこれで確かめられる。
 射程は `build/README.md` §5。
-
-## 出す前に
-
-`origin` は GitHub にある。**push したオブジェクトは親リポジトリから SHA で
-辿れて、後から消せない。** 点検は push の前にしか意味が無い。
-
-- **ローカル固有のパスが混入していないか。** 成果物にもコミットメッセージにも
-  書かない。スクリプトでパスが要るときは環境に依存しない形にする
-- **個人情報が混入していないか。** 成果物にもコミットメッセージにも書かない
-- 未コミットの変更が残っていないか
-- 文書の索引と実体が食い違っていないか
 
 ## 外部リポジトリ
 
