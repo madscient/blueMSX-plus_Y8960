@@ -54,6 +54,29 @@ cp -r "doc/fork/y8960/tests/MSX2+ - C-BIOS + Y8960" "$DEST/"
 cp "<y8960bas.rom のパス>" "$DEST/MSX2+ - C-BIOS + Y8960/"
 ```
 
+### バンクマッパーのテスト
+
+`tests/banktest.asm` が**バンクメモリの回帰テスト**である。ROM カートリッジとして
+Y8960 SCC に載せ、MSX 側からバンクレジスタを叩いて結果を画面に出す。
+C-BIOS でも動く（ROM の init から走るため、スロット切り替えが要らない）。
+
+```sh
+py "doc/fork/y8960/tests/make-banktest.py" <pasmo.exe> <出力先>/banktest.rom
+```
+
+出来た ROM を `tests/MSX2+ - C-BIOS + Y8960 (banktest)/` の構成に置いて起動する。
+画面に 3 行出る。**どれか 1 つでも `NG` なら回帰している。**
+
+```
+1 ROM BANKS: OK
+2 RAM WRITE: OK
+3 ROM PROTECT: OK
+```
+
+**判別力は確かめてある**（`implementation-plan.md` §5.7）。
+
+### 本体のファームウェアを載せる構成
+
 **この構成で確かめられるのは「起動してクラッシュしないこと」までである。**
 C-BIOS は BASIC を持たないので、`y8960bas.rom` の拡張 BASIC を呼べない。
 バンクが正しくマップされているかは、**実機 BIOS を持つ機種に載せて
