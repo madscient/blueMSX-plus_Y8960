@@ -14,6 +14,7 @@ BANK1   equ     06000h          ; BANK1 window itself
 REG_B1C equ     07000h          ; BANK1 register, compatibility mode
 REG_MOD equ     04ffbh          ; RAM mode register, visible in both modes
 REG_B1R equ     04ffdh          ; BANK1 register, RAM mode
+SCC_B1  equ     07800h          ; SCC window inside BANK1
 
         org     04000h
 
@@ -100,11 +101,43 @@ t3:
 
         ld      hl, msg_t3ok
         call    print
-        jr      done
+        jr      t4
 
 t3_fail:
         ld      hl, msg_t3ng
         call    print
+
+; --- 4. the SCC window replaces the bank at 1800-1FFF
+t4:
+        ld      a, 03fh
+        ld      (REG_B1C), a
+        ld      a, 05ah
+        ld      (SCC_B1), a             ; SCC waveform, not memory
+        ld      a, (SCC_B1)
+        cp      05ah
+        jr      nz, t4_fail
+
+        ld      a, 1                    ; close it again
+        ld      (REG_B1C), a
+        ld      a, (BANK1W)
+        cp      1
+        jr      nz, t4_fail
+
+        ld      hl, msg_t4ok
+        call    print
+        jr      done
+
+t4_fail:
+        ld      hl, msg_t4ng
+        call    print
+
+; Regions 2 and 3 are not tested here.
+;
+; A cartridge's init entry runs with page 1 (4000-7FFF) switched to the
+; cartridge slot; page 2 (8000-BFFF) still belongs to RAM. Writes aimed at
+; BANK2 or BANK3 never reach the mapper at all - they land in RAM, and
+; reading them back succeeds for the wrong reason. Testing those regions
+; needs ENASLT first.
 
 done:
         ret
@@ -131,3 +164,7 @@ msg_t3ok:
         db      "3 ROM PROTECT: OK", 13, 10, 0
 msg_t3ng:
         db      "3 ROM PROTECT: NG", 13, 10, 0
+msg_t4ok:
+        db      "4 SCC WINDOW: OK", 13, 10, 0
+msg_t4ng:
+        db      "4 SCC WINDOW: NG", 13, 10, 0

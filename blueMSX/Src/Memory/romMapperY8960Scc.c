@@ -27,6 +27,9 @@
 #include "DeviceManager.h"
 #include "SlotManager.h"
 #include "SaveState.h"
+#include "SCC.h"
+#include "AudioMixer.h"
+#include "Board.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -41,6 +44,7 @@
 
 typedef struct {
     int    deviceHandle;
+    SCC*   scc;
     UInt8* memory;
     int    slot;
     int    sslot;
@@ -51,15 +55,30 @@ typedef struct {
     UInt8  ramMode;
 } RomMapperY8960Scc;
 
+/* A region shows the SCC registers instead of a bank when its own bank
+** register holds 3Fh. In RAM mode region 0 is excluded, because that is
+** where the mode and bank registers have to stay reachable. */
+static int sccVisible(RomMapperY8960Scc* rm, int region)
+{
+    if (rm->bankReg[region] != 0x3F) {
+        return 0;
+    }
+
+    return !(rm->ramMode && region == 0);
+}
+
 static void bankSwitch(RomMapperY8960Scc* rm, int region)
 {
+    int    scc      = sccVisible(rm, region);
     int    bank     = rm->bankReg[region] & 0x1F;
     UInt8* bankData = rm->memory + bank * Y8960_BANK_SIZE;
     /* Region 0 carries the RAM mode and bank registers, so its writes have
     ** to come through the callback even when a RAM bank is mapped there. */
-    int    writable = rm->ramMode && region != 0 && bank >= Y8960_ROM_BANKS;
+    int    writable = !scc && rm->ramMode && region != 0 && bank >= Y8960_ROM_BANKS;
 
-    slotMapPage(rm->slot, rm->sslot, rm->startPage + region, bankData, 1, writable);
+    /* The SCC window covers only 1800-1FFF of the region, and a mapped page
+    ** is all or nothing, so the whole region goes through the callback. */
+    slotMapPage(rm->slot, rm->sslot, rm->startPage + region, bankData, !scc, writable);
 }
 
 static void bankSwitchAll(RomMapperY8960Scc* rm)
@@ -80,6 +99,7 @@ static void reset(RomMapperY8960Scc* rm)
         rm->bankReg[region] = (UInt8)region;
     }
 
+    sccReset(rm->scc);
     bankSwitchAll(rm);
 }
 
@@ -96,6 +116,8 @@ static void saveState(RomMapperY8960Scc* rm)
                        (Y8960_BANKS - Y8960_ROM_BANKS) * Y8960_BANK_SIZE);
 
     saveStateClose(state);
+
+    sccSaveState(rm->scc);
 }
 
 static void loadState(RomMapperY8960Scc* rm)
@@ -112,6 +134,7 @@ static void loadState(RomMapperY8960Scc* rm)
 
     saveStateClose(state);
 
+    sccLoadState(rm->scc);
     bankSwitchAll(rm);
 }
 
@@ -119,6 +142,7 @@ static void destroy(RomMapperY8960Scc* rm)
 {
     slotUnregister(rm->slot, rm->sslot, rm->startPage);
     deviceManagerUnregister(rm->deviceHandle);
+    sccDestroy(rm->scc);
 
     free(rm->memory);
     free(rm);
@@ -136,17 +160,44 @@ static void setBank(RomMapperY8960Scc* rm, int region, UInt8 value)
     bankSwitch(rm, region);
 }
 
-static UInt8 read(RomMapperY8960Scc* rm, UInt16 address)
+static UInt8 readMemory(RomMapperY8960Scc* rm, UInt16 address)
 {
     int bank = rm->bankReg[address >> 13] & 0x1F;
 
     return rm->memory[bank * Y8960_BANK_SIZE + (address & 0x1FFF)];
 }
 
+static UInt8 read(RomMapperY8960Scc* rm, UInt16 address)
+{
+    int region = address >> 13;
+
+    if ((address & 0x1800) == 0x1800 && sccVisible(rm, region)) {
+        return sccRead(rm->scc, (UInt8)(address & 0xFF));
+    }
+
+    return readMemory(rm, address);
+}
+
+static UInt8 peek(RomMapperY8960Scc* rm, UInt16 address)
+{
+    int region = address >> 13;
+
+    if ((address & 0x1800) == 0x1800 && sccVisible(rm, region)) {
+        return sccPeek(rm->scc, (UInt8)(address & 0xFF));
+    }
+
+    return readMemory(rm, address);
+}
+
 static void write(RomMapperY8960Scc* rm, UInt16 address, UInt8 value)
 {
     int region = address >> 13;
     int bank;
+
+    if ((address & 0x1800) == 0x1800 && sccVisible(rm, region)) {
+        sccWrite(rm->scc, (UInt8)(address & 0xFF), value);
+        return;
+    }
 
     /* 4?FBh with ? = 8..F, the only register visible in both modes. */
     if (address >= 0x0800 && address < 0x1000 && (address & 0xFF) == 0xFB) {
@@ -186,12 +237,15 @@ int romMapperY8960SccCreate(const char* filename, UInt8* romData,
     RomMapperY8960Scc* rm = (RomMapperY8960Scc*)calloc(1, sizeof(RomMapperY8960Scc));
 
     rm->deviceHandle = deviceManagerRegister(ROM_Y8960SCC, &callbacks, rm);
-    slotRegister(slot, sslot, startPage, Y8960_REGIONS, read, read, write, destroy, rm);
+    slotRegister(slot, sslot, startPage, Y8960_REGIONS, read, peek, write, destroy, rm);
 
+    rm->scc       = sccCreateEx(boardGetMixer(), MIXER_CHANNEL_Y8960);
     rm->memory    = (UInt8*)calloc(1, Y8960_MEM_SIZE);
     rm->slot      = slot;
     rm->sslot     = sslot;
     rm->startPage = startPage;
+
+    sccSetMode(rm->scc, SCC_REAL);
 
     if (romData != NULL && size > 0) {
         int romSize = size;

@@ -71,7 +71,12 @@ py "doc/fork/y8960/tests/make-banktest.py" <pasmo.exe> <出力先>/banktest.rom
 1 ROM BANKS: OK
 2 RAM WRITE: OK
 3 ROM PROTECT: OK
+4 SCC WINDOW: OK
 ```
+
+**BANK2 と BANK3 は試せない。** カートリッジの init はページ1
+（4000-7FFF）だけが自分のスロットに切り替わった状態で走るので、
+ページ2 に向けた書き込みはマッパーに届かない（`ENASLT` が要る）。
 
 **判別力は確かめてある**（`implementation-plan.md` §5.7）。
 

@@ -41,6 +41,10 @@ typedef enum { SCC_NONE = 0, SCC_REAL, SCC_COMPATIBLE, SCC_PLUS } SccMode;
 
 /* Constructor and destructor */
 SCC* sccCreate(Mixer* mixer);
+/* Same, on a chosen mixer channel type. The Y8960 puts every one of its
+** blocks on a type of its own, so the cartridge can be balanced as a unit
+** against the machine. */
+SCC* sccCreateEx(Mixer* mixer, Int32 audioType);
 void sccDestroy(SCC* scc);
 void sccReset(SCC* scc);
 void sccSetMode(SCC* scc, SccMode newMode);

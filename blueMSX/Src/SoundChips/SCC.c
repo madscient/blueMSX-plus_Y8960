@@ -383,6 +383,11 @@ static void getDebugInfo(SCC* scc, DbgDevice* dbgDevice)
 
 SCC* sccCreate(Mixer* mixer)
 {
+    return sccCreateEx(mixer, MIXER_CHANNEL_SCC);
+}
+
+SCC* sccCreateEx(Mixer* mixer, Int32 audioType)
+{
     DebugCallbacks dbgCallbacks = { getDebugInfo, NULL, NULL, NULL };
     SCC* scc = (SCC*)calloc(1, sizeof(SCC));
 
@@ -390,7 +395,7 @@ SCC* sccCreate(Mixer* mixer)
 
 //    scc->debugHandle = debugDeviceRegister(DBGTYPE_AUDIO, langDbgDevScc(), &dbgCallbacks, scc);
 
-    scc->handle = mixerRegisterChannel(mixer, MIXER_CHANNEL_SCC, 0, sccSync, NULL, scc);
+    scc->handle = mixerRegisterChannel(mixer, audioType, 0, sccSync, NULL, scc);
 
     sccReset(scc);
 
