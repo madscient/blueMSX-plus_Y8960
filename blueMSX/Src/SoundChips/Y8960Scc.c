@@ -12,6 +12,12 @@
 ** Modified 2026 by Hesoten for blueMSX+ fork.
 ** See https://github.com/Hesoten/blueMSX-plus for change history.
 **
+** Forked for the Y8960 cartridge, 2026 by madscient.
+** The cartridge carries an SCC-equivalent circuit (IKASCC in the hardware),
+** not a Konami SCC, so it is emulated as its own chip rather than sharing
+** the machine's. Divergence in behaviour is expected as the hardware is
+** finished; keeping them separate is what makes that possible.
+**
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
 ** the Free Software Foundation; either version 2 of the License, or
@@ -28,7 +34,7 @@
 **
 ******************************************************************************
 */
-#include "SCC.h"
+#include "Y8960Scc.h"
 #include "Board.h"
 #include "SaveState.h"
 #include "DebugDeviceManager.h"
@@ -45,16 +51,16 @@
 
 #define OFFSETOF(s, a) ((int)(&((s*)0)->a))
 
-static Int32* sccSync(SCC* scc, UInt32 count);
+static Int32* sccSync(Y8960SccChip* scc, UInt32 count);
 
 
-struct SCC
+struct Y8960SccChip
 {
     Mixer* mixer;
     Int32  handle;
     Int32  debugHandle;
     
-    SccMode mode;
+    Y8960SccMode mode;
     UInt8 deformReg;
     Int8 curWave[5];
     Int8 wave[5][32];
@@ -78,13 +84,13 @@ struct SCC
     Int32  buffer[AUDIO_MONO_BUFFER_SIZE];
 };
 
-void sccLoadState(SCC* scc)
+void y8960SccLoadState(Y8960SccChip* scc)
 {
-    SaveState* state = saveStateOpenForRead("scc");
+    SaveState* state = saveStateOpenForRead("y8960scc");
     char tag[32];
     int i;
 
-    scc->mode      =         saveStateGet(state, "mode", SCC_COMPATIBLE);
+    scc->mode      =         saveStateGet(state, "mode", Y8960_SCC_COMPATIBLE);
     scc->deformReg = (UInt8) saveStateGet(state, "deformReg", 0);
     
     for (i = 0; i < 5; i++) {
@@ -125,9 +131,9 @@ void sccLoadState(SCC* scc)
     saveStateClose(state);
 }
 
-void sccSaveState(SCC* scc)
+void y8960SccSaveState(Y8960SccChip* scc)
 {
-    SaveState* state = saveStateOpenForWrite("scc");
+    SaveState* state = saveStateOpenForWrite("y8960scc");
     char tag[32];
     int i;
 
@@ -172,7 +178,7 @@ void sccSaveState(SCC* scc)
     saveStateClose(state);
 }
 
-static UInt8 sccGetWave(SCC* scc, UInt8 channel, UInt8 address)
+static UInt8 sccGetWave(Y8960SccChip* scc, UInt8 channel, UInt8 address)
 {
     if (scc->rotate[channel] == ROTATE_OFF) {
         UInt8 value = scc->wave[channel][address & 0x1f];
@@ -191,7 +197,7 @@ static UInt8 sccGetWave(SCC* scc, UInt8 channel, UInt8 address)
                  periodCh = 3;
              }
          }
-         else if (channel == 3 && scc->mode != SCC_PLUS) {
+         else if (channel == 3 && scc->mode != Y8960_SCC_PLUS) {
              periodCh = 4;
          }
 
@@ -203,7 +209,7 @@ static UInt8 sccGetWave(SCC* scc, UInt8 channel, UInt8 address)
     }
 }
 
-static UInt8 sccGetFreqAndVol(SCC* scc, UInt8 address)
+static UInt8 sccGetFreqAndVol(Y8960SccChip* scc, UInt8 address)
 {
     address &= 0x0f;
 
@@ -224,7 +230,7 @@ static UInt8 sccGetFreqAndVol(SCC* scc, UInt8 address)
     }
 }
 
-static void sccUpdateWave(SCC* scc, UInt8 channel, UInt8 address, UInt8 value)
+static void sccUpdateWave(Y8960SccChip* scc, UInt8 channel, UInt8 address, UInt8 value)
 {
     if (!scc->readOnly[channel]) {
         UInt8 pos = address & 0x1f;
@@ -232,13 +238,13 @@ static void sccUpdateWave(SCC* scc, UInt8 channel, UInt8 address, UInt8 value)
         scc->bus = value;
 
         scc->wave[channel][pos] = value;
-        if ((scc->mode != SCC_PLUS) && (channel == 3)) {
+        if ((scc->mode != Y8960_SCC_PLUS) && (channel == 3)) {
             scc->wave[4][pos] = scc->wave[3][pos];
         }
     }
 }
 
-static void sccUpdateFreqAndVol(SCC* scc, UInt8 address, UInt8 value)
+static void sccUpdateFreqAndVol(Y8960SccChip* scc, UInt8 address, UInt8 value)
 {
     address &= 0x0f;
     /* Drop the FDC/HDD boost on writes that make any voice audible
@@ -284,7 +290,7 @@ static void sccUpdateFreqAndVol(SCC* scc, UInt8 address, UInt8 value)
     }
 }
 
-static void sccUpdateDeformation(SCC* scc, UInt8 value)
+static void sccUpdateDeformation(Y8960SccChip* scc, UInt8 value)
 {
     int channel;
 
@@ -300,7 +306,7 @@ static void sccUpdateDeformation(SCC* scc, UInt8 value)
         scc->deformSample[channel] = scc->oldSample[channel];
     }
 
-    if (scc->mode != SCC_REAL) {
+    if (scc->mode != Y8960_SCC_REAL) {
         value &= ~0x80;
     }
 
@@ -340,11 +346,11 @@ static void sccUpdateDeformation(SCC* scc, UInt8 value)
     }
 }
 
-void sccReset(SCC* scc) {
+void y8960SccReset(Y8960SccChip* scc) {
     int channel;
 
-    if (scc->mode != SCC_REAL) {
-        sccSetMode(scc, SCC_COMPATIBLE);
+    if (scc->mode != Y8960_SCC_REAL) {
+        y8960SccSetMode(scc, Y8960_SCC_COMPATIBLE);
     }
 
     for (channel = 0; channel < 5; channel++) {
@@ -364,51 +370,51 @@ void sccReset(SCC* scc) {
     scc->bus         = 0xFFFF;
 }
 
-void sccSetMode(SCC* scc, SccMode newMode)
+void y8960SccSetMode(Y8960SccChip* scc, Y8960SccMode newMode)
 {
     scc->mode = newMode;
 }
 
-static void getDebugInfo(SCC* scc, DbgDevice* dbgDevice)
+static void getDebugInfo(Y8960SccChip* scc, DbgDevice* dbgDevice)
 {
     static UInt8 ram[0x100];
     int i;
 
     for (i = 0; i < 0x100; i++) {
-        sccPeek(scc, i);
+        y8960SccPeek(scc, i);
     }
 
     dbgDeviceAddMemoryBlock(dbgDevice, langDbgMemScc(), 1, 0, 0x100, ram);
 }
 
-SCC* sccCreate(Mixer* mixer)
+Y8960SccChip* y8960SccCreate(Mixer* mixer)
 {
     DebugCallbacks dbgCallbacks = { getDebugInfo, NULL, NULL, NULL };
-    SCC* scc = (SCC*)calloc(1, sizeof(SCC));
+    Y8960SccChip* scc = (Y8960SccChip*)calloc(1, sizeof(Y8960SccChip));
 
     scc->mixer = mixer;
 
 //    scc->debugHandle = debugDeviceRegister(DBGTYPE_AUDIO, langDbgDevScc(), &dbgCallbacks, scc);
 
-    scc->handle = mixerRegisterChannel(mixer, MIXER_CHANNEL_SCC, 0, sccSync, NULL, scc);
+    scc->handle = mixerRegisterChannel(mixer, MIXER_CHANNEL_Y8960, 0, sccSync, NULL, scc);
 
-    sccReset(scc);
+    y8960SccReset(scc);
 
     return scc;
 }
 
-void sccDestroy(SCC* scc)
+void y8960SccDestroy(Y8960SccChip* scc)
 {
 //    debugDeviceUnregister(scc->debugHandle);
     mixerUnregisterChannel(scc->mixer, scc->handle);
     free(scc);
 }
 
-UInt8 sccRead(SCC* scc, UInt8 address)
+UInt8 y8960SccRead(Y8960SccChip* scc, UInt8 address)
 {
     switch (scc->mode) {
 
-    case SCC_REAL:
+    case Y8960_SCC_REAL:
         if (address < 0x80) {
             return sccGetWave(scc, address >> 5, address);
         } 
@@ -425,7 +431,7 @@ UInt8 sccRead(SCC* scc, UInt8 address)
 
         return 0xff;
 
-    case SCC_COMPATIBLE:
+    case Y8960_SCC_COMPATIBLE:
         if (address < 0x80) {
             return sccGetWave(scc, address >> 5, address);
         } 
@@ -445,7 +451,7 @@ UInt8 sccRead(SCC* scc, UInt8 address)
  
         return 0xff;
 
-    case SCC_PLUS:
+    case Y8960_SCC_PLUS:
         if (address < 0xa0) {
             return sccGetWave(scc, address >> 5, address);
         } 
@@ -465,13 +471,13 @@ UInt8 sccRead(SCC* scc, UInt8 address)
     return 0xff;
 }
 
-UInt8 sccPeek(SCC* scc, UInt8 address)
+UInt8 y8960SccPeek(Y8960SccChip* scc, UInt8 address)
 {
     UInt8 result;
 
     switch (scc->mode) {
 
-    case SCC_REAL:
+    case Y8960_SCC_REAL:
         if (address < 0x80) {
             return sccGetWave(scc, address >> 5, address);
         } 
@@ -486,7 +492,7 @@ UInt8 sccPeek(SCC* scc, UInt8 address)
 
         return 0xff;
 
-    case SCC_COMPATIBLE:
+    case Y8960_SCC_COMPATIBLE:
         if (address < 0x80) {
             return sccGetWave(scc, address >> 5, address);
         } 
@@ -505,7 +511,7 @@ UInt8 sccPeek(SCC* scc, UInt8 address)
  
         result = 0xff;
 
-    case SCC_PLUS:
+    case Y8960_SCC_PLUS:
         if (address < 0xa0) {
             return sccGetWave(scc, address >> 5, address);
         } 
@@ -524,12 +530,12 @@ UInt8 sccPeek(SCC* scc, UInt8 address)
     return 0xff;
 }
 
-void sccWrite(SCC* scc, UInt8 address, UInt8 value)
+void y8960SccWrite(Y8960SccChip* scc, UInt8 address, UInt8 value)
 {
     mixerSync(scc->mixer);
 
     switch (scc->mode) {
-    case SCC_REAL:
+    case Y8960_SCC_REAL:
         if (address < 0x80) {
             sccUpdateWave(scc, address >> 5, address, value);
             return;
@@ -547,7 +553,7 @@ void sccWrite(SCC* scc, UInt8 address, UInt8 value)
         sccUpdateDeformation(scc, value);
         return;
 
-    case SCC_COMPATIBLE:
+    case Y8960_SCC_COMPATIBLE:
         if (address < 0x80) {
             sccUpdateWave(scc, address >> 5, address, value);
             return;
@@ -569,7 +575,7 @@ void sccWrite(SCC* scc, UInt8 address, UInt8 value)
 
         return;
 
-    case SCC_PLUS:
+    case Y8960_SCC_PLUS:
         if (address < 0xa0) {
             sccUpdateWave(scc, address >> 5, address, value);
             return;
@@ -589,11 +595,11 @@ void sccWrite(SCC* scc, UInt8 address, UInt8 value)
     }
 }
 
-void sccGetDebugInfo(SCC* scc, DbgDevice* dbgDevice)
+void y8960SccGetDebugInfo(Y8960SccChip* scc, DbgDevice* dbgDevice)
 {
 }
 
-static Int32 filter(SCC* scc, Int32 input) {
+static Int32 filter(Y8960SccChip* scc, Int32 input) {
     scc->in[4] = scc->in[3];
     scc->in[3] = scc->in[2];
     scc->in[2] = scc->in[1];
@@ -617,7 +623,7 @@ static Int32 filter(SCC* scc, Int32 input) {
 // Transition band: 250.0 Hz
 // Stopband attenuation: 50.0 dB
 //
-static Int32 filter4(SCC* scc, Int32 in1, Int32 in2, Int32 in3, Int32 in4)
+static Int32 filter4(Y8960SccChip* scc, Int32 in1, Int32 in2, Int32 in3, Int32 in4)
 {
     int i;
     DoubleT res;
@@ -682,7 +688,7 @@ static Int32 filter4(SCC* scc, Int32 in1, Int32 in2, Int32 in3, Int32 in4)
     return (Int32)res;
 }
 
-static Int32* sccSync(SCC* scc, UInt32 count)
+static Int32* sccSync(Y8960SccChip* scc, UInt32 count)
 {
     Int32* buffer  = scc->buffer;
     Int32  channel;

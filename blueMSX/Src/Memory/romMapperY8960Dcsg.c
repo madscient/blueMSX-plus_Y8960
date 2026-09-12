@@ -1,6 +1,6 @@
 /*****************************************************************************
 **
-** Y8960 cartridge - the DCSG block: two SN76489.
+** Y8960 cartridge - the DCSG block: two DCSG-equivalent circuits.
 **
 ** Copyright (C) 2026 madscient
 ** See https://github.com/madscient/blueMSX-plus_Y8960 for change history.
@@ -27,7 +27,7 @@
 #include "SaveState.h"
 #include "Board.h"
 #include "IoPort.h"
-#include "SN76489.h"
+#include "Y8960Dcsg.h"
 #include "AudioMixer.h"
 #include <stdlib.h>
 
@@ -42,7 +42,7 @@
 
 typedef struct {
     int      deviceHandle;
-    SN76489* chip[2];
+    Y8960DcsgChip* chip[2];
 } RomMapperY8960Dcsg;
 
 static void writeIo(RomMapperY8960Dcsg* rm, UInt16 port, UInt8 value)
@@ -53,7 +53,7 @@ static void writeIo(RomMapperY8960Dcsg* rm, UInt16 port, UInt8 value)
         return;
     }
 
-    sn76489WriteData(rm->chip[index], port, value);
+    y8960DcsgWriteData(rm->chip[index], port, value);
 }
 
 /* The tunnel is not gated: the enablers live in the same window and could not
@@ -62,32 +62,32 @@ static void tunnel0(void* ref, int p, UInt8 value)
 {
     RomMapperY8960Dcsg* rm = (RomMapperY8960Dcsg*)ref;
 
-    sn76489WriteData(rm->chip[0], Y8960_DCSG_PORT0, value);
+    y8960DcsgWriteData(rm->chip[0], Y8960_DCSG_PORT0, value);
 }
 
 static void tunnel1(void* ref, int p, UInt8 value)
 {
     RomMapperY8960Dcsg* rm = (RomMapperY8960Dcsg*)ref;
 
-    sn76489WriteData(rm->chip[1], Y8960_DCSG_PORT1, value);
+    y8960DcsgWriteData(rm->chip[1], Y8960_DCSG_PORT1, value);
 }
 
 static void reset(RomMapperY8960Dcsg* rm)
 {
-    sn76489Reset(rm->chip[0]);
-    sn76489Reset(rm->chip[1]);
+    y8960DcsgReset(rm->chip[0]);
+    y8960DcsgReset(rm->chip[1]);
 }
 
 static void saveState(RomMapperY8960Dcsg* rm)
 {
-    sn76489SaveState(rm->chip[0]);
-    sn76489SaveState(rm->chip[1]);
+    y8960DcsgSaveState(rm->chip[0]);
+    y8960DcsgSaveState(rm->chip[1]);
 }
 
 static void loadState(RomMapperY8960Dcsg* rm)
 {
-    sn76489LoadState(rm->chip[0]);
-    sn76489LoadState(rm->chip[1]);
+    y8960DcsgLoadState(rm->chip[0]);
+    y8960DcsgLoadState(rm->chip[1]);
 }
 
 static void destroy(RomMapperY8960Dcsg* rm)
@@ -98,8 +98,8 @@ static void destroy(RomMapperY8960Dcsg* rm)
     ioPortUnregister(Y8960_DCSG_PORT0, rm);
     ioPortUnregister(Y8960_DCSG_PORT1, rm);
 
-    sn76489Destroy(rm->chip[0]);
-    sn76489Destroy(rm->chip[1]);
+    y8960DcsgDestroy(rm->chip[0]);
+    y8960DcsgDestroy(rm->chip[1]);
 
     deviceManagerUnregister(rm->deviceHandle);
 
@@ -113,8 +113,8 @@ int romMapperY8960DcsgCreate(void)
 
     rm->deviceHandle = deviceManagerRegister(ROM_Y8960DCSG, &callbacks, rm);
 
-    rm->chip[0] = sn76489CreateEx(boardGetMixer(), MIXER_CHANNEL_Y8960, "Y8960 DCSG 0");
-    rm->chip[1] = sn76489CreateEx(boardGetMixer(), MIXER_CHANNEL_Y8960, "Y8960 DCSG 1");
+    rm->chip[0] = y8960DcsgCreate(boardGetMixer(), "Y8960 DCSG 0");
+    rm->chip[1] = y8960DcsgCreate(boardGetMixer(), "Y8960 DCSG 1");
 
     /* Write only: the chip has nothing to read back, and these ports may be
     ** shared with something else in the machine. */

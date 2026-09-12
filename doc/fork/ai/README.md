@@ -111,7 +111,13 @@ Y8960 なら `y8960/implementation-plan.md`。口頭で終えない。
 Y8960 の実装で上流のファイルに手が入ることが分かっているのは、
 `Src/Media/MediaDb.{h,cpp}`、`Src/Board/Machine.c`、
 `Src/SoundChips/AudioMixer.h`、`Src/Emulator/Properties.c`、
-`Src/Win32/Win32machineConfig.c`、ビルド定義 3 系統、`Src/SoundChips/SN76489.{c,h}`。
+`Src/Win32/Win32machineConfig.c`、ビルド定義 3 系統。
+
+**音源コアは上流を広げずにフォークする。** カートリッジ内の音源ブロックは
+本体のチップそのものではなく等価回路なので、共有すると挙動の分岐を表現できない。
+`SCC.{c,h}` と `SN76489.{c,h}` には一度手を入れたが、**取り消してフォークにした**
+（`y8960/implementation-plan.md` §11 の 2026-09-12 (10)）。
+残る `AY8910.c` / `Emu2413/` / `OpenMsxY8950Latest/` も同じ扱いにする。
 **`Src/Memory/IoPort.{c,h}` は 2026-09-12 に実際に変更した**（1 ポートに
 複数デバイスを登録できるようにし、`ioPortUnregister` に `ref` を足した）。
 `ioPortUnregister` の呼び出し 200 箇所を持つ **53 ファイル**にも手が入っている。

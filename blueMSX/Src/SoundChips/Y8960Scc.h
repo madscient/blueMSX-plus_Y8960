@@ -9,6 +9,12 @@
 **
 ** Copyright (C) 2003-2006 Daniel Vik
 **
+** Forked for the Y8960 cartridge, 2026 by madscient.
+** The cartridge carries an SCC-equivalent circuit (IKASCC in the hardware),
+** not a Konami SCC, so it is emulated as its own chip rather than sharing
+** the machine's. Divergence in behaviour is expected as the hardware is
+** finished; keeping them separate is what makes that possible.
+**
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
 ** the Free Software Foundation; either version 2 of the License, or
@@ -25,8 +31,8 @@
 **
 ******************************************************************************
 */
-#ifndef SCC_H
-#define SCC_H
+#ifndef Y8960_SCC_H
+#define Y8960_SCC_H
 
 #include <stdio.h>
 
@@ -35,25 +41,25 @@
 #include "DebugDeviceManager.h"
 
 /* Type definitions */
-typedef struct SCC SCC;
+typedef struct Y8960SccChip Y8960SccChip;
 
-typedef enum { SCC_NONE = 0, SCC_REAL, SCC_COMPATIBLE, SCC_PLUS } SccMode;
+typedef enum { Y8960_SCC_NONE = 0, Y8960_SCC_REAL, Y8960_SCC_COMPATIBLE, Y8960_SCC_PLUS } Y8960SccMode;
 
 /* Constructor and destructor */
-SCC* sccCreate(Mixer* mixer);
-void sccDestroy(SCC* scc);
-void sccReset(SCC* scc);
-void sccSetMode(SCC* scc, SccMode newMode);
+Y8960SccChip* y8960SccCreate(Mixer* mixer);
+void y8960SccDestroy(Y8960SccChip* scc);
+void y8960SccReset(Y8960SccChip* scc);
+void y8960SccSetMode(Y8960SccChip* scc, Y8960SccMode newMode);
 
 /* Register read/write methods */
-UInt8 sccRead(SCC* scc, UInt8 address);
-UInt8 sccPeek(SCC* scc, UInt8 address);
-void sccWrite(SCC* scc, UInt8 address, UInt8 value);
+UInt8 y8960SccRead(Y8960SccChip* scc, UInt8 address);
+UInt8 y8960SccPeek(Y8960SccChip* scc, UInt8 address);
+void y8960SccWrite(Y8960SccChip* scc, UInt8 address, UInt8 value);
 
-void sccGetDebugInfo(SCC* scc, DbgDevice* dbgDevice);
+void y8960SccGetDebugInfo(Y8960SccChip* scc, DbgDevice* dbgDevice);
 
-void sccLoadState(SCC* scc);
-void sccSaveState(SCC* scc);
+void y8960SccLoadState(Y8960SccChip* scc);
+void y8960SccSaveState(Y8960SccChip* scc);
 
 #endif
 

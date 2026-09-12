@@ -36,10 +36,6 @@ typedef struct SN76489 SN76489;
 
 /* Constructor and destructor */
 SN76489* sn76489Create(Mixer* mixer);
-/* Same, on a chosen mixer channel type and under a chosen debugger name. The
-** Y8960 carries two of these and keeps them on its own channel type, so they
-** have to be told apart from the machine's own chip and from each other. */
-SN76489* sn76489CreateEx(Mixer* mixer, Int32 audioType, const char* name);
 void sn76489Destroy(SN76489* sn76489);
 
 /* Reset chip */
