@@ -947,6 +947,7 @@
     <ClCompile Include="..\..\Src\SoundChips\Y8960Dcsg.c" />
     <ClCompile Include="..\..\Src\SoundChips\Y8960OpllCore.c" />
     <ClCompile Include="..\..\Src\SoundChips\Y8960Opllex.c" />
+    <ClCompile Include="..\..\Src\SoundChips\Y8960Ssgs.c" />
     <ClCompile Include="..\..\Src\SoundChips\Y8960Opl2Core.cpp">
       <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
@@ -1313,6 +1314,7 @@
     <ClInclude Include="..\..\Src\SoundChips\Y8960Dcsg.h" />
     <ClInclude Include="..\..\Src\SoundChips\Y8960OpllCore.h" />
     <ClInclude Include="..\..\Src\SoundChips\Y8960Opllex.h" />
+    <ClInclude Include="..\..\Src\SoundChips\Y8960Ssgs.h" />
     <ClInclude Include="..\..\Src\SoundChips\Y8960Opl2Core.h" />
     <ClInclude Include="..\..\Src\SoundChips\Y8960Opl2Adpcm.h" />
     <ClInclude Include="..\..\Src\SoundChips\Y8960Opl2ex.h" />

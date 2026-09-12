@@ -397,6 +397,7 @@ SOURCE_FILES += Y8960Scc.c
 SOURCE_FILES += Y8960Dcsg.c
 SOURCE_FILES += Y8960OpllCore.c
 SOURCE_FILES += Y8960Opllex.c
+SOURCE_FILES += Y8960Ssgs.c
 # These three need C++20; the msvc projects set it per file, and there is no
 # per-file mechanism here.
 SOURCE_FILES += Y8960Opl2Core.cpp

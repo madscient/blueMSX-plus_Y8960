@@ -1,6 +1,6 @@
 /*****************************************************************************
 **
-** Y8960 cartridge - the SSGS block: YMZ705 class, two SSG units with per-channel pan.
+** Y8960 cartridge - the SSGS block: two YM2149 equivalents with pan pots.
 **
 ** Copyright (C) 2026 madscient
 ** See https://github.com/madscient/blueMSX-plus_Y8960 for change history.
@@ -24,14 +24,77 @@
 #include "romMapperY8960.h"
 #include "MediaDb.h"
 #include "DeviceManager.h"
+#include "SaveState.h"
+#include "Board.h"
+#include "IoPort.h"
+#include "Y8960Ssgs.h"
+#include "AudioMixer.h"
 #include <stdlib.h>
 
+/* The machine's own PSG sits on the same two addresses. Both can be
+** registered since the overlap was fixed upstream, and both receive the
+** write; only the machine's PSG drives the read port at A2h, which this block
+** therefore does not claim. */
+#define Y8960_SSGS_ADDRESS 0xA0
+#define Y8960_SSGS_DATA    0xA1
+
 typedef struct {
-    int deviceHandle;
+    int             deviceHandle;
+    Y8960SsgsChip*  chip;
 } RomMapperY8960Ssgs;
+
+static void writeIo(RomMapperY8960Ssgs* rm, UInt16 port, UInt8 value)
+{
+    if (!y8960IoEnabled(Y8960_IO_SSGS)) {
+        return;
+    }
+
+    if (port == Y8960_SSGS_DATA) {
+        y8960SsgsWriteData(rm->chip, value);
+    }
+    else {
+        y8960SsgsWriteAddress(rm->chip, value);
+    }
+}
+
+/* The tunnel is not gated: the enablers live in the same window and could not
+** be reached otherwise. */
+static void tunnel(void* ref, int port, UInt8 value)
+{
+    RomMapperY8960Ssgs* rm = (RomMapperY8960Ssgs*)ref;
+
+    if (port) {
+        y8960SsgsWriteData(rm->chip, value);
+    }
+    else {
+        y8960SsgsWriteAddress(rm->chip, value);
+    }
+}
+
+static void reset(RomMapperY8960Ssgs* rm)
+{
+    y8960SsgsReset(rm->chip);
+}
+
+static void saveState(RomMapperY8960Ssgs* rm)
+{
+    y8960SsgsSaveState(rm->chip);
+}
+
+static void loadState(RomMapperY8960Ssgs* rm)
+{
+    y8960SsgsLoadState(rm->chip);
+}
 
 static void destroy(RomMapperY8960Ssgs* rm)
 {
+    y8960UnregisterTunnel(Y8960_TUN_SSGS, rm);
+
+    ioPortUnregister(Y8960_SSGS_ADDRESS, rm);
+    ioPortUnregister(Y8960_SSGS_DATA, rm);
+
+    y8960SsgsDestroy(rm->chip);
+
     deviceManagerUnregister(rm->deviceHandle);
 
     free(rm);
@@ -39,10 +102,20 @@ static void destroy(RomMapperY8960Ssgs* rm)
 
 int romMapperY8960SsgsCreate(void)
 {
-    DeviceCallbacks callbacks = { destroy, NULL, NULL, NULL };
+    DeviceCallbacks callbacks = { destroy, reset, saveState, loadState };
     RomMapperY8960Ssgs* rm = (RomMapperY8960Ssgs*)calloc(1, sizeof(RomMapperY8960Ssgs));
 
     rm->deviceHandle = deviceManagerRegister(ROM_Y8960SSGS, &callbacks, rm);
+
+    rm->chip = y8960SsgsCreate(boardGetMixer(), "Y8960 SSGS");
+
+    /* Write only: the cartridge does not answer reads. */
+    ioPortRegister(Y8960_SSGS_ADDRESS, NULL, writeIo, rm);
+    ioPortRegister(Y8960_SSGS_DATA, NULL, writeIo, rm);
+
+    y8960RegisterTunnel(Y8960_TUN_SSGS, tunnel, rm);
+
+    reset(rm);
 
     return 1;
 }
