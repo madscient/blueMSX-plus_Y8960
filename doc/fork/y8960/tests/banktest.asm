@@ -17,8 +17,16 @@ REG_B1R equ     04ffdh          ; BANK1 register, RAM mode
 SCC_B1  equ     07800h          ; SCC window inside BANK1
 
 ENA1    equ     07ff6h          ; I/O enabler 1: b0 = OPLL1, b1 = OPLL2
+ENA2    equ     07fffh          ; I/O enabler 2: b0 = OPL2-1, b1 = OPL2-2
 TUN0A   equ     07ff4h          ; tunnel to OPLL circuit 1, address
 TUN0D   equ     07ff5h          ; tunnel to OPLL circuit 1, data
+TUNC0A  equ     07feeh          ; tunnel to OPL2 circuit 1, address
+TUNC0D  equ     07fefh          ; tunnel to OPL2 circuit 1, data
+
+OPL20A  equ     0c0h            ; OPL2 circuit 1: address / status
+OPL20D  equ     0c1h            ; OPL2 circuit 1: data
+OPL21A  equ     0c2h            ; OPL2 circuit 2
+OPL21D  equ     0c3h
 
         org     04000h
 
@@ -350,6 +358,128 @@ t9:
         call    delay
         call    offt
 
+; --- 10. OPL2EX: the gate, the tunnel and the two circuits, all read back
+;
+; This block answers reads, so unlike the OPLL and the DCSG it can say for
+; itself whether a write arrived. Each step leaves a value that the next one
+; would not produce by accident.
+t10:
+; a. shut: the data port must not answer at all
+        xor     a
+        ld      (ENA2), a
+        ld      a, 040h
+        out     (OPL20A), a
+        in      a, (OPL20D)
+        cp      0ffh
+        jr      nz, t10_fail
+
+; b. open: a register written reads back
+        ld      a, 001h
+        ld      (ENA2), a
+        ld      a, 040h
+        out     (OPL20A), a
+        ld      a, 03fh
+        out     (OPL20D), a
+        ld      a, 040h
+        out     (OPL20A), a
+        in      a, (OPL20D)
+        cp      03fh
+        jr      nz, t10_fail
+
+; c. the tunnel delivers while the gate is shut
+;
+; Written shut and read after opening, so the read cannot be what did the
+; writing. The register holds 3Fh from step b, so an undelivered write leaves
+; that rather than a zero.
+        xor     a
+        ld      (ENA2), a
+        ld      a, 040h
+        ld      (TUNC0A), a
+        ld      a, 02ah
+        ld      (TUNC0D), a
+
+        ld      a, 001h
+        ld      (ENA2), a
+        ld      a, 040h
+        out     (OPL20A), a
+        in      a, (OPL20D)
+        cp      02ah
+        jr      nz, t10_fail
+
+; d. the second circuit is a separate chip
+        ld      a, 002h                 ; circuit 2 open, circuit 1 shut
+        ld      (ENA2), a
+        ld      a, 040h
+        out     (OPL21A), a
+        ld      a, 015h
+        out     (OPL21D), a
+        ld      a, 040h
+        out     (OPL21A), a
+        in      a, (OPL21D)
+        cp      015h
+        jr      nz, t10_fail
+
+        ld      a, 001h                 ; circuit 1 must still hold its own
+        ld      (ENA2), a
+        ld      a, 040h
+        out     (OPL20A), a
+        in      a, (OPL20D)
+        cp      02ah
+        jr      nz, t10_fail
+
+        ld      hl, msg_t10ok
+        call    print
+        jr      t11
+
+t10_fail:
+        ld      hl, msg_t10ng
+        call    print
+
+; --- 11. OPL2EX: four tones, judged by ear
+;
+; A names the waveform the YM3812 has and the Y8950 does not, so hearing A and
+; B alike means the waveform register did nothing.
+t11:
+        ld      hl, msg_t11
+        call    print
+
+        ld      a, 003h                 ; both circuits open
+        ld      (ENA2), a
+
+        ld      hl, msg_t11a
+        call    print
+        ld      hl, opl2_sine
+        call    send0
+        call    delay
+        ld      hl, opl2_off
+        call    send0
+
+        ld      hl, msg_t11b
+        call    print
+        ld      hl, opl2_half
+        call    send0
+        call    delay
+        ld      hl, opl2_off
+        call    send0
+
+        ld      hl, msg_t11c
+        call    print
+        ld      hl, opl2_sine
+        call    send1
+        call    delay
+        ld      hl, opl2_off
+        call    send1
+
+        ld      hl, msg_t11d
+        call    print
+        xor     a                       ; both circuits shut again
+        ld      (ENA2), a
+        ld      hl, opl2_sine
+        call    sendt
+        call    delay
+        ld      hl, opl2_off
+        call    sendt
+
 ; Regions 2 and 3 are not tested here.
 ;
 ; A cartridge's init entry runs with page 1 (4000-7FFF) switched to the
@@ -360,6 +490,80 @@ t9:
 
 done:
         ret
+
+; --- register lists for the OPL2EX, sent by the three routines below
+;
+; Pairs of register and value, FFh to stop. One held note on channel 0:
+; multiple 1 on both slots, the modulator held down so the carrier is what is
+; heard, fast attack, block 4.
+;
+; The two settings that decide whether the note starts and stops are easy to
+; get wrong together. The envelope type bit has to be set, or the note dies
+; while the key is still down; the release rate has to be fast, or it keeps
+; sounding after the key is lifted. Measured: with the type bit clear and the
+; release at 0 the note runs at full level and stays there after key-off.
+opl2_sine:
+        db      001h, 020h              ; waveform select enabled
+        db      020h, 021h              ; sustained, multiple 1
+        db      023h, 021h
+        db      040h, 01fh
+        db      043h, 000h
+        db      060h, 0f0h
+        db      063h, 0f0h
+        db      080h, 00fh              ; sustain full, release fast
+        db      083h, 00fh
+        db      0c0h, 000h
+        db      0e0h, 000h              ; the full sine
+        db      0e3h, 000h
+        db      0a0h, 080h
+        db      0b0h, 031h              ; key on
+        db      0ffh
+
+opl2_half:
+        db      0e0h, 001h              ; the positive half only
+        db      0e3h, 001h
+        db      0b0h, 011h              ; key off, then on again
+        db      0b0h, 031h
+        db      0ffh
+
+opl2_off:
+        db      0b0h, 011h
+        db      0ffh
+
+; HL -> a register list. The two ports of each circuit are adjacent, but the
+; tunnel is written as memory, so the three cannot share one routine.
+send0:
+        ld      a, (hl)
+        cp      0ffh
+        ret     z
+        out     (OPL20A), a
+        inc     hl
+        ld      a, (hl)
+        out     (OPL20D), a
+        inc     hl
+        jr      send0
+
+send1:
+        ld      a, (hl)
+        cp      0ffh
+        ret     z
+        out     (OPL21A), a
+        inc     hl
+        ld      a, (hl)
+        out     (OPL21D), a
+        inc     hl
+        jr      send1
+
+sendt:
+        ld      a, (hl)
+        cp      0ffh
+        ret     z
+        ld      (TUNC0A), a
+        inc     hl
+        ld      a, (hl)
+        ld      (TUNC0D), a
+        inc     hl
+        jr      sendt
 
 ; One sustained note on channel 0: preset 1, full volume, block 4, F-number
 ; 180h. Key-off keeps the block so only the key bit moves.
@@ -494,3 +698,17 @@ msg_t9d:
         db      " D 7AH 2ND CIRCUIT: TONE", 13, 10, 0
 msg_t9e:
         db      " E TUNNEL, SHUT: TONE", 13, 10, 0
+msg_t10ok:
+        db      "10 OPL2 READ BACK: OK", 13, 10, 0
+msg_t10ng:
+        db      "10 OPL2 READ BACK: NG", 13, 10, 0
+msg_t11:
+        db      "11 OPL2 (LISTEN):", 13, 10, 0
+msg_t11a:
+        db      " A SINE", 13, 10, 0
+msg_t11b:
+        db      " B HALF SINE: OTHER TONE", 13, 10, 0
+msg_t11c:
+        db      " C 2ND CIRCUIT: TONE", 13, 10, 0
+msg_t11d:
+        db      " D TUNNEL, SHUT: TONE", 13, 10, 0
