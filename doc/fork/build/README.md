@@ -275,6 +275,11 @@ ROM の実在までで、`machineInitialize()`（`romMapper*Create` を呼ぶと
 **起動するとウィンドウが出る。人間の並行作業と衝突しうるので、
 走らせる前に一声かけること。自動で繰り返し起動しない。**
 
+**MSX 側の操作は自動化できない。** `SendKeys` でキーを送っても MSX には
+届かない（**確認済み**: BASIC の画面に文字が出ないことを写して見た）。
+DirectInput 経由と見られる（**未確認**）。
+BASIC からコマンドを打つ必要がある検証は、**人の手を借りるしかない**。
+
 音声は `mixerStartLog()` が WAV に落とせる（**確認済み(読解)**:
 `Src/SoundChips/AudioMixer.c:630`、UI からは `Src/Emulator/Actions.c:406`）。
 **コマンドラインから開始する手段は見当たらない。**
