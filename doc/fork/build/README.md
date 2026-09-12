@@ -132,12 +132,61 @@ cp -r blueMSX/ReleaseFiles/Tools/Cheats "$DEST/Tools/"
 `Tools` だけは既にプラグインの DLL が入っているので、`Cheats` を中に足す。
 名前は衝突しない（**確認済み**: `ReleaseFiles/Tools` の中身は `Cheats` だけ）。
 
-### マシン構成は作業ツリーを直接指せる
+### 実機の BIOS ROM
+
+リポジトリの `ReleaseFiles/Machines` は**機種定義だけで、実機の BIOS ROM を
+含まない**。この状態で使えるのは C-BIOS 系の 24 機種である（**確認済み**:
+`/listmachines` が 24 行を返した）。
+
+**ROM の置き場所はマシンごとに違うので、この文書には書かない。**
+インストール済みの blueMSX+ があるなら、その `Machines` フォルダの中身を
+出力先の `Machines` に重ねればよい。`Shared Roms` も一緒に入る。
+
+```sh
+DEST=blueMSX/Make/msvc2022/x64/Release
+cp -r "<インストール済み blueMSX+ の Machines>"/* "$DEST/Machines/"
+```
+
+**上書きで重ねる。** リポジトリ側にしかない機種定義も残る。
+
+出力先は gitignore 済みなので、**ROM を置いても追跡対象にならない**
+（**確認済み**: コピー後に `git status` がクリーンだった）。
+`ReleaseFiles/Machines` の側には置かないこと。そちらは追跡される。
+
+**`/listmachines` に出る数は、ROM が揃っている機種の数である。**
+`machineIsValid` が `checkRoms` でスロットの ROM ファイルの実在を確かめ、
+欠けている機種を落とす（**確認済み(読解)**: `Src/Board/Machine.c:647-690`）。
+このマシンでは 253 機種のうち **96 機種**が通った（**確認済み**）。
+残りは ROM が揃っていない。
+
+### マシン構成は作業ツリーを直接指せる。ただし ROM は付いてこない
 
 `/machinedir` にパスを渡すと、コピーではなく**作業ツリーの
 `blueMSX/ReleaseFiles/Machines` を読ませられる**（**確認済み**:
-コピー側と作業ツリー側で `/listmachines` が同じ 24 機種を返した）。
-Y8960 のテスト用構成を作業ツリーで編集しながら試せる。
+ROM を重ねる前は、コピー側と作業ツリー側で `/listmachines` が同じ 24 機種を返した）。
+
+**ただし作業ツリーには実機 ROM が無い**ので、そちらを指すと C-BIOS 系だけに戻る。
+実機機種と作業ツリーの構成を同時に使うことはできない。
+
+| 何を指すか | 使える機種 | テスト構成の置き場所 |
+|---|---|---|
+| 出力先の `Machines`（既定） | ROM を重ねた分すべて | 出力先。追跡されない |
+| `/machinedir` で作業ツリー | C-BIOS 系だけ | 作業ツリー。追跡される |
+
+**Y8960 のテストは C-BIOS 機で足りる**（Y8960 はカートリッジであって、
+本体の BIOS に依存しない）ので、どちらでも回せる。
+
+### Y8960 のテスト用マシン構成をどこに置くか
+
+**未決。** 置き場所で性質が変わる。
+
+| 置き場所 | 性質 |
+|---|---|
+| 出力先の `Machines/` | 追跡されない。使い捨て。ビルド出力を消すと消える |
+| `blueMSX/ReleaseFiles/Machines/` | 追跡される。**配布物に入る**（`ci-package.ps1` が `ReleaseFiles` を丸ごと詰める） |
+
+Y8960 が WIP のうちは前者でよい。**配布に載せる段になったら後者へ移す**。
+どちらに置いても `/machinedir` で読ませられる。
 
 ## 5. ヘッドレスで確かめられること
 
@@ -188,6 +237,8 @@ ROM の実在までで、`machineInitialize()`（`romMapper*Create` を呼ぶと
    無ければ `msvc2026`（v145）を使うか、`-p:PlatformToolset` で上書きする
 2. **vcpkg のグローバル統合の有無と、インストール済みライブラリ**（§3.1）
 3. **`ReleaseFiles` のコピー**（§4）。ビルドしただけでは動かない
+4. **実機の BIOS ROM の置き場所**（§4）。マシンごとに違うのでこの文書には
+   書いていない。無くても C-BIOS 系 24 機種は動く
 
 `x64/` 配下は全部生成物なので、clone して §2 と §4 を踏めば復元できる。
 
@@ -214,5 +265,8 @@ ROM の実在までで、`machineInitialize()`（`romMapper*Create` を呼ぶと
   コピー側と同じ 24 機種が返った
 - PowerShell の `>` では GUI サブシステムのアプリの出力も終了コードも取れないことを
   実測（§3.2）。`Start-Process -Wait -PassThru -RedirectStandardOutput` に切り替えた
+- **実機の BIOS ROM を出力先に重ねた**（§4）。`/listmachines` が 24 機種から
+  **96 機種**に増えた（**確認済み**）。コピー後も `git status` はクリーンで、
+  ROM は追跡されていない
 - **`msvc2026`（v145）と `Win32` プラットフォーム、`Debug` / `Final` 構成は
   試していない**
