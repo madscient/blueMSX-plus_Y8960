@@ -148,9 +148,14 @@ blueMSX+ のファイルは冒頭に帰属を持つ。**どれも消さない。
 | `Src/SoundChips/OpenMsxY8950Latest/` | GPL（openMSX 由来） |
 | `Src/SoundChips/AY8910.c` / `SN76489.c` / `SCC.c` | GPLv2（blueMSX 由来） |
 
+`Src/SoundChips/Y8960OpllCore.c` は Emu2413 のフォークなので MIT 表示を引き継ぎ、
+音色データの CC BY-SA 表示を併せて持つ。
+
 音色データを別の出所から持ち込むときは、その出所の表示も要る。
-"Copyright free OPLL(x) ROM patches" (David Viens / Hubert Lamontagne) は
-**CC BY-SA なので帰属表示が要る**。詳細は `y8960/implementation-plan.md` §5.2。
+**"Copyright free OPLL(x) ROM patches" (David Viens / Hubert Lamontagne、
+CC BY-SA) は `Src/SoundChips/Y8960OpllCore.c` に入っている。**
+同ファイル冒頭の音色テーブルに付いた出典表示が帰属表示なので、消さない。
+詳細は `y8960/implementation-plan.md` §5.2。
 
 ## 作業の規則は `ai/` にある
 

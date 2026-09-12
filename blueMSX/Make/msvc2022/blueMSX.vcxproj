@@ -945,6 +945,8 @@
     <ClCompile Include="..\..\Src\SoundChips\SCC.c" />
     <ClCompile Include="..\..\Src\SoundChips\Y8960Scc.c" />
     <ClCompile Include="..\..\Src\SoundChips\Y8960Dcsg.c" />
+    <ClCompile Include="..\..\Src\SoundChips\Y8960OpllCore.c" />
+    <ClCompile Include="..\..\Src\SoundChips\Y8960Opllex.c" />
     <ClCompile Include="..\..\Src\SoundChips\SN76489.c" />
     <ClCompile Include="..\..\Src\SoundChips\VLM5030.c" />
     <ClCompile Include="..\..\Src\SoundChips\Y8950.cpp" />
@@ -1300,6 +1302,8 @@
     <ClInclude Include="..\..\Src\SoundChips\SCC.h" />
     <ClInclude Include="..\..\Src\SoundChips\Y8960Scc.h" />
     <ClInclude Include="..\..\Src\SoundChips\Y8960Dcsg.h" />
+    <ClInclude Include="..\..\Src\SoundChips\Y8960OpllCore.h" />
+    <ClInclude Include="..\..\Src\SoundChips\Y8960Opllex.h" />
     <ClInclude Include="..\..\Src\SoundChips\SN76489.h" />
     <ClInclude Include="..\..\Src\SoundChips\VLM5030.h" />
     <ClInclude Include="..\..\Src\SoundChips\Y8950.h" />
