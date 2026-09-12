@@ -47,6 +47,35 @@ typedef enum {
 ** machine configuration stays silent rather than answering unconditionally. */
 int y8960IoEnabled(Y8960IoBlock block);
 
+/* The window also tunnels writes straight into the sound blocks, at
+** 7FEAh-7FF5h. Unlike the direct I/O ports these are NOT gated by the
+** enablers: the enablers themselves are only reachable through this window,
+** so gating the tunnels would leave no way to open anything.
+**
+** Inside the window the first circuit of a pair sits at the higher address,
+** which is the opposite of the direct I/O ports for OPL2 and DCSG. The two
+** orderings were settled separately, for compatibility with earlier designs,
+** so neither can be derived from the other. */
+typedef enum {
+    Y8960_TUN_SSGS,     /* 7FEAh register, 7FEBh value */
+    Y8960_TUN_OPL21,    /* 7FECh address,  7FEDh data  */
+    Y8960_TUN_OPL20,    /* 7FEEh address,  7FEFh data  */
+    Y8960_TUN_DCSG1,    /* 7FF0h, single byte          */
+    Y8960_TUN_DCSG0,    /* 7FF1h, single byte          */
+    Y8960_TUN_OPLL1,    /* 7FF2h address,  7FF3h data  */
+    Y8960_TUN_OPLL0,    /* 7FF4h address,  7FF5h data  */
+    Y8960_TUN_COUNT
+} Y8960TunnelBlock;
+
+/* port is 0 for the address or register number and 1 for the data; blocks
+** that take a single byte only ever see 0. */
+typedef void (*Y8960TunnelWrite)(void* ref, int port, UInt8 value);
+
+/* A block registers itself when it is created and clears the entry when it
+** is destroyed. Writes to an unclaimed tunnel go nowhere. */
+void y8960RegisterTunnel(Y8960TunnelBlock block, Y8960TunnelWrite write, void* ref);
+void y8960UnregisterTunnel(Y8960TunnelBlock block, void* ref);
+
 /* One block per RomType, so a machine configuration can carry them
 ** independently while the cartridge hardware is still being designed. */
 int romMapperY8960OpllexCreate(void);

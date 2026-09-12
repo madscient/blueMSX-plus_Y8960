@@ -125,11 +125,28 @@ t4:
 
         ld      hl, msg_t4ok
         call    print
-        jr      done
+        jr      tunnels
 
 t4_fail:
         ld      hl, msg_t4ng
         call    print
+
+; --- tunnel sweep
+;
+; Writes a distinct value to each tunnel address in turn. Nothing is checked
+; here: with no block registered the writes go nowhere, and the mapping can
+; only be read off a probe placed in tunnelWrite. It is kept so the sweep is
+; reproducible when a probe is needed. BANK1 holds a ROM bank at this point,
+; so the window is open.
+tunnels:
+        ld      hl, 07feah
+        ld      b, 12
+        ld      c, 0a0h
+tun_loop:
+        ld      (hl), c
+        inc     hl
+        inc     c
+        djnz    tun_loop
 
 ; The memory mapped window is not tested here.
 ;

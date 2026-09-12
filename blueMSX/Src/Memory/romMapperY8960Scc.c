@@ -61,6 +61,38 @@ typedef struct {
 ** single card, so the other blocks find it through here. */
 static RomMapperY8960Scc* theY8960Scc = NULL;
 
+typedef struct {
+    Y8960TunnelWrite write;
+    void*            ref;
+} Y8960Tunnel;
+
+static Y8960Tunnel theTunnels[Y8960_TUN_COUNT];
+
+void y8960RegisterTunnel(Y8960TunnelBlock block, Y8960TunnelWrite write, void* ref)
+{
+    if (block < Y8960_TUN_COUNT) {
+        theTunnels[block].write = write;
+        theTunnels[block].ref   = ref;
+    }
+}
+
+void y8960UnregisterTunnel(Y8960TunnelBlock block, void* ref)
+{
+    /* Only the block that claimed it may release it, so a device destroyed
+    ** after its replacement was created cannot unhook the newcomer. */
+    if (block < Y8960_TUN_COUNT && theTunnels[block].ref == ref) {
+        theTunnels[block].write = NULL;
+        theTunnels[block].ref   = NULL;
+    }
+}
+
+static void tunnelWrite(Y8960TunnelBlock block, int port, UInt8 value)
+{
+    if (theTunnels[block].write != NULL) {
+        theTunnels[block].write(theTunnels[block].ref, port, value);
+    }
+}
+
 int y8960IoEnabled(Y8960IoBlock block)
 {
     RomMapperY8960Scc* rm = theY8960Scc;
@@ -256,8 +288,20 @@ static void write(RomMapperY8960Scc* rm, UInt16 address, UInt8 value)
         case 0x1F:
             rm->ioEnable2 = value;
             break;
+        case 0x0A: tunnelWrite(Y8960_TUN_SSGS,  0, value); break;
+        case 0x0B: tunnelWrite(Y8960_TUN_SSGS,  1, value); break;
+        case 0x0C: tunnelWrite(Y8960_TUN_OPL21, 0, value); break;
+        case 0x0D: tunnelWrite(Y8960_TUN_OPL21, 1, value); break;
+        case 0x0E: tunnelWrite(Y8960_TUN_OPL20, 0, value); break;
+        case 0x0F: tunnelWrite(Y8960_TUN_OPL20, 1, value); break;
+        case 0x10: tunnelWrite(Y8960_TUN_DCSG1, 0, value); break;
+        case 0x11: tunnelWrite(Y8960_TUN_DCSG0, 0, value); break;
+        case 0x12: tunnelWrite(Y8960_TUN_OPLL1, 0, value); break;
+        case 0x13: tunnelWrite(Y8960_TUN_OPLL1, 1, value); break;
+        case 0x14: tunnelWrite(Y8960_TUN_OPLL0, 0, value); break;
+        case 0x15: tunnelWrite(Y8960_TUN_OPLL0, 1, value); break;
         default:
-            /* 7FEA-7FF5 tunnel into the sound blocks; not wired up yet. */
+            /* 7FE0-7FE9 and 7FF7-7FFE carry nothing. */
             break;
         }
         return;
