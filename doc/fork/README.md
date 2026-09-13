@@ -19,6 +19,7 @@ blueMSX+ 自身が [blueMSX](https://msxblue.com/bluemsx/) の非公式フォー
 |---|---|
 | `y8960/` | Y8960 カートリッジのエミュレーション実装 |
 | `y8960/README.md` | Y8960 の文書の役割と索引 |
+| `y8960/user-guide.md` | **Y8960 対応の使い方（エンドユーザー向け）** |
 | `y8960/hardware-notes.md` | Y8960 のハードウェア仕様。madscient/openMSX_Y8960 からの写し |
 | `y8960/implementation-plan.md` | blueMSX+ 側の実装計画・決定・実行経緯 |
 | `build/README.md` | ビルド環境。このマシンの事情と手順、ヘッドレスで確かめられること |
@@ -75,23 +76,24 @@ blueMSX+ 自身が [blueMSX](https://msxblue.com/bluemsx/) の非公式フォー
 
 ## Y8960 の実装状況
 
-**7 ブロックが `RomType` を持ち、マシン構成に個別に置ける。**
-そのうち 3 ブロックは中身が入っている。
+**7 ブロックが `RomType` を持ち、マシン構成に個別に置ける。すべてに中身が入っている。**
+加えて基盤タイプ `MSX2++`（Y8960 内蔵、SSGS が本体の PSG）がある。
 
 | ブロック | 状態 | 土台 |
 |---|---|---|
-| OPLLEX | **器のみ** | `Src/SoundChips/Emu2413/` のフォーク |
-| OPL2EX | **器のみ** | `Src/SoundChips/OpenMsxY8950Latest/` のフォーク |
-| SSGS | **器のみ** | `Src/SoundChips/AY8910.c` のフォーク |
+| OPLLEX | 実装済み・**音を確認** | `Src/SoundChips/Emu2413/` のフォーク |
+| OPL2EX | 実装済み・**音を確認** | `Src/SoundChips/OpenMsxY8950Latest/` のフォーク |
+| SSGS | 実装済み・**音を確認**（カートリッジ / 内蔵とも） | `Src/SoundChips/AY8910.c` のフォーク |
 | MSX-TIMER | 実装済み・**音は持たない** | 新規 |
-| MSX-MIXER | **器のみ** | 新規 |
+| MSX-MIXER | **入口のみ**（実機側が未実装） | 新規 |
 | Y8960 SCC + マッパー | 実装済み・**音は未聴取** | `Src/SoundChips/Y8960Scc.c`（`SCC.c` のフォーク）+ 新規マッパー |
 | DCSG | 実装済み・**音は未聴取** | `Src/SoundChips/Y8960Dcsg.c`（`SN76489.c` のフォーク） |
 | I/O イネーブラ / MMIO 窓 | 実装済み | SCC のマッパーが持つ |
 
-**音を実際に聴いた者はまだいない。** 確かめてあるのは MSX 側から見える
-レジスタとメモリの挙動まで（`y8960/implementation-plan.md` の各 §「確かめたこと」）。
-**タイマ割り込みが CPU に届くことも未確認**で、フラグが立つところまでしか見ていない。
+**OPLLEX / OPL2EX / SSGS は、エミュレータの中で人が聴いて確かめた。**
+SCC と DCSG の音はまだ聴いていない。
+**タイマ割り込みが CPU に届くことは未確認**で、フラグが立つところまでしか見ていない。
+詳細は `y8960/implementation-plan.md` の §0 と各 §「確かめたこと」。
 
 **カートリッジ内の音源ブロックは、SCC や DCSG そのものではなく等価回路である。**
 だから本体のコアを共有せず、フォークとして実装している

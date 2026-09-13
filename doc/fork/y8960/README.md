@@ -10,116 +10,84 @@ Y8960 対応は upstream には存在しない、このフォーク固有の機�
 
 ## 文書一覧
 
-| 文書 | 役割 |
-|---|---|
-| `README.md` (本書) | 文書の役割の記録・索引 |
-| `hardware-notes.md` | Y8960 ハードウェア仕様の調査結果。**madscient/openMSX_Y8960 からの写し**（情報リソース。blueMSX+ の成果物ではない） |
-| `implementation-plan.md` | blueMSX+ 側の実装計画・決定事項・実行経緯 |
-| `tests/MSX2+ - C-BIOS + Y8960/` | 7 ブロックを置いたテスト用マシン構成。**`y8960bas.rom` が要る** |
-| `tests/MSX2+ - C-BIOS + Y8960 (banktest)/` | 同じ構成で、Y8960 SCC に `banktest.rom` を載せたもの。**外部 ROM は要らない** |
-| `tests/banktest.asm` | バンクマッパーと MSX-TIMER の回帰テスト（MSX 側で走る） |
-| `tests/make-banktest.py` | 上を pasmo でアセンブルして ROM にする |
+| 文書 | 読者 | 役割 |
+|---|---|---|
+| `README.md` (本書) | 開発者・AI | 文書の役割の記録・索引 |
+| `user-guide.md` | **エンドユーザー** | Y8960 対応の使い方。**経緯・内部の識別子・開発文書への参照を書かない** |
+| `hardware-notes.md` | 開発者・AI | Y8960 ハードウェア仕様の調査結果。**madscient/openMSX_Y8960 からの写し**（情報リソース。blueMSX+ の成果物ではない） |
+| `implementation-plan.md` | 開発者・AI | blueMSX+ 側の実装計画・決定事項・実行経緯 |
 
 `implementation-plan.md` が**作業計画と経緯を記録する文書**である。
 セッションをまたぐ引き継ぎ情報・見送った判断・訂正はすべてここに書く。
 **引き継ぎの入口は同 §0。**
 
-## 状態（2026-09-12）
+**`user-guide.md` を直すときは、書く主張を先にコードか実行で確かめる。**
+エンドユーザー向けの文書には確度の印を付けられないので、
+確かめられないものは本文に書かず、同文書の「動作の確認が済んでいない機能」に置く。
 
-**Phase 0 と Phase 1 が完了し、Phase 2 は DCSG まで進んだ。**
+### テスト
 
-| | |
+| ファイル | 役割 |
 |---|---|
-| 中身が入っている | Y8960 SCC + バンクマッパー、I/O イネーブラ、MMIO 窓、トンネル、MSX-TIMER、DCSG ×2 |
-| 器だけ | OPLLEX、OPL2EX、SSGS、MSX-MIXER |
+| `tests/banktest.asm` + `make-banktest.py` | MSX 側で走る回帰テスト。バンクマッパー・窓・タイマ・DCSG・OPLLEX・OPL2EX・SSGS。128KB に展開 |
+| `tests/ssgstest.asm` + `make-ssgstest.py` | 基盤タイプ `MSX2++` で SSGS が本体の PSG として働くか。16KB の素の ROM |
+| `tests/opllex-bank-probe.c` | OPLLEX のコア単体試験（ヘッドレス） |
+| `tests/opl2ex-probe.cpp` + `opl2ex-host-stub.c` | OPL2EX のコア単体試験（ヘッドレス） |
+| `tests/ssgs-probe.c` + `ssgs-host-stub.c` | SSGS のコア単体試験（ヘッドレス） |
+| `tests/MSX2+ - C-BIOS + Y8960/` | 7 ブロックを置いた構成。**`y8960bas.rom` が要る** |
+| `tests/MSX2+ - C-BIOS + Y8960 (banktest)/` | 同じ構成で、Y8960 SCC に `banktest.rom` を載せたもの。本体 MSX-MUSIC は外してある |
+| `tests/MSX2+ - C-BIOS + Y8960 (cartridge)/` | Y8960 SCC を**外した**構成。`/rom1 <rom> /romtype1 Y8960SCC` でカートリッジとして挿す |
+| `tests/MSX2++ - C-BIOS + Y8960/` | 基盤タイプ `MSX2++`。`ssgstest.rom` を `/romtype1 4000h` で挿す |
 
-**次の一手と、確かめずに残してあることは `implementation-plan.md` §0。**
+コア単体試験のビルド手順は各ファイルの冒頭にある。
+
+## 状態
+
+**7 ブロックすべてに中身が入り、MSX 側から確かめられるものは確かめ終えた。**
+MSX-MIXER だけは実機側が未実装で、入口（値を憶える）までで止まっている。
+
+**現在地・次の一手・確かめずに残してあることは `implementation-plan.md` §0。**
 セッションをまたぐときはそこを最初に読む。残る未決は同 §9。
 
-前提として**上流の I/O ポートを重ね合わせ対応に直した**
-（`implementation-plan.md` §4.2）。書き込みが複数デバイスへ配られることは
-実測で確かめてある。
-
 **カートリッジ内の音源ブロックは等価回路であって、本体のチップではない。**
-だから本体のコアを共有せず、フォークとして実装する
-（`Y8960Scc.c` / `Y8960Dcsg.c`。同 §11 の 2026-09-12 (10)）。
+だから本体のコアを共有せず、フォークとして実装している（同 §11 の 2026-09-12 (10)）。
 
 **ハードウェア仕様は `hardware-notes.md` だけを見ないこと。**
-写しより新しい情報が `implementation-plan.md` §3.3 にある。Y8960 を駆動する
-ファームウェア（MsxSoundSuiteExtension）が前提にしている仕様で、
-写しが未決としていた論点のいくつかはそこで決着している。
+写しより新しい情報が `implementation-plan.md` §3.3 にある。
 
 ## テストの回し方
 
-**テスト用マシン構成がある。** `tests/MSX2+ - C-BIOS + Y8960/` を
-ビルド出力の `Machines/` にコピーすると、7 ブロックを置いた構成で起動できる。
-C-BIOS MSX2+ に 7 行足したもので、本体の ROM は C-BIOS のものを相対パスで参照する。
-
-**Y8960 SCC には `y8960bas.rom` が要る。** マッパーが ROM を伴うため、
-無いとこの構成は `/listmachines` に出ない。
-ROM は madscient/MsxSoundSuiteExtension から各自で用意し、**コピー先**の
-構成フォルダに置く。**リポジトリには置かないこと**（再配布に許諾が要る。
-`doc/fork/README.md` の「持ち込んではいけないもの」）。
+構成フォルダをビルド出力の `Machines/` にコピーし、ROM を置いて起動する。
 
 ```sh
 DEST=blueMSX/Make/msvc2022/x64/Release/Machines
-cp -r "doc/fork/y8960/tests/MSX2+ - C-BIOS + Y8960" "$DEST/"
-cp "<y8960bas.rom のパス>" "$DEST/MSX2+ - C-BIOS + Y8960/"
+cp -r "doc/fork/y8960/tests/MSX2+ - C-BIOS + Y8960 (banktest)" "$DEST/"
+py "doc/fork/y8960/tests/make-banktest.py" <pasmo.exe> "$DEST/MSX2+ - C-BIOS + Y8960 (banktest)/banktest.rom"
 ```
 
-### バンクマッパーのテスト
-
-`tests/banktest.asm` が**バンクメモリの回帰テスト**である。ROM カートリッジとして
-Y8960 SCC に載せ、MSX 側からバンクレジスタを叩いて結果を画面に出す。
-C-BIOS でも動く（ROM の init から走るため、スロット切り替えが要らない）。
-
-```sh
-py "doc/fork/y8960/tests/make-banktest.py" <pasmo.exe> <出力先>/banktest.rom
-```
-
-出来た ROM を `banktest.rom` という名前で、コピー先の
-`Machines/MSX2+ - C-BIOS + Y8960 (banktest)/` に置いて起動する
-（構成がその名前で参照している）。**この構成に `y8960bas.rom` は要らない。**
-画面に 7 行出る。**どれか 1 つでも `NG` なら回帰している。**
+`banktest` の画面に出る行のうち、**`OK` / `NG` のものは機械判定**、
+`(LISTEN)` のものは**人が聴いて判定する**。期待する聞こえ方は各行に書いてある。
 
 ```
-1 ROM BANKS: OK
-2 RAM WRITE: OK
-3 ROM PROTECT: OK
-4 SCC WINDOW: OK
-5 TIMER ENABLER: OK
-6 TIMER COUNTS: OK
-7 TIMER FLAG: OK
+1 ROM BANKS: OK        5 TIMER ENABLER: OK     9 OPLL (LISTEN)
+2 RAM WRITE: OK        6 TIMER COUNTS: OK     10 OPL2 READ BACK: OK
+3 ROM PROTECT: OK      7 TIMER FLAG: OK       11 OPL2 (LISTEN)
+4 SCC WINDOW: OK       8 DCSG SWEPT           12 SSGS (LISTEN)
 ```
 
-**BANK2 と BANK3 は試せない。** カートリッジの init はページ1
-（4000-7FFF）だけが自分のスロットに切り替わった状態で走るので、
-ページ2 に向けた書き込みはマッパーに届かない（`ENASLT` が要る）。
+**起動するとウィンドウが出る。** 画面の読み取り方と注意は
+`doc/fork/build/README.md` §5.1。**撮る直前にウィンドウを前面へ出すこと**
+（待っている間に別のウィンドウが手前に来ると結果が隠れる）。
 
-**判別力は確かめてある**（`implementation-plan.md` §5.7）。
+**`y8960bas.rom` はリポジトリに置かない**（再配布に許諾が要る。
+`doc/fork/README.md` の「持ち込んではいけないもの」）。
 
-### 本体のファームウェアを載せる構成
-
-**この構成で確かめられるのは「起動してクラッシュしないこと」までである。**
-C-BIOS は BASIC を持たないので、`y8960bas.rom` の拡張 BASIC を呼べない。
-バンクが正しくマップされているかは、**実機 BIOS を持つ機種に載せて
-拡張 BASIC を呼ばないと分からない**。
-
-（起動時に C-BIOS が `Init ROM in slot: 1` を 2 回出すが、
-**これを判定に使わないこと。** 標準の MSX BIOS は ROM ヘッダを
-`4000H` と `8000H` でしか探さず、この表示が何を意味するかは未解明である。）
-
-**自動で判定できるのはここまで**（`implementation-plan.md` §8）。
-
-ただし**検証の経路は分かっている**（`implementation-plan.md` §8）。
-`/listromtypes` と `/listmachines` はウィンドウを出さずに終わるので、
-RomType の登録とマシン構成の妥当性はヘッドレスで判定できる。
-デバイスの生成と音は起動しないと確かめられない。
-
-手順は `doc/fork/build/README.md` §5。実装が入ったらここに具体化する。
+**BANK2 と BANK3 は試せない。** カートリッジの init はページ1 だけが自分の
+スロットに切り替わった状態で走るので、ページ2 に向けた書き込みはマッパーに
+届かない（`ENASLT` が要る）。
 
 **非回帰テストの注意**: 修正後に通ることは、修正前に落ちることを示すまで
-証拠にならない。テストを書いたら、まず期待値を壊して落ちるのを確認すること。
+証拠にならない。規則は `doc/fork/ai/README.md` の「判別力は、壊した版に掛けて示す」。
 
 ## 取り込み元
 
@@ -127,3 +95,6 @@ Y8960 の実装方針は madscient/openMSX_Y8960 から引いている。
 一次仕様である hra1129/Y8960_Cartridge からは**何も取り込んでいない**。
 `hardware-notes.md` は RTL と仕様書を読解した結果の記述であって、複製ではない。
 理由は `doc/fork/README.md` の「ライセンスと帰属」。
+
+OPLLEX の音色データは "Copyright free OPLL(x) ROM patches"（CC BY-SA）。
+帰属表示は `Src/SoundChips/Y8960OpllCore.c` と `user-guide.md` にある。
