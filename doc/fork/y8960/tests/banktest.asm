@@ -1,12 +1,19 @@
 ; Y8960 bank mapper test cartridge.
 ;
 ; Runs from the cartridge's own init entry, so the Y8960 slot is already
-; selected and no slot switching is needed. Prints one line per check.
+; selected in page 1. Prints one line per check.
+;
+; Checks 15-18 hand other pages to the cartridge by writing A8h directly,
+; taking the slot from page 1. That holds only while the cartridge sits in a
+; primary slot that is not expanded, as in the test machine.
 ;
 ; Each 8kB bank carries its bank number at offset 0C00h, placed there by
 ; make-banktest.py. Bank 0 holds this code.
 
 CHPUT   equ     000a2h
+RG1SAV  equ     0f3e0h          ; BIOS copy of VDP register 1
+HKEYI   equ     0fd9ah          ; hook called on every interrupt
+TCOUNT  equ     HKEYI + 3       ; free while the hook holds a 3-byte JP
 
 BANK1W  equ     06C00h          ; marker seen through the BANK1 window
 BANK1   equ     06000h          ; BANK1 window itself
@@ -631,8 +638,13 @@ t15:
         di
         in      a, (0a8h)
         ld      b, a                    ; the slot selection to put back
+        and     00ch                    ; page 1's slot: this cartridge
+        rrca
+        rrca                            ; moved down to page 0
+        ld      c, a
+        ld      a, b
         and     0fch
-        or      001h                    ; page 0 from slot 1
+        or      c
         out     (0a8h), a
         ld      a, (00C00h)
         ld      c, a
@@ -653,15 +665,223 @@ t15_fail:
         call    print
 t15_done:
 
-; Regions 2 and 3 are not tested here.
+; --- 16. the bank at 6000h shows again at E000h
 ;
-; A cartridge's init entry runs with page 1 (4000-7FFF) switched to the
-; cartridge slot; page 2 (8000-BFFF) still belongs to RAM. Writes aimed at
-; BANK2 or BANK3 never reach the mapper at all - they land in RAM, and
-; reading them back succeeds for the wrong reason. Testing those regions
-; needs ENASLT first.
+; Page 3 holds the stack and the BIOS work area, so it belongs to the
+; cartridge only between the two OUTs, with interrupts off and nothing in
+; between that touches the stack. BANK1 holds bank 1, whose marker sits at
+; 0C00h. An unmirrored slot reads FFh there.
+t16:
+        ld      a, 1
+        ld      (REG_B1C), a
+        di
+        in      a, (0a8h)
+        ld      b, a                    ; the slot selection to put back
+        and     00ch                    ; page 1's slot: this cartridge
+        add     a, a
+        add     a, a
+        add     a, a
+        add     a, a                    ; moved up to page 3
+        ld      c, a
+        ld      a, b
+        and     03fh
+        or      c
+        out     (0a8h), a
+        ld      a, (0ec00h)
+        ld      c, a
+        ld      a, b
+        out     (0a8h), a
+        ei
+
+        ld      a, c
+        cp      1
+        jr      nz, t16_fail
+
+        ld      hl, msg_t16ok
+        call    print
+        jr      t17
+
+t16_fail:
+        ld      hl, msg_t16ng
+        call    print
+
+; --- 17, 18. the SCC window in BANK2 and BANK3
+;
+; The init entry leaves page 2 on RAM, where a write aimed at BANK2 or BANK3
+; lands and reads back for the wrong reason. sccpage2 gives page 2 to the
+; cartridge first, and also reads the region's marker, which RAM would not
+; hold.
+t17:
+        ld      hl, 09000h
+        ld      de, 09800h
+        ld      c, 2
+        call    sccpage2
+        ld      hl, msg_t17ok
+        jr      z, t17_print
+        ld      hl, msg_t17ng
+t17_print:
+        call    print
+
+t18:
+        ld      hl, 0b000h
+        ld      de, 0b800h
+        ld      c, 3
+        call    sccpage2
+        ld      hl, msg_t18ok
+        jr      z, t18_print
+        ld      hl, msg_t18ng
+t18_print:
+        call    print
+
+; --- 19. the timer's interrupt reaches the processor
+;
+; The BIOS calls H.KEYI on every interrupt before it looks at the VDP, so a
+; handler hooked there sees them all. The VDP's frame interrupt is off for the
+; duration, which leaves the timer as the only source: without that, VDP
+; interrupts would find the flag the timer raises anyway and count it. The
+; handler clears the flag, which is what lets the line fall; a line that
+; stayed up would starve the wait and this check would never print.
+t19:
+        ld      a, 1
+        ld      (REG_B1C), a            ; a ROM bank: the window, for the enabler
+        ld      a, 080h
+        ld      (ENA2), a
+
+        di
+        ld      hl, (HKEYI)             ; the hook's five bytes, to put back
+        push    hl
+        ld      hl, (HKEYI + 2)
+        push    hl
+        ld      a, (HKEYI + 4)
+        push    af
+        ld      a, 0c3h
+        ld      (HKEYI), a
+        ld      hl, tint
+        ld      (HKEYI + 1), hl
+        xor     a
+        ld      (TCOUNT), a
+
+        ld      a, (RG1SAV)
+        and     0dfh                    ; frame interrupt off
+        out     (099h), a
+        ld      a, 081h
+        out     (099h), a
+
+        xor     a                       ; counter 0, register 0
+        out     (0b0h), a
+        ld      a, 091h                 ; interrupt on, resolution 1, repeat
+        out     (0b1h), a
+        ld      a, 001h
+        out     (0b0h), a
+        ld      a, 0ffh                 ; terminal value 255: about 80 a second
+        out     (0b1h), a
+        ld      a, 002h
+        out     (0b0h), a
+        ld      a, 003h                 ; enable and clear
+        out     (0b1h), a
+        ld      a, 00fh
+        out     (0b2h), a               ; drop flags left by earlier checks
+        ei
+
+        call    delay
+
+        di
+        ld      a, 002h
+        out     (0b0h), a
+        xor     a                       ; counter 0 stopped
+        out     (0b1h), a
+        xor     a
+        out     (0b0h), a
+        xor     a                       ; its interrupt off
+        out     (0b1h), a
+        ld      a, 00fh
+        out     (0b2h), a
+        ld      a, (RG1SAV)
+        out     (099h), a
+        ld      a, 081h
+        out     (099h), a
+        ld      a, (TCOUNT)             ; before the restore below overwrites it
+        ld      c, a
+        pop     af
+        ld      (HKEYI + 4), a
+        pop     hl
+        ld      (HKEYI + 2), hl
+        pop     hl
+        ld      (HKEYI), hl
+        ei
+
+        ld      a, c
+        cp      2                       ; more than one: the line fell and rose again
+        jr      c, t19_fail
+
+        ld      hl, msg_t19ok
+        call    print
+        jr      done
+
+t19_fail:
+        ld      hl, msg_t19ng
+        call    print
 
 done:
+        ret
+
+; Shows the SCC in one region of page 2 and checks it answers, then puts the
+; bank back and checks its marker. Page 2 belongs to the cartridge only in
+; between, with interrupts off.
+;
+; In:  HL = the region's bank register, compatibility mode (9000h or B000h)
+;      DE = the region's SCC window (9800h or B800h)
+;      C  = the bank the region holds, put back afterwards
+; Out: Z set when both checks pass
+; Destroys AF, B, E
+sccpage2:
+        di
+        in      a, (0a8h)
+        push    af                      ; the slot selection to put back
+        and     00ch                    ; page 1's slot: this cartridge
+        add     a, a
+        add     a, a                    ; moved up to page 2
+        ld      b, a
+        pop     af
+        push    af
+        and     0cfh
+        or      b
+        out     (0a8h), a
+
+        ld      (hl), 03fh
+        ld      a, 0a5h
+        ld      (de), a                 ; SCC waveform, not memory
+        ld      a, (de)
+        ld      b, a
+        ld      (hl), c
+
+        push    hl                      ; the marker, 0400h below the register
+        ld      a, h
+        sub     004h
+        ld      h, a
+        ld      e, (hl)
+        pop     hl
+
+        pop     af
+        out     (0a8h), a
+        ei
+
+        ld      a, b
+        cp      0a5h
+        ret     nz
+        ld      a, e
+        cp      c
+        ret
+
+; Hooked into H.KEYI by check 19; the BIOS has saved every register.
+; Counts counter 0's interrupts in TCOUNT and clears its flag.
+tint:
+        in      a, (0b2h)
+        and     001h
+        ret     z
+        out     (0b2h), a
+        ld      hl, TCOUNT
+        inc     (hl)
         ret
 
 ; --- register lists for the OPL2EX, sent by the three routines below
@@ -950,3 +1170,19 @@ msg_t15ok:
         db      "15 MIRROR AT 0000H: OK", 13, 10, 0
 msg_t15ng:
         db      "15 MIRROR AT 0000H: NG", 13, 10, 0
+msg_t16ok:
+        db      "16 MIRROR AT E000H: OK", 13, 10, 0
+msg_t16ng:
+        db      "16 MIRROR AT E000H: NG", 13, 10, 0
+msg_t17ok:
+        db      "17 SCC WINDOW BANK2: OK", 13, 10, 0
+msg_t17ng:
+        db      "17 SCC WINDOW BANK2: NG", 13, 10, 0
+msg_t18ok:
+        db      "18 SCC WINDOW BANK3: OK", 13, 10, 0
+msg_t18ng:
+        db      "18 SCC WINDOW BANK3: NG", 13, 10, 0
+msg_t19ok:
+        db      "19 TIMER INTERRUPT: OK", 13, 10, 0
+msg_t19ng:
+        db      "19 TIMER INTERRUPT: NG", 13, 10, 0

@@ -188,9 +188,7 @@ Y8960 を駆動する拡張 BASIC と BIOS が
 
 次の機能は実装されていますが、動作の確認が済んでいません。
 
-- MSX-TIMER の割り込みが CPU に届くこと
-- BANK2 / BANK3 に SCC を出すこと
-- `C000h`-`FFFFh` 側のミラー
+- `C000h`-`DFFFh` のミラー
 - SCC と DCSG の音
 - 基盤タイプが MSX2++ のマシンで OPLLEX / OPL2EX / DCSG が応答すること
   （MSX-TIMER と SSGS は確認済み）

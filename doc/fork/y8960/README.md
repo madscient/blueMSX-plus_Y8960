@@ -69,11 +69,15 @@ py "doc/fork/y8960/tests/make-banktest.py" <pasmo.exe> "$DEST/MSX2+ - C-BIOS + Y
 `(LISTEN)` のものは**人が聴いて判定する**。期待する聞こえ方は各行に書いてある。
 
 ```
-1 ROM BANKS: OK        5 TIMER ENABLER: OK     9 OPLL (LISTEN)       13 WINDOW, BANK 20: OK
-2 RAM WRITE: OK        6 TIMER COUNTS: OK     10 OPL2 READ BACK: OK  14 PAGE 0 NO WRITE: OK
-3 ROM PROTECT: OK      7 TIMER FLAG: OK       11 OPL2 (LISTEN)       15 MIRROR AT 0000H: OK
-4 SCC WINDOW: OK       8 DCSG SWEPT           12 SSGS (LISTEN)
+1 ROM BANKS: OK        6 TIMER COUNTS: OK     11 OPL2 (LISTEN)        16 MIRROR AT E000H: OK
+2 RAM WRITE: OK        7 TIMER FLAG: OK       12 SSGS (LISTEN)        17 SCC WINDOW BANK2: OK
+3 ROM PROTECT: OK      8 DCSG SWEPT           13 WINDOW, BANK 20: OK  18 SCC WINDOW BANK3: OK
+4 SCC WINDOW: OK       9 OPLL (LISTEN)        14 PAGE 0 NO WRITE: OK  19 TIMER INTERRUPT: OK
+5 TIMER ENABLER: OK   10 OPL2 READ BACK: OK   15 MIRROR AT 0000H: OK
 ```
+
+画面がスクロールするので、1 から 12 は起動後 16 秒ほど、
+残りは 60 秒ほどで撮る。
 
 `ssgstest` は `MSX2++` の構成に `ssgstest.rom` を置いて起動する。
 1 / 2 / 6 / 7 / 8 が機械判定、3 / 4 が聴く項目、5 がかな LED を見る項目。
@@ -90,9 +94,9 @@ py "doc/fork/y8960/tests/make-ssgstest.py" <pasmo.exe> "$DEST/MSX2++ - C-BIOS + 
 **`y8960bas.rom` はリポジトリに置かない**（再配布に許諾が要る。
 `doc/fork/README.md` の「持ち込んではいけないもの」）。
 
-**BANK2 と BANK3 は試せない。** カートリッジの init はページ1 だけが自分の
-スロットに切り替わった状態で走るので、ページ2 に向けた書き込みはマッパーに
-届かない（`ENASLT` が要る）。
+**15-18 はカートリッジを拡張されていない基本スロットに置いたときだけ使える。**
+カートリッジの init はページ1 だけが自分のスロットに切り替わった状態で走るので、
+他のページは A8h を直接書いてカートリッジに向ける。拡張スロットでは `ENASLT` が要る。
 
 **非回帰テストの注意**: 修正後に通ることは、修正前に落ちることを示すまで
 証拠にならない。規則は `doc/fork/ai/README.md` の「判別力は、壊した版に掛けて示す」。
