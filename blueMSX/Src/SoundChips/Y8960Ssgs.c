@@ -285,7 +285,8 @@ void y8960SsgsWriteData(Y8960SsgsChip* chip, UInt8 data)
 /* Registers the chip does not have read as all ones rather than as zero: the
 ** bus ANDs what every device drives, so ones are how a device says it is not
 ** answering. The registers it does have read back what was written, as the
-** PSG this is built from does. */
+** PSG this is built from does; the four-bit ones come back as four bits, as
+** openMSX_Y8960 returns them. */
 UInt8 y8960SsgsReadData(Y8960SsgsChip* chip)
 {
     int core = Y8960_SSGS_CORE_OF(chip->address);
@@ -296,7 +297,7 @@ UInt8 y8960SsgsReadData(Y8960SsgsChip* chip)
     }
 
     if (sub == Y8960_SSGS_LED_REG && core == 1) {
-        return (UInt8)(0xF0 | chip->led);
+        return chip->led;
     }
 
     if (sub == 0x0E || sub == 0x0F) {
@@ -312,7 +313,7 @@ UInt8 y8960SsgsReadData(Y8960SsgsChip* chip)
     }
 
     if (sub >= Y8960_SSGS_PAN_FIRST && sub <= Y8960_SSGS_PAN_LAST) {
-        return (UInt8)(0xF0 | chip->core[core].regs[sub]);
+        return chip->core[core].regs[sub];
     }
 
     return 0xFF;

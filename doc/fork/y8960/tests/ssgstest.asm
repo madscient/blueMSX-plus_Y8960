@@ -194,10 +194,29 @@ t7:
 
         ld      hl, msg_t7ok
         call    print
-        jr      done
+        jr      t8
 
 t7_fail:
         ld      hl, msg_t7ng
+        call    print
+
+; --- 8. a pan pot reads back as its four bits
+;
+; Channel B's pot is untouched, so it holds the centre reset left there. A
+; chip that filled the unused bits would read F8h.
+t8:
+        ld      a, 011h                 ; first core, channel B pan
+        out     (PSGADDR), a
+        in      a, (PSGREAD)
+        cp      008h
+        jr      nz, t8_fail
+
+        ld      hl, msg_t8ok
+        call    print
+        jr      done
+
+t8_fail:
+        ld      hl, msg_t8ng
         call    print
 
 done:
@@ -248,3 +267,7 @@ msg_t7ok:
         db      "7 NO WINDOW: OK", 13, 10, 0
 msg_t7ng:
         db      "7 NO WINDOW: NG", 13, 10, 0
+msg_t8ok:
+        db      "8 PAN READS 4 BITS: OK", 13, 10, 0
+msg_t8ng:
+        db      "8 PAN READS 4 BITS: NG", 13, 10, 0
