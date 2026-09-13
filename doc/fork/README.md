@@ -78,13 +78,18 @@ blueMSX+ 自身が [blueMSX](https://msxblue.com/bluemsx/) の非公式フォー
 |---|---|---|
 | PR #77 | I/O ポートの解放が登録と食い違う 3 件。`fix/ioport-unregister-mismatch` | **上流 `develop` にマージされた**（マージコミット `178eaf03`） |
 | issue #78 | 1 ポートに 1 デバイスしか登録できない件。多重化の提案 | OPEN。コメント無し |
+| PR #80 | #78 の実装（`IoPort` の多重化と `ioPortUnregister` の `ref`）。`feature/ioport-multi-claim` | 2026-09-13 に提案として提出。取り込むかは上流に委ねた |
+| PR #81 | キーマトリクスの注入と `/hidden`。`feature/key-matrix-input` | 同上 |
 | issue #74 | PSG のレジスタ番号を 4bit で丸めている件 | OPEN のまま。上流は PR #75（`be45fc46`）で直しており、本フォークは cherry-pick 済み |
 
 PR #77 と issue #78 は本文を**日本語を先、英語を後**（`<details>` に格納）。
 上流の所有者と報告者がどちらも日本語話者で、かつ公開リポジトリに
 海外の利用者もいるため。**タイトルは英語**（既存の issue / PR に揃えた）。
 
-**issue #78 が決着するまで、`IoPort.{c,h}` と `ioPortUnregister` の 53 ファイルは
+**上流とのあいだの保留は、PR #80 / #81 に集めた**（2026-09-13 ユーザー判断）。取り込むかどうかは上流の
+所有者に委ね、こちらは上流が動いたときに `develop` のマージで受け取る（入口を 1 つにする）。
+
+**PR #80 が決着するまで、`IoPort.{c,h}` と `ioPortUnregister` の 53 ファイルは
 上流と食い違ったままになる。** 上流が別の形で多重化を入れた場合、取り込みのときに
 この 53 ファイルがまとめて衝突面になる。
 
