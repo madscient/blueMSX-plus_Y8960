@@ -41,6 +41,7 @@
 #define Y8960_MEM_SIZE   (Y8960_BANKS * Y8960_BANK_SIZE)
 
 #define Y8960_REGIONS    4
+#define Y8960_START_PAGE 2
 
 typedef struct {
     int    deviceHandle;
@@ -156,7 +157,15 @@ static int mmioVisible(RomMapperY8960Scc* rm)
         return 0;
     }
 
-    return (rm->bankReg[1] & 0x1F) < Y8960_ROM_BANKS;
+    /* A bank number from 16 up hides the window only while RAM mode is on.
+    ** In compatibility mode those banks cannot be written, and the window
+    ** stays, as openMSX_Y8960 has it. */
+    return !(rm->ramMode && (rm->bankReg[1] & 0x1F) >= Y8960_ROM_BANKS);
+}
+
+static int mirrorPage(int region)
+{
+    return region < 2 ? region + 6 : region - 2;
 }
 
 static void bankSwitch(RomMapperY8960Scc* rm, int region)
@@ -171,6 +180,14 @@ static void bankSwitch(RomMapperY8960Scc* rm, int region)
     /* The SCC window covers only 1800-1FFF of the region, and a mapped page
     ** is all or nothing, so the whole region goes through the callback. */
     slotMapPage(rm->slot, rm->sslot, rm->startPage + region, bankData, !scc, writable);
+
+    /* Each bank also shows four pages away: 4000-7FFF again at C000-FFFF and
+    ** 8000-BFFF again at 0000-3FFF. The mirrors are for reading; writes and
+    ** the SCC window stay with the page itself. Only a mapper at 4000h has
+    ** them, which is where the cartridge decodes. */
+    if (rm->startPage == Y8960_START_PAGE) {
+        slotMapPage(rm->slot, rm->sslot, mirrorPage(region), bankData, 1, 0);
+    }
 }
 
 static void bankSwitchAll(RomMapperY8960Scc* rm)
@@ -239,6 +256,10 @@ static void loadState(RomMapperY8960Scc* rm)
 static void destroy(RomMapperY8960Scc* rm)
 {
     slotUnregister(rm->slot, rm->sslot, rm->startPage);
+    if (rm->startPage == Y8960_START_PAGE) {
+        slotUnregister(rm->slot, rm->sslot, 0);
+        slotUnregister(rm->slot, rm->sslot, 6);
+    }
     deviceManagerUnregister(rm->deviceHandle);
     y8960SccDestroy(rm->scc);
 
@@ -352,8 +373,10 @@ static void write(RomMapperY8960Scc* rm, UInt16 address, UInt8 value)
         }
     }
 
+    /* 4000-5FFF holds the mode and bank registers, and is not written to
+    ** memory even when a RAM bank shows there, as openMSX_Y8960 has it. */
     bank = rm->bankReg[region] & 0x1F;
-    if (rm->ramMode && bank >= Y8960_ROM_BANKS) {
+    if (rm->ramMode && region != 0 && bank >= Y8960_ROM_BANKS) {
         rm->memory[bank * Y8960_BANK_SIZE + (address & 0x1FFF)] = value;
     }
 }
@@ -366,6 +389,13 @@ int romMapperY8960SccCreate(const char* filename, UInt8* romData,
 
     rm->deviceHandle = deviceManagerRegister(ROM_Y8960SCC, &callbacks, rm);
     slotRegister(slot, sslot, startPage, Y8960_REGIONS, read, peek, write, destroy, rm);
+
+    /* No callbacks on the mirrors: they are always mapped for reading, and a
+    ** write that finds no callback is dropped, which is what they need. */
+    if (startPage == Y8960_START_PAGE) {
+        slotRegister(slot, sslot, 0, 2, NULL, NULL, NULL, NULL, rm);
+        slotRegister(slot, sslot, 6, 2, NULL, NULL, NULL, NULL, rm);
+    }
 
     rm->scc       = y8960SccCreate(boardGetMixer());
     rm->memory    = (UInt8*)calloc(1, Y8960_MEM_SIZE);

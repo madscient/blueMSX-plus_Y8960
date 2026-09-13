@@ -3,12 +3,12 @@
 ; Runs from the cartridge's own init entry, so the Y8960 slot is already
 ; selected and no slot switching is needed. Prints one line per check.
 ;
-; Each 8kB bank carries its bank number at offset 0800h, placed there by
+; Each 8kB bank carries its bank number at offset 0C00h, placed there by
 ; make-banktest.py. Bank 0 holds this code.
 
 CHPUT   equ     000a2h
 
-BANK1W  equ     06800h          ; marker seen through the BANK1 window
+BANK1W  equ     06C00h          ; marker seen through the BANK1 window
 BANK1   equ     06000h          ; BANK1 window itself
 
 REG_B1C equ     07000h          ; BANK1 register, compatibility mode
@@ -549,6 +549,110 @@ t12:
         ld      hl, ssgs_off
         call    sendg
 
+; --- 13. the window stays in compatibility mode with a high bank in BANK1
+;
+; The timer is shut through the window, bank 20 goes into BANK1 with RAM mode
+; off, and the timer is opened through the window. A ROM bank is put back
+; before reading, so the open is seen only if the window was there to take it.
+t13:
+        ld      a, 1
+        ld      (REG_B1C), a            ; a ROM bank: the window is present
+        xor     a
+        ld      (ENA2), a               ; timer shut
+        ld      a, 20
+        ld      (REG_B1C), a            ; bank 20, compatibility mode
+        ld      a, 080h
+        ld      (ENA2), a               ; open the timer, if the window is here
+        ld      a, 1
+        ld      (REG_B1C), a
+        in      a, (0b2h)
+        cp      0ffh
+        jr      z, t13_fail
+
+        ld      hl, msg_t13ok
+        call    print
+        jr      t14
+
+t13_fail:
+        ld      hl, msg_t13ng
+        call    print
+
+; --- 14. in RAM mode 4000-5FFF takes no write, even with a RAM bank there
+;
+; This code runs from 4000h, so it is first copied into bank 16 and only then
+; is bank 16 shown at 4000h: the processor keeps finding the same bytes while
+; the page changes under it. The probe byte at 5F00h lies outside the copy.
+t14:
+        ld      a, 1
+        ld      (REG_MOD), a            ; RAM mode
+        ld      a, 16
+        ld      (REG_B1R), a            ; bank 16 at 6000h, where it can be written
+        ld      hl, 04000h
+        ld      de, 06000h
+        ld      bc, 00C00h              ; up to the marker, which holds all the code
+        ldir                            ; the code, into bank 16
+        xor     a
+        ld      (07f00h), a             ; the probe byte, bank 16 offset 1F00h
+
+        ld      a, 16
+        ld      (048fch), a             ; bank 16 at 4000h too
+        ld      a, 05ah
+        ld      (05f00h), a             ; must be refused
+        ld      a, (05f00h)
+        ld      c, a
+
+        xor     a
+        ld      (048fch), a             ; bank 0 back at 4000h
+        ld      a, 1
+        ld      (REG_B1R), a
+        xor     a
+        ld      (REG_MOD), a            ; compatibility mode again
+        ld      a, 1
+        ld      (REG_B1C), a
+
+        ld      a, c
+        or      a
+        jr      nz, t14_fail            ; the write went in
+
+        ld      hl, msg_t14ok
+        call    print
+        jr      t15
+
+t14_fail:
+        ld      hl, msg_t14ng
+        call    print
+
+; --- 15. the bank at 8000h shows again at 0000h
+;
+; Page 0 is given to the cartridge's slot for one read, with interrupts off
+; because the BIOS lives there. BANK2 still holds bank 2, whose marker sits at
+; 0C00h. An unmirrored slot reads FFh there.
+t15:
+        di
+        in      a, (0a8h)
+        ld      b, a                    ; the slot selection to put back
+        and     0fch
+        or      001h                    ; page 0 from slot 1
+        out     (0a8h), a
+        ld      a, (00C00h)
+        ld      c, a
+        ld      a, b
+        out     (0a8h), a
+        ei
+
+        ld      a, c
+        cp      2
+        jr      nz, t15_fail
+
+        ld      hl, msg_t15ok
+        call    print
+        jr      t15_done
+
+t15_fail:
+        ld      hl, msg_t15ng
+        call    print
+t15_done:
+
 ; Regions 2 and 3 are not tested here.
 ;
 ; A cartridge's init entry runs with page 1 (4000-7FFF) switched to the
@@ -834,3 +938,15 @@ msg_t12d:
         db      " D OPEN, PAN F: MOVES RIGHT", 13, 10, 0
 msg_t12e:
         db      " E BOTH CORES: LEFT+RIGHT", 13, 10, 0
+msg_t13ok:
+        db      "13 WINDOW, BANK 20: OK", 13, 10, 0
+msg_t13ng:
+        db      "13 WINDOW, BANK 20: NG", 13, 10, 0
+msg_t14ok:
+        db      "14 PAGE 0 NO WRITE: OK", 13, 10, 0
+msg_t14ng:
+        db      "14 PAGE 0 NO WRITE: NG", 13, 10, 0
+msg_t15ok:
+        db      "15 MIRROR AT 0000H: OK", 13, 10, 0
+msg_t15ng:
+        db      "15 MIRROR AT 0000H: NG", 13, 10, 0

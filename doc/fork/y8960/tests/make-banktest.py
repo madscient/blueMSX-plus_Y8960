@@ -1,6 +1,6 @@
 """Assemble banktest.asm and expand it into a 128kB Y8960 cartridge image.
 
-Bank 0 holds the code; every bank carries its own number at offset 0800h so
+Bank 0 holds the code; every bank carries its own number at offset 0C00h so
 the test can tell which bank the BANK1 window is showing.
 
 Usage:  py make-banktest.py <pasmo.exe> <output.rom>
@@ -11,7 +11,7 @@ import sys
 
 BANK_SIZE = 0x2000
 ROM_BANKS = 16
-MARKER_OFFSET = 0x0800
+MARKER_OFFSET = 0x0C00
 
 here = os.path.dirname(os.path.abspath(__file__))
 pasmo, out = sys.argv[1], sys.argv[2]
