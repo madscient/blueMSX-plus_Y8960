@@ -32,6 +32,7 @@
 | | |
 |---|---|
 | キーマトリクス | `MsxPPI.c` が `inputEventGetState(EC_*)` で組む。外から `inputEventSet` / `inputEventUnset` を呼べば押したことになる（`Actions.c` の `actionKeyPress` が既にある） |
+| キーバインド定義 | **ホストのキー（DirectInput）→ `EC_*` の変換だけに効く**（`Win32keyboard.c` の `bindingsDikForEc`）。`inputEventSet` は `eventMap[]` に直接書くマクロ（`InputEvent.h`）なので、**そこへ注入すればバインドを通らない**。`EC_*` → キーマトリクスの対応は `MsxPPI.c` に固定で、設定では変わらない。**逆に、ホストのキーイベントを合成する作り方（`SendInput` や `WM_KEYDOWN`）ではバインドとフォーカスの影響を受ける**ので採らない |
 | ホストのキーボード | フォーカスが無い間は読まれない（`keyboardUpdate`）。**フォーカスの出入りで全キーがリセットされる**（`keyboardResetKbd` → `inputEventReset`） |
 | 既存の `WM_COPYDATA` | ファイル起動の受け渡しに使っている（`Win32.c`、識別子 `LAUNCH_COPYDATA_ID` = `0x424D5846`）。識別子で区別して足せる |
 | 2 つ目の起動の転送 | 引数が登録済み拡張子のファイル 1 個のときだけ。オプション付きの起動は常に新しいインスタンス |
