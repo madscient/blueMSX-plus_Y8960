@@ -264,6 +264,11 @@ MSX 系統の板はすべて `BOARD_MSX` になり、個々の板種別と比べ
 2026-09-12 の時点では読み書き・生成分岐・CPU フラグ・構成エディタの 4 種類、
 6 ファイルだった。
 
+**キー入力の注入と `/hidden` のために 7 本触った**（2026-09-13、上流候補の枝
+`feature/key-matrix-input`）。`Board/Board.c`、`Win32/Win32.c`、`Win32/Win32keyboard.{c,h}`、
+`Emulator/CommandLine.c`、ビルド定義 3 系統。新規は `Input/KeyMatrixInput.{c,h}`。
+内容は `automation/plan.md` §4。
+
 ## ヒアドキュメントにバックスラッシュを書かない
 
 **この作業ツリーでは、Bash ツールのヒアドキュメントがバックスラッシュを

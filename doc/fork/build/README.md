@@ -414,7 +414,7 @@ vcpkg のグローバル統合（§3.1）がそれを置いていく。空にし
 API の仕組みからの見立てで、**未検証**）。
 
 **これで自動で読めるのは「画面に出る結果」までである。**
-MSX 側のキー操作も送れない（上記）。音は §5.2。
+音は §5.2、キー入力とウィンドウを出さない実行は §5.3。
 
 ### 5.2 音は WAV に書き出して読める
 
@@ -439,6 +439,24 @@ Start-Sleep -Seconds 25
 
 **聴いて分かることの一部は、これで機械が判定できる。** 使い方の例は
 `doc/fork/y8960/tests/sndtest.asm` と `analyze-sndtest.py`（音程の並びで判定する）。
+
+### 5.3 ウィンドウを出さずに走らせ、キーを押す
+
+`/hidden` を付けるとウィンドウを出さず、音も鳴らさない（WAV は録れる）。
+キーは `WM_COPYDATA` でキーマトリクスに押す。形式と振る舞いは
+`doc/fork/automation/plan.md` §3、PowerShell の道具は
+`doc/fork/automation/tests/BlueMsxControl.ps1`。
+
+**隠したウィンドウは `Process.MainWindowHandle` に出ない。** クラス名 `blueMSX` と
+プロセス ID で探す（`BlueMsxControl.ps1` の `Find-BlueMsxWindow`）。
+
+**PowerShell から Win32 の文字列引数に `$null` を渡すと空文字列になる。**
+`FindWindowEx` の窓名に `$null` を渡すと何も見つからない（**確認済み**）。
+`[NullString]::Value` を渡すか、C# 側で `null` を渡す。
+
+**`/rootdir` で設定と出力を人の使っている場所から分ける。** 新しい設定ファイルは
+ビデオドライバが `d3d12` になる。表示ありで走らせると、この機械では
+エミュレータの画面が白いままだった（**確認済み**。原因は調べていない）。`/hidden` なら描かないので影響しない。
 
 ## 6. 別のマシンで再開するとき
 
