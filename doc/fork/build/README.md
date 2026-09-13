@@ -370,13 +370,14 @@ BASIC からコマンドを打つ必要がある検証は、**人の手を借り
 
 **スクリーンショットのコマンドラインオプションは無い**（**確認済み(読解)**:
 `Src/Emulator/CommandLine.c` の `cmdLineOptions`）。
-PowerShell から窓の矩形を取って画面を写す。
+PowerShell から、ウィンドウ自身に描かせて写す。
 
 ```powershell
 $env:LIB = ""; $env:INCLUDE = ""   # §3.1。空でないと Add-Type が止まる
 Add-Type -AssemblyName System.Drawing
 $sig = @'
 [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+[DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, uint nFlags);
 public struct RECT { public int Left, Top, Right, Bottom; }
 '@
 Add-Type -MemberDefinition $sig -Name Win -Namespace Cap | Out-Null
@@ -390,7 +391,9 @@ $r = New-Object Cap.Win+RECT
 [void][Cap.Win]::GetWindowRect($p.MainWindowHandle, [ref]$r)
 $bmp = New-Object System.Drawing.Bitmap ($r.Right-$r.Left), ($r.Bottom-$r.Top)
 $g = [System.Drawing.Graphics]::FromImage($bmp)
-$g.CopyFromScreen($r.Left, $r.Top, 0, 0, $bmp.Size)
+$hdc = $g.GetHdc()
+[void][Cap.Win]::PrintWindow($p.MainWindowHandle, $hdc, 2)   # 2 = PW_RENDERFULLCONTENT
+$g.ReleaseHdc($hdc)
 $bmp.Save($shot, [System.Drawing.Imaging.ImageFormat]::Png)
 $g.Dispose(); $bmp.Dispose(); Stop-Process -Id $p.Id -Force
 ```
@@ -403,9 +406,12 @@ vcpkg のグローバル統合（§3.1）がそれを置いていく。空にし
 **`-PassThru` は型の配列を返す。** `$w::GetWindowRect` は
 `MethodNotFound` になる。`[Cap.Win]::` と型名で呼ぶこと。
 
-**他のウィンドウが重なっていると、その画素が写る**（**確認済み**:
-取得した画像の上部に別アプリが写り込んだ）。MSX の画面自体は読めたが、
-確実にするなら手前に出してから写す（**未検証**）。
+**`CopyFromScreen` で画面から写さないこと。** 画面の画素を読むので、
+エミュレータの手前にある別のウィンドウの中身がそのまま画像に入る。
+利用者が見ている内容を撮ることになる。`PrintWindow` はウィンドウ自身に
+描かせるので、手前に何があっても読まない（**確認済み**: この方法で MSX の画面が
+読めた。**別のウィンドウが重なった状態で撮ったことはない** — 重なっても読めることは
+API の仕組みからの見立てで、**未検証**）。
 
 **これで自動で読めるのは「画面に出る結果」までである。**
 音は依然として人の耳が要る。MSX 側のキー操作も送れない（上記）。

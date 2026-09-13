@@ -29,15 +29,15 @@ Y8960 対応は upstream には存在しない、このフォーク固有の機�
 
 | ファイル | 役割 |
 |---|---|
-| `tests/banktest.asm` + `make-banktest.py` | MSX 側で走る回帰テスト。バンクマッパー・窓・タイマ・DCSG・OPLLEX・OPL2EX・SSGS。128KB に展開 |
-| `tests/ssgstest.asm` + `make-ssgstest.py` | 基盤タイプ `MSX2++` で SSGS が本体の PSG として働くか。16KB の素の ROM |
+| `tests/banktest.asm` + `make-banktest.py` | MSX 側で走る回帰テスト。バンクマッパー・窓・ミラー・タイマ・DCSG・OPLLEX・OPL2EX・SSGS。128KB に展開 |
+| `tests/ssgstest.asm` + `make-ssgstest.py` | 基盤タイプ `MSX2++` で SSGS が本体の PSG として働くか、窓とイネーブラが無いか。16KB の素の ROM |
 | `tests/opllex-bank-probe.c` | OPLLEX のコア単体試験（ヘッドレス） |
 | `tests/opl2ex-probe.cpp` + `opl2ex-host-stub.c` | OPL2EX のコア単体試験（ヘッドレス） |
 | `tests/ssgs-probe.c` + `ssgs-host-stub.c` | SSGS のコア単体試験（ヘッドレス） |
 | `tests/MSX2+ - C-BIOS + Y8960/` | 7 ブロックを置いた構成。**`y8960bas.rom` が要る** |
 | `tests/MSX2+ - C-BIOS + Y8960 (banktest)/` | 同じ構成で、Y8960 SCC に `banktest.rom` を載せたもの。本体 MSX-MUSIC は外してある |
 | `tests/MSX2+ - C-BIOS + Y8960 (cartridge)/` | Y8960 SCC を**外した**構成。`/rom1 <rom> /romtype1 Y8960SCC` でカートリッジとして挿す |
-| `tests/MSX2++ - C-BIOS + Y8960/` | 基盤タイプ `MSX2++`。`ssgstest.rom` を `/romtype1 4000h` で挿す |
+| `tests/MSX2++ - C-BIOS + Y8960/` | 基盤タイプ `MSX2++`。MSX-TIMER と Y8960 SCC を置き、Y8960 SCC に `ssgstest.rom` を載せたもの |
 
 コア単体試験のビルド手順は各ファイルの冒頭にある。
 
@@ -69,15 +69,23 @@ py "doc/fork/y8960/tests/make-banktest.py" <pasmo.exe> "$DEST/MSX2+ - C-BIOS + Y
 `(LISTEN)` のものは**人が聴いて判定する**。期待する聞こえ方は各行に書いてある。
 
 ```
-1 ROM BANKS: OK        5 TIMER ENABLER: OK     9 OPLL (LISTEN)
-2 RAM WRITE: OK        6 TIMER COUNTS: OK     10 OPL2 READ BACK: OK
-3 ROM PROTECT: OK      7 TIMER FLAG: OK       11 OPL2 (LISTEN)
+1 ROM BANKS: OK        5 TIMER ENABLER: OK     9 OPLL (LISTEN)       13 WINDOW, BANK 20: OK
+2 RAM WRITE: OK        6 TIMER COUNTS: OK     10 OPL2 READ BACK: OK  14 PAGE 0 NO WRITE: OK
+3 ROM PROTECT: OK      7 TIMER FLAG: OK       11 OPL2 (LISTEN)       15 MIRROR AT 0000H: OK
 4 SCC WINDOW: OK       8 DCSG SWEPT           12 SSGS (LISTEN)
 ```
 
+`ssgstest` は `MSX2++` の構成に `ssgstest.rom` を置いて起動する。
+1 / 2 / 6 / 7 / 8 が機械判定、3 / 4 が聴く項目、5 がかな LED を見る項目。
+
+```sh
+cp -r "doc/fork/y8960/tests/MSX2++ - C-BIOS + Y8960" "$DEST/"
+py "doc/fork/y8960/tests/make-ssgstest.py" <pasmo.exe> "$DEST/MSX2++ - C-BIOS + Y8960/ssgstest.rom"
+```
+
 **起動するとウィンドウが出る。** 画面の読み取り方と注意は
-`doc/fork/build/README.md` §5.1。**撮る直前にウィンドウを前面へ出すこと**
-（待っている間に別のウィンドウが手前に来ると結果が隠れる）。
+`doc/fork/build/README.md` §5.1。**画面は `PrintWindow` で撮る**
+（画面から写すと、手前に来た別のウィンドウの中身が写る）。
 
 **`y8960bas.rom` はリポジトリに置かない**（再配布に許諾が要る。
 `doc/fork/README.md` の「持ち込んではいけないもの」）。
