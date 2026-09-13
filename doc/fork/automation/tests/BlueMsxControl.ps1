@@ -16,6 +16,7 @@ public static class BlueMsxControl {
     [DllImport("user32.dll", CharSet = CharSet.Ansi)] static extern IntPtr FindWindowEx(IntPtr p, IntPtr a, string cls, string win);
     [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
     [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+    [DllImport("user32.dll")] static extern bool IsWindow(IntPtr h);
     [StructLayout(LayoutKind.Sequential)] struct COPYDATASTRUCT { public IntPtr dwData; public int cbData; public IntPtr lpData; }
     [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr h, uint msg, IntPtr w, ref COPYDATASTRUCT c);
     [DllImport("user32.dll", EntryPoint = "SendMessage")] public static extern IntPtr SendMsg(IntPtr h, uint msg, IntPtr w, IntPtr l);
@@ -31,7 +32,10 @@ public static class BlueMsxControl {
         return IntPtr.Zero;
     }
 
+    // -1 when the window is gone: a refused request also answers 0, and a
+    // script must not read an emulator that exited as one that said no.
     public static long CopyData(IntPtr h, long id, string text) {
+        if (!IsWindow(h)) return -1;
         COPYDATASTRUCT c = new COPYDATASTRUCT();
         c.dwData = new IntPtr(id);
         byte[] b = Encoding.ASCII.GetBytes(text + "\0");
@@ -67,7 +71,8 @@ function Find-BlueMsxWindow([System.Diagnostics.Process]$Process, [int]$TimeoutM
     return [IntPtr]::Zero
 }
 
-# Returns 1 when the whole request was queued, 0 when it was refused.
+# Returns 1 when the whole request was queued, 0 when it was refused, and -1
+# when the emulator's window no longer exists.
 function Send-KeyMatrix([IntPtr]$Window, [string]$Commands) {
     return [BlueMsxControl]::CopyData($Window, $BlueMsxKeyMatrixId, $Commands)
 }
@@ -76,13 +81,15 @@ function Get-KeyMatrixRemaining([IntPtr]$Window) {
     return [BlueMsxControl]::CopyData($Window, $BlueMsxKeyMatrixId, "")
 }
 
+# True when the queue has drained; false on timeout or when the emulator is gone.
 function Wait-KeyMatrix([IntPtr]$Window, [int]$TimeoutSeconds = 60) {
     $t0 = Get-Date
-    while ((Get-KeyMatrixRemaining $Window) -gt 0) {
-        if (((Get-Date) - $t0).TotalSeconds -gt $TimeoutSeconds) { return $false }
+    while ($true) {
+        $n = Get-KeyMatrixRemaining $Window
+        if ($n -eq 0) { return $true }
+        if ($n -lt 0 -or ((Get-Date) - $t0).TotalSeconds -gt $TimeoutSeconds) { return $false }
         Start-Sleep -Milliseconds 100
     }
-    return $true
 }
 
 function Invoke-BlueMsxMenu([IntPtr]$Window, [int]$CommandId) {
@@ -90,7 +97,7 @@ function Invoke-BlueMsxMenu([IntPtr]$Window, [int]$CommandId) {
 }
 
 # Character -> row, mask, shift for the international layout (C-BIOS US).
-# Covers what the tests type; add keys as they are needed.
+# Letters, digits, space, RETURN and the symbols of rows 0-2.
 function Get-KeyInternational([char]$c) {
     $letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     $s = [string]$c
@@ -103,11 +110,17 @@ function Get-KeyInternational([char]$c) {
     }
     if ($s -match '^[0-7]$') { return @(0, (1 -shl [int]$s), 0) }
     if ($s -match '^[89]$')  { return @(1, (1 -shl ([int]$s - 8)), 0) }
+    # Rows 0-2 hold the symbols; each entry is row, bit, shift.
+    $symbols = @{
+        ')' = @(0,0,1); '!' = @(0,1,1); '@' = @(0,2,1); '#' = @(0,3,1); '$' = @(0,4,1)
+        '%' = @(0,5,1); '^' = @(0,6,1); '&' = @(0,7,1); '*' = @(1,0,1); '(' = @(1,1,1)
+        '-' = @(1,2,0); '_' = @(1,2,1); '=' = @(1,3,0); '+' = @(1,3,1); ';' = @(1,7,0)
+        ':' = @(1,7,1); "'" = @(2,0,0); '"' = @(2,0,1); ',' = @(2,2,0); '<' = @(2,2,1)
+        '.' = @(2,3,0); '>' = @(2,3,1); '/' = @(2,4,0); '?' = @(2,4,1)
+    }
+    if ($symbols.ContainsKey($s)) { $e = $symbols[$s]; return @($e[0], (1 -shl $e[1]), $e[2]) }
     switch ($s) {
         ' '  { return @(8, 0x01, 0) }
-        ','  { return @(2, 0x04, 0) }
-        '.'  { return @(2, 0x08, 0) }
-        '!'  { return @(0, 0x02, 1) }
         "`n" { return @(7, 0x80, 0) }
     }
     throw "no key for '$s'"

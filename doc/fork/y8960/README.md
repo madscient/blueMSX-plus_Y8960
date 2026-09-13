@@ -38,6 +38,7 @@ Y8960 対応は upstream には存在しない、このフォーク固有の機�
 | `tests/MSX2+ - C-BIOS + Y8960/` | 7 ブロックを置いた構成。**`y8960bas.rom` が要る** |
 | `tests/MSX2+ - C-BIOS + Y8960 (banktest)/` | 同じ構成で、Y8960 SCC に `banktest.rom` を載せたもの。本体 MSX-MUSIC は外してある |
 | `tests/MSX2+ - C-BIOS + Y8960 (cartridge)/` | Y8960 SCC を**外した**構成。`/rom1 <rom> /romtype1 Y8960SCC` でカートリッジとして挿す |
+| `tests/MSX2 - Y8960 (firmware)/` | 汎用 `MSX2`（MSX BASIC 2.1）に Y8960 の 7 ブロックを載せ、Y8960 SCC に `y8960bas.rom` を載せたもの。**`Machines/Shared Roms/` の BIOS と `y8960bas.rom` が要る** |
 | `tests/MSX2++ - C-BIOS + Y8960/` | 基盤タイプ `MSX2++`。MSX-TIMER と Y8960 SCC を置き、Y8960 SCC に `ssgstest.rom` を載せたもの |
 
 コア単体試験のビルド手順は各ファイルの冒頭にある。
