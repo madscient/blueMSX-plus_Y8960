@@ -122,7 +122,6 @@ private:
     int delta;
     uint8_t reg7;
     uint8_t reg15;
-    bool romBank;
 };
 
 } // namespace y8960opl2

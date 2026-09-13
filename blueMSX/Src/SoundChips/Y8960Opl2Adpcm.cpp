@@ -64,7 +64,6 @@ static constexpr int R07_REC         = 0x40;
 static constexpr int R07_START       = 0x80;
 static constexpr int R07_MODE        = 0xE0;
 
-static constexpr int R08_ROM         = 0x01;
 static constexpr int R08_64K         = 0x02;
 static constexpr int R08_DA_AD       = 0x04;
 static constexpr int R08_SAMPL       = 0x08;
@@ -90,7 +89,7 @@ Y8950Adpcm::Y8950Adpcm(Y8950& y8950_, const DeviceConfig& config,
     , aud{}
     , startAddr(0), stopAddr(7), addrMask((1 << 18) - 1)
     , volumeWStep(0), readDelay(0), delta(0)
-    , reg7(0), reg15(0), romBank(false)
+    , reg7(0), reg15(0)
 {
     clearRam();
 }
@@ -113,7 +112,6 @@ void Y8950Adpcm::reset(EmuTime time)
     reg7 = 0;
     reg15 = 0;
     readDelay = 0;
-    romBank = false;
     writeReg(0x12, 255, time);
 
     restart(emu);
@@ -206,7 +204,9 @@ void Y8950Adpcm::writeReg(uint8_t rg, uint8_t data, EmuTime time)
         break;
 
     case 0x08:
-        romBank = data & R08_ROM;
+        /* Bit 0 is not looked at. A Y8950 uses it to read samples from a ROM
+        ** instead of its RAM; the Y8960 has only the SRAM behind its ADPCM,
+        ** so there is nothing for the bit to choose. */
         addrMask = data & R08_64K ? (1 << 16) - 1 : (1 << 18) - 1;
         break;
 
@@ -343,7 +343,7 @@ uint8_t Y8950Adpcm::peekData() const
 void Y8950Adpcm::writeMemory(unsigned memPtr, uint8_t value)
 {
     unsigned addr = (memPtr / 2) & addrMask;
-    if ((addr < ram.span(circuit)) && !romBank) {
+    if (addr < ram.span(circuit)) {
         ram.write(circuit, addr, value);
     }
 }
@@ -351,7 +351,7 @@ void Y8950Adpcm::writeMemory(unsigned memPtr, uint8_t value)
 uint8_t Y8950Adpcm::readMemory(unsigned memPtr) const
 {
     unsigned addr = (memPtr / 2) & addrMask;
-    if (romBank || (addr >= ram.span(circuit))) {
+    if (addr >= ram.span(circuit)) {
         return 0;
     } else {
         return ram.read(circuit, addr);
@@ -431,7 +431,6 @@ void Y8950Adpcm::blueMsxSaveStateImpl(SaveState* s)
     saveStateSet(s, "adpcm_delta",       (UInt32)delta);
     saveStateSet(s, "adpcm_reg7",        (UInt32)reg7);
     saveStateSet(s, "adpcm_reg15",       (UInt32)reg15);
-    saveStateSet(s, "adpcm_romBank",     (UInt32)romBank);
 
     saveStateSet(s, "adpcm_emu_memPtr",       (UInt32)emu.memPtr);
     saveStateSet(s, "adpcm_emu_nowStep",      (UInt32)emu.nowStep);
@@ -454,7 +453,6 @@ void Y8950Adpcm::blueMsxLoadStateImpl(SaveState* s)
     delta       = (int)saveStateGet(s, "adpcm_delta",       delta);
     reg7        = (uint8_t)saveStateGet(s, "adpcm_reg7",  reg7);
     reg15       = (uint8_t)saveStateGet(s, "adpcm_reg15", reg15);
-    romBank     = (bool)saveStateGet(s, "adpcm_romBank",  romBank);
 
     emu.memPtr       = saveStateGet(s, "adpcm_emu_memPtr",       emu.memPtr);
     emu.nowStep      = saveStateGet(s, "adpcm_emu_nowStep",      emu.nowStep);

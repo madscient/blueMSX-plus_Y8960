@@ -167,6 +167,40 @@ int main()
               memcmp(pattern, got, 4) == 0);
     }
 
+    /* ---- bit 0 of 08h selects nothing ----------------------------------- */
+    {
+        /* On a Y8950 the bit sends the ADPCM to a sample ROM, where writes are
+        ** dropped and reads come back as zero. The Y8960 has only its SRAM
+        ** behind the ADPCM, so software that sets the bit must still find the
+        ** RAM there. */
+        SampleRam ram(256 * 1024);
+        Y8950 chip("probe", cfg, ram, 0, 0x2000, T);
+        const uint8_t pattern[4] = { 0x3C, 0x5A, 0x69, 0x96 };
+        uint8_t got[4] = { 0, 0, 0, 0 };
+
+        chip.reset(T);
+        chip.writeReg(0x08, 0x01, T);           /* ROM bit set */
+        chip.writeReg(0x09, 0x00, T);
+        chip.writeReg(0x0A, 0x00, T);
+        chip.writeReg(0x0B, 0xFF, T);
+        chip.writeReg(0x0C, 0xFF, T);
+        chip.writeReg(0x07, 0x60, T);
+        for (int i = 0; i < 4; i++) chip.writeReg(0x0F, pattern[i], T);
+        chip.writeReg(0x07, 0x00, T);
+
+        chip.writeReg(0x07, 0x20, T);           /* read back, bit still set */
+        chip.readReg(0x0F, T);
+        chip.readReg(0x0F, T);
+        for (int i = 0; i < 4; i++) got[i] = chip.readReg(0x0F, T);
+        chip.writeReg(0x07, 0x00, T);
+
+        printf("  with 08h b0 set: wrote %02x %02x %02x %02x, read %02x %02x %02x %02x\n",
+               pattern[0], pattern[1], pattern[2], pattern[3],
+               got[0], got[1], got[2], got[3]);
+        check("08h bit 0 does not take the RAM away",
+              memcmp(pattern, got, 4) == 0);
+    }
+
     /* ---- the modes divide the RAM as declared -------------------------- */
     {
         SampleRam ram(256 * 1024);
