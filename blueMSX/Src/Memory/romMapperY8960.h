@@ -33,8 +33,9 @@
 ** Reset leaves all of them closed. The cartridge has no direct I/O port for
 ** the enablers, so software has to reach them through the window.
 **
-** A Y8960 built into a machine has neither window nor enablers, and every
-** block answers there without being opened. */
+** A Y8960 built into an MSX2++ has neither window nor enablers, and every
+** block answers there without being opened. It keeps its bank memory and its
+** SCC; only the window goes. */
 typedef enum {
     Y8960_IO_OPLL0,     /* 7CH-7DH, enabler 1 bit 0 */
     Y8960_IO_OPLL1,     /* 7AH-7BH, enabler 1 bit 1 */
@@ -46,10 +47,14 @@ typedef enum {
     Y8960_IO_TIMER      /* B0H-B3H, enabler 2 bit 7 */
 } Y8960IoBlock;
 
-/* True when the SCC block is absent: the enablers live in that block's window,
-** and a Y8960 built into a machine has no window, so every block answers
-** unconditionally there. */
+/* True on an MSX2++, where the Y8960 is built in and has no window, and when
+** the SCC block is absent, which leaves the enablers unreachable. */
 int y8960IoEnabled(Y8960IoBlock block);
+
+/* Whether the Y8960 is built into the machine rather than plugged in. The
+** board sets it on every machine it builds, before the slots are filled, so a
+** machine that follows an MSX2++ does not inherit it. */
+void y8960SetBuiltIn(int builtIn);
 
 /* The window also tunnels writes straight into the sound blocks, at
 ** 7FEAh-7FF5h. Unlike the direct I/O ports these are NOT gated by the

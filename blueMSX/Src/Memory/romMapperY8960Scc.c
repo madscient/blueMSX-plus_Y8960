@@ -61,6 +61,15 @@ typedef struct {
 ** single card, so the other blocks find it through here. */
 static RomMapperY8960Scc* theY8960Scc = NULL;
 
+/* Set by the board before the machine is built. boardGetType() cannot answer
+** this: it folds every MSX board, MSX2++ included, down to the MSX family. */
+static int y8960BuiltIn = 0;
+
+void y8960SetBuiltIn(int builtIn)
+{
+    y8960BuiltIn = builtIn;
+}
+
 typedef struct {
     Y8960TunnelWrite write;
     void*            ref;
@@ -97,11 +106,11 @@ int y8960IoEnabled(Y8960IoBlock block)
 {
     RomMapperY8960Scc* rm = theY8960Scc;
 
-    /* The enablers live in the memory mapped window, and a Y8960 built into a
-    ** machine has no window at all: there is nothing to gate with, so every
-    ** block answers. The SCC block is what carries the window, so its absence
-    ** is what that case looks like from here. */
-    if (rm == NULL) {
+    /* The enablers live in the memory mapped window. Built into an MSX2++ the
+    ** Y8960 has no window, so every block answers. A machine that leaves the
+    ** SCC block out has no way to reach the enablers either, and its blocks
+    ** answer too rather than stay shut for good. */
+    if (rm == NULL || y8960BuiltIn) {
         return 1;
     }
 
@@ -136,6 +145,13 @@ static int sccVisible(RomMapperY8960Scc* rm, int region)
 ** there, or it does not and the window is gone along with the enablers. */
 static int mmioVisible(RomMapperY8960Scc* rm)
 {
+    /* Built into an MSX2++ the cartridge's window does not exist: the blocks
+    ** sit on the bus directly and there is nothing to open or tunnel into.
+    ** The bank memory and the SCC are still there. */
+    if (y8960BuiltIn) {
+        return 0;
+    }
+
     if (sccVisible(rm, 1)) {
         return 0;
     }

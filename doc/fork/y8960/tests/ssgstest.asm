@@ -1,13 +1,18 @@
 ; MSX2++ test cartridge: the SSGS standing in for the machine's PSG.
 ;
-; Runs from the cartridge's own init entry. A plain 16kB ROM at 4000h, so it
-; needs no mapper; build it with make-ssgstest.py.
+; Runs from the init entry of the slot that holds it. A plain 16kB image at
+; 4000h; build it with make-ssgstest.py. The MSX2++ test machine loads it into
+; the Y8960 SCC block's bank memory, so it also runs with that block present.
 ;
 ; On a machine whose board type is MSX2++ there is no AY-3-8910 at all: the
 ; Y8960's SSGS answers A0h-A2h. Checks 1 and 2 therefore fail on a machine
 ; where the SSGS is absent, and check 2 fails if the GPIO is not wired.
 ;
 ; Checks 3 and 4 are for the ear, 5 for the eye.
+;
+; Checks 6 and 7 are about the built-in Y8960 having no enablers and no
+; window. The machine carries the SCC block, which holds this ROM, so they
+; cannot pass on the rule that opens the gates when that block is missing.
 
 CHPUT   equ     000a2h
 
@@ -158,6 +163,43 @@ t5:
         ld      a, 06fh         ; bit 7 low: kana on
         out     (PSGDATA), a
 
+; --- 6. the MSX-TIMER answers without anything having opened it
+;
+; This machine carries the SCC block, which holds the enablers on a cartridge
+; and keeps them shut after reset; a shut timer reads FFh. Only the MSX2++
+; rule, that a built-in Y8960 has no enablers, lets it answer here.
+t6:
+        in      a, (0b2h)       ; interrupt flags
+        cp      0ffh
+        jr      z, t6_fail
+
+        ld      hl, msg_t6ok
+        call    print
+        jr      t7
+
+t6_fail:
+        ld      hl, msg_t6ng
+        call    print
+
+; --- 7. the write that shuts every gate on a cartridge changes nothing
+;
+; BANK1 holds a ROM bank after reset, which on a cartridge is exactly when the
+; window is present and this write would close the timer.
+t7:
+        xor     a
+        ld      (07fffh), a     ; enabler 2, all shut, if there were a window
+        in      a, (0b2h)
+        cp      0ffh
+        jr      z, t7_fail
+
+        ld      hl, msg_t7ok
+        call    print
+        jr      done
+
+t7_fail:
+        ld      hl, msg_t7ng
+        call    print
+
 done:
         ret
 
@@ -198,3 +240,11 @@ msg_t4:
         db      "4 PAN 0: EXPECT LEFT ONLY", 13, 10, 0
 msg_t5:
         db      "5 KANA LED: EXPECT LIT", 13, 10, 0
+msg_t6ok:
+        db      "6 NO ENABLER NEEDED: OK", 13, 10, 0
+msg_t6ng:
+        db      "6 NO ENABLER NEEDED: NG", 13, 10, 0
+msg_t7ok:
+        db      "7 NO WINDOW: OK", 13, 10, 0
+msg_t7ng:
+        db      "7 NO WINDOW: NG", 13, 10, 0

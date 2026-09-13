@@ -41,6 +41,7 @@
 #include "Board.h"
 #include "RTC.h"
 #include "MsxPsg.h"
+#include "romMapperY8960.h"
 #include "VDP.h"
 #include "Casette.h"
 #include "Disk.h"
@@ -249,6 +250,10 @@ int msxCreate(Machine* machine,
     for (i = 0; i < 2; i++) {
         cartridgeSetSlotInfo(i, machine->cart[i].slot, machine->cart[i].subslot);
     }
+
+    /* An MSX2++ has the Y8960 built in: no enablers, no memory mapped window,
+    ** and its SSGS for a PSG. Told before the slots are filled. */
+    y8960SetBuiltIn(machine->board.type == BOARD_MSX2PP);
 
     success = machineInitialize(machine, &msxRam, &msxRamSize, &msxRamStart);
 
