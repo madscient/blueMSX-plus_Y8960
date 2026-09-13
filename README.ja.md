@@ -1,5 +1,16 @@
 # blueMSX+
 
+> **このリポジトリは [blueMSX+](https://github.com/Hesoten/blueMSX-plus) の非公式フォークで、
+> 音源カートリッジ Y8960 のエミュレーションを追加したものです。**
+>
+> Y8960 はハードウェアが開発中の MSX 用音源カートリッジです
+> （[hra1129/Y8960_Cartridge](https://github.com/hra1129/Y8960_Cartridge)）。
+> エミュレーションは現時点の仕様に沿っており、ハードウェアが変われば動作も変わります。
+> 使い方は [Y8960 対応の使い方](doc/fork/y8960/user-guide.md) を参照してください。
+>
+> Y8960 に関する問題は、blueMSX+ 本家ではなくこのリポジトリに報告してください。
+> 以下は blueMSX+ 自身の説明です。
+
 blueMSX+ は MSX エミュレータ [blueMSX](https://msxblue.com/bluemsx/jindex.htm) の非公式フォークです。  
 Windows 11 向けに UI や音声周りを中心にモダン化しています。
 

@@ -217,6 +217,11 @@ Y8960 の実装で上流のファイルに手が入ることが分かってい�
 （`git merge-base --is-ancestor <修正> <ref>` で ref ごとに確かめられる）。
 自分で直す前に 1 度見る。
 
+**ルートの `README.md` と `README.ja.md` を触った**（2026-09-12、ユーザー指示）。
+GitHub のフロントページに出るので、**このリポジトリの素性**（blueMSX+ の非公式フォークで、
+Y8960 のエミュレーションを足したもの）と、ユーザーガイドへの導線を冒頭に置いた。
+**この変更は上流に出す枝に絶対に混ぜない。** 上流の README としては誤りになる。
+
 **カートリッジ挿入を繋ぐのに 1 本触った**（2026-09-12）。
 `Src/Memory/MegaromCartridge.c` の `cartridgeInsert` に `case ROM_Y8960SCC:`。
 内容は `y8960/implementation-plan.md` §11 の (20)。
