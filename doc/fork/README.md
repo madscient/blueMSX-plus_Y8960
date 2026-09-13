@@ -130,12 +130,12 @@ MegaFlashROM SCC+ SD に触れているが、PR に本文も参照も無く、#7
 | SSGS | 実装済み・**音を確認**（カートリッジ / 内蔵とも） | `Src/SoundChips/AY8910.c` のフォーク |
 | MSX-TIMER | 実装済み・**音は持たない** | 新規 |
 | MSX-MIXER | **入口のみ**（実機側が未実装） | 新規 |
-| Y8960 SCC + マッパー | 実装済み・**音は未聴取** | `Src/SoundChips/Y8960Scc.c`（`SCC.c` のフォーク）+ 新規マッパー |
-| DCSG | 実装済み・**音は未聴取** | `Src/SoundChips/Y8960Dcsg.c`（`SN76489.c` のフォーク） |
+| Y8960 SCC + マッパー | 実装済み・**音を確認** | `Src/SoundChips/Y8960Scc.c`（`SCC.c` のフォーク）+ 新規マッパー |
+| DCSG | 実装済み・**音を確認** | `Src/SoundChips/Y8960Dcsg.c`（`SN76489.c` のフォーク） |
 | I/O イネーブラ / MMIO 窓 | 実装済み | SCC のマッパーが持つ |
 
-**OPLLEX / OPL2EX / SSGS は、エミュレータの中で人が聴いて確かめた。**
-SCC と DCSG の音はまだ聴いていない。
+**5 つの音源ブロックすべてを、エミュレータの中で人が聴いて確かめた。**
+SCC と DCSG は録音からも判定している（`y8960/tests/sndtest.asm`）。
 **タイマ割り込みが CPU に届くことも確かめた**（`banktest` の 19）。
 詳細は `y8960/implementation-plan.md` の §0 と各 §「確かめたこと」。
 

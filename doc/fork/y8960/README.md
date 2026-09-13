@@ -30,6 +30,7 @@ Y8960 対応は upstream には存在しない、このフォーク固有の機�
 | ファイル | 役割 |
 |---|---|
 | `tests/banktest.asm` + `make-banktest.py` | MSX 側で走る回帰テスト。バンクマッパー・窓・ミラー・タイマ・DCSG・OPLLEX・OPL2EX・SSGS。128KB に展開 |
+| `tests/sndtest.asm` + `make-sndtest.py` + `analyze-sndtest.py` | DCSG のゲートとトンネル、SCC の音。録音した WAV を判定する。16KB |
 | `tests/ssgstest.asm` + `make-ssgstest.py` | 基盤タイプ `MSX2++` で SSGS が本体の PSG として働くか、窓とイネーブラが無いか。16KB の素の ROM |
 | `tests/opllex-bank-probe.c` | OPLLEX のコア単体試験（ヘッドレス） |
 | `tests/opl2ex-probe.cpp` + `opl2ex-host-stub.c` | OPL2EX のコア単体試験（ヘッドレス） |
@@ -69,15 +70,24 @@ py "doc/fork/y8960/tests/make-banktest.py" <pasmo.exe> "$DEST/MSX2+ - C-BIOS + Y
 `(LISTEN)` のものは**人が聴いて判定する**。期待する聞こえ方は各行に書いてある。
 
 ```
-1 ROM BANKS: OK        6 TIMER COUNTS: OK     11 OPL2 (LISTEN)        16 MIRROR AT E000H: OK
+1 ROM BANKS: OK        6 TIMER COUNTS: OK     11 OPL2 (LISTEN)        16 MIRROR C000H,E000H: OK
 2 RAM WRITE: OK        7 TIMER FLAG: OK       12 SSGS (LISTEN)        17 SCC WINDOW BANK2: OK
-3 ROM PROTECT: OK      8 DCSG SWEPT           13 WINDOW, BANK 20: OK  18 SCC WINDOW BANK3: OK
+3 ROM PROTECT: OK      8 DCSG (SEE SNDTEST)   13 WINDOW, BANK 20: OK  18 SCC WINDOW BANK3: OK
 4 SCC WINDOW: OK       9 OPLL (LISTEN)        14 PAGE 0 NO WRITE: OK  19 TIMER INTERRUPT: OK
 5 TIMER ENABLER: OK   10 OPL2 READ BACK: OK   15 MIRROR AT 0000H: OK
 ```
 
 画面がスクロールするので、1 から 12 は起動後 16 秒ほど、
 残りは 60 秒ほどで撮る。
+
+`sndtest` はカートリッジ構成に挿して起動し、その間の音を WAV に書き出して判定する。
+書き出しの開始と停止はウィンドウへの `WM_COMMAND`（`doc/fork/build/README.md` §5.2）。
+
+```sh
+py "doc/fork/y8960/tests/make-sndtest.py" <pasmo.exe> <dir>/sndtest.rom
+blueMSX+.exe /machine "MSX2+ - C-BIOS + Y8960 (cartridge)" /rom1 <dir>/sndtest.rom /romtype1 Y8960SCC
+py "doc/fork/y8960/tests/analyze-sndtest.py" "<ビルド出力>/Audio Capture/sndtest_NN.wav"
+```
 
 `ssgstest` は `MSX2++` の構成に `ssgstest.rom` を置いて起動する。
 1 / 2 / 6 / 7 / 8 が機械判定、3 / 4 が聴く項目、5 がかな LED を見る項目。

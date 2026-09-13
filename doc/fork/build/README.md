@@ -414,7 +414,31 @@ vcpkg のグローバル統合（§3.1）がそれを置いていく。空にし
 API の仕組みからの見立てで、**未検証**）。
 
 **これで自動で読めるのは「画面に出る結果」までである。**
-音は依然として人の耳が要る。MSX 側のキー操作も送れない（上記）。
+MSX 側のキー操作も送れない（上記）。音は §5.2。
+
+### 5.2 音は WAV に書き出して読める
+
+**WAV の書き出しはコマンドラインオプションには無いが、メニューコマンドにある**
+（`Src/Win32/Win32Menu.c` の `ID_FILE_LOGWAV` = 40016。開始と停止のトグル）。
+ウィンドウに `WM_COMMAND` を `PostMessage` すれば、前面に出さずに操作できる
+（**確認済み** 2026-09-13: 送って WAV が書かれた）。
+
+```powershell
+$sig = '[DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);'
+Add-Type -MemberDefinition $sig -Name PM -Namespace SndCap | Out-Null
+[void][SndCap.PM]::PostMessage($p.MainWindowHandle, 0x0111, [IntPtr]40016, [IntPtr]::Zero)  # 開始
+Start-Sleep -Seconds 25
+[void][SndCap.PM]::PostMessage($p.MainWindowHandle, 0x0111, [IntPtr]40016, [IntPtr]::Zero)  # 停止
+```
+
+| | |
+|---|---|
+| 書き出し先 | ビルド出力の `Audio Capture/`、名前は `<ROM 名>_NN.wav`。`x64/` の下なので gitignore の内側 |
+| 前提 | `bluemsx.ini` の `capture.audioPromptFilename=no`（既定値）。`yes` だと保存ダイアログが出て止まる |
+| 形式 | 16bit ステレオ、44.1kHz（**確認済み**: Python の `wave` で読んだ） |
+
+**聴いて分かることの一部は、これで機械が判定できる。** 使い方の例は
+`doc/fork/y8960/tests/sndtest.asm` と `analyze-sndtest.py`（音程の並びで判定する）。
 
 ## 6. 別のマシンで再開するとき
 
