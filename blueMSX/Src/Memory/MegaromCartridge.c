@@ -121,6 +121,7 @@
 #include "romMapperDooly.h"
 #include "romMapperSg1000RamExpander.h"
 #include "romMapperMuPack.h"
+#include "romMapperY8960.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -779,6 +780,10 @@ int cartridgeInsert(int cartNo, RomType romType, const char* cart, const char* c
             
         case ROM_FMPAC:
             success &= romMapperFMPACCreate(romName, buf, size, slot, sslot, 2);
+            break;
+
+        case ROM_Y8960SCC:
+            success &= romMapperY8960SccCreate(romName, buf, size, slot, sslot, 2);
             break;
 
         case ROM_SUNRISEIDE:

@@ -217,6 +217,17 @@ Y8960 の実装で上流のファイルに手が入ることが分かってい�
 （`git merge-base --is-ancestor <修正> <ref>` で ref ごとに確かめられる）。
 自分で直す前に 1 度見る。
 
+**カートリッジ挿入を繋ぐのに 1 本触った**（2026-09-12）。
+`Src/Memory/MegaromCartridge.c` の `cartridgeInsert` に `case ROM_Y8960SCC:`。
+内容は `y8960/implementation-plan.md` §11 の (20)。
+
+#### ROM タイプを選択肢に出したら、挿入の分岐も繋ぐ
+
+`RomTypeList.c` に載せると挿入ダイアログの選択肢に出るが、
+**挿入そのものは `MegaromCartridge.c` の `cartridgeInsert` が型ごとに分岐している。**
+片方だけだと**選べるのに挿さらない**（`default: success = 0`）。
+機種構成の `Machine.c` とも別経路なので、3 か所を数える。
+
 **`MSX2++` の機種を足すのに 6 本触った**（2026-09-12）。
 `Board/Machine.{h,c}`、`Board/Board.c`、`Board/MSX.c`、
 `SoundChips/MsxPsg.{h,c}`、`Win32/Win32machineConfig.c`。
