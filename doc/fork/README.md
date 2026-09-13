@@ -23,6 +23,7 @@ blueMSX+ 自身が [blueMSX](https://msxblue.com/bluemsx/) の非公式フォー
 | `y8960/hardware-notes.md` | Y8960 のハードウェア仕様。madscient/openMSX_Y8960 からの写し |
 | `y8960/implementation-plan.md` | blueMSX+ 側の実装計画・決定・実行経緯 |
 | `build/README.md` | ビルド環境。このマシンの事情と手順、ヘッドレスで確かめられること |
+| `automation/plan.md` | キー入力の注入とウィンドウを出さない実行の計画（上流候補） |
 | `ai/README.md` | **AI 向けの作業規則。** 確度・コミットの分け方・出す前の点検 |
 
 ## 上流との関係
