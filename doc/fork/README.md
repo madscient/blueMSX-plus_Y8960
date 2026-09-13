@@ -30,9 +30,9 @@ blueMSX+ 自身が [blueMSX](https://msxblue.com/bluemsx/) の非公式フォー
 | | |
 |---|---|
 | このフォーク | `origin` = madscient/blueMSX-plus_Y8960 |
-| 直接の上流 | Hesoten/blueMSX-plus（**remote は未設定**。2026-09-12 時点で `origin` だけ） |
+| 直接の上流 | Hesoten/blueMSX-plus（remote 名 `upstream`） |
 | そのまた上流 | blueMSX 本家 |
-| 作業ブランチ | `main` |
+| 作業ブランチ | `feature/y8960`（分岐点は上流 `main` の `5afffd55`） |
 | ライセンス | **GPLv2**（blueMSX+ と同じ。ルートの `README.md` §License） |
 
 **追従の方法は未定である。** 上流を remote として追加するか、
@@ -60,10 +60,23 @@ blueMSX+ 自身が [blueMSX](https://msxblue.com/bluemsx/) の非公式フォー
 
 ### 出した記録
 
-| | |
-|---|---|
-| PR #77 | I/O ポートの解放が登録と食い違う 3 件。`fix/ioport-unregister-mismatch` |
-| issue #78 | 1 ポートに 1 デバイスしか登録できない件。多重化の提案 |
+| | | 状態（2026-09-13 に確認） |
+|---|---|---|
+| PR #77 | I/O ポートの解放が登録と食い違う 3 件。`fix/ioport-unregister-mismatch` | **上流 `develop` にマージされた**（マージコミット `178eaf03`） |
+| issue #78 | 1 ポートに 1 デバイスしか登録できない件。多重化の提案 | OPEN。コメント無し |
+| issue #74 | PSG のレジスタ番号を 4bit で丸めている件 | OPEN のまま。上流は PR #75（`be45fc46`）で直しており、本フォークは cherry-pick 済み |
+
+**issue #78 が決着するまで、`IoPort.{c,h}` と `ioPortUnregister` の 53 ファイルは
+上流と食い違ったままになる。** 上流が別の形で多重化を入れた場合、取り込みのときに
+この 53 ファイルがまとめて衝突面になる。
+
+**上流 `develop` を取り込んだときの衝突**（`git merge-tree` で試算、2026-09-13。
+作業ツリーには触れていない）: `develop` の `90e2920b` に対して衝突は
+`Sf7000PPI.c` と `romMapperOpcodeModule.c` の 2 件だけ。どちらも PR #77 の修正と、
+本フォークが同じ箇所を `ref` 付きで直したものとの重なりである。
+PR #79（`743359b1`、カートリッジ PSG が `AY8910_NONE` でポートを取らない）は
+`AY8910.{c,h}` と 5 つのマッパーに入るが、自動マージで済む
+（**未検証** — ビルドして動かしてはいない）。
 
 どちらも本文は**日本語を先、英語を後**（`<details>` に格納）。
 上流の所有者と報告者がどちらも日本語話者で、かつ公開リポジトリに
