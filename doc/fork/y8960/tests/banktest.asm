@@ -271,9 +271,10 @@ t7_fail:
 
 ; --- 8. DCSG: the enabler gates the direct port, the tunnel ignores it
 ;
-; Nothing here can be read back - the chip is write only - so the checks are
-; made by a probe placed in the DCSG block. The values are distinct so the
-; log shows which write arrived.
+; Nothing here can be read back - the chip is write only. These writes are
+; for a probe placed in the DCSG block; the values are distinct so its log
+; shows which write arrived. The same gates are judged without a probe by
+; sndtest.asm, from a recording.
 t8:
         ld      a, 080h                 ; timer on, both DCSG closed
         ld      (07fffh), a
@@ -665,12 +666,12 @@ t15_fail:
         call    print
 t15_done:
 
-; --- 16. the bank at 6000h shows again at E000h
+; --- 16. the banks at 4000h and 6000h show again at C000h and E000h
 ;
 ; Page 3 holds the stack and the BIOS work area, so it belongs to the
 ; cartridge only between the two OUTs, with interrupts off and nothing in
-; between that touches the stack. BANK1 holds bank 1, whose marker sits at
-; 0C00h. An unmirrored slot reads FFh there.
+; between that touches the stack. BANK0 holds bank 0 and BANK1 bank 1, whose
+; markers sit at 0C00h. An unmirrored slot reads FFh there.
 t16:
         ld      a, 1
         ld      (REG_B1C), a
@@ -687,12 +688,17 @@ t16:
         and     03fh
         or      c
         out     (0a8h), a
+        ld      a, (0cc00h)
+        ld      d, a
         ld      a, (0ec00h)
         ld      c, a
         ld      a, b
         out     (0a8h), a
         ei
 
+        ld      a, d
+        or      a
+        jr      nz, t16_fail
         ld      a, c
         cp      1
         jr      nz, t16_fail
@@ -1119,7 +1125,7 @@ msg_t7ok:
 msg_t7ng:
         db      "7 TIMER FLAG: NG", 13, 10, 0
 msg_t8:
-        db      "8 DCSG SWEPT (SEE PROBE)", 13, 10, 0
+        db      "8 DCSG SWEPT (SEE SNDTEST)", 13, 10, 0
 msg_t9:
         db      "9 OPLL (LISTEN):", 13, 10, 0
 msg_t9a:
@@ -1171,9 +1177,9 @@ msg_t15ok:
 msg_t15ng:
         db      "15 MIRROR AT 0000H: NG", 13, 10, 0
 msg_t16ok:
-        db      "16 MIRROR AT E000H: OK", 13, 10, 0
+        db      "16 MIRROR C000H,E000H: OK", 13, 10, 0
 msg_t16ng:
-        db      "16 MIRROR AT E000H: NG", 13, 10, 0
+        db      "16 MIRROR C000H,E000H: NG", 13, 10, 0
 msg_t17ok:
         db      "17 SCC WINDOW BANK2: OK", 13, 10, 0
 msg_t17ng:
