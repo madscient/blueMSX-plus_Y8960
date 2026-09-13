@@ -148,6 +148,7 @@ static int vramAddr;
 #define vdpIsSprites16x16(regs)      (regs[1]  & 0x02)
 #define vdpIsSpritesOff(regs)        (regs[8]  & 0x02)
 #define vdpIsColor0Solid(regs)       (regs[8]  & 0x20)
+#define vdpIsMsx1Vdp(vdp)            ((vdp)->vdpVersion == VDP_TMS9918A || (vdp)->vdpVersion == VDP_TMS99x8A || (vdp)->vdpVersion == VDP_TMS9929A)
 #define vdpIsVideoPal(vdp)          (((vdp)->vdpRegs[9]  & (vdp)->palMask & 0x02) | (vdp)->palValue)
 #define vdpIsOddPage(vdp)           (((~(vdp)->vdpStatus[2] & 0x02) << 7) & (((vdp)->vdpRegs[9]  & 0x04) << 6))
 // V9938 blink page alternation: while the blink OFF phase is active the odd
@@ -347,6 +348,9 @@ struct VDP {
     int    blinkCnt;
     int    blinkLineBase;
     int    drawArea;
+    /* drawArea as the command engine sees it. Fetching starts a fetch window
+    ** before the first display line, so this goes up earlier. */
+    int    cmdDrawArea;
     UInt16 paletteReg[16];
     int    vramSize;
     int    vramPages;
@@ -607,6 +611,7 @@ static void onVint(VDP* vdp, UInt32 time)
         }
 //    }
 //    vdp->drawArea = 0;
+    vdp->cmdDrawArea = 0;
     vdpSetTimingMode(vdp->cmdEngine, vdp->vdpRegs[8] & 2);
 }
 
@@ -616,6 +621,7 @@ static void onDrawAreaEnd(VDP* vdp, UInt32 time)
 
     vdp->timeDrawAreaEndEn = 0;
     vdp->drawArea = 0;
+    vdp->cmdDrawArea = 0;
 }
 
 static void onTmsVint(VDP* vdp, UInt32 time)
@@ -632,6 +638,9 @@ static void onVStart(VDP* vdp, UInt32 time)
     vdp->timeVStartEn = 0;
 //    vdp->lineOffset = -1;
     vdp->vdpStatus[2] &= ~0x40;
+
+    vdp->cmdDrawArea = 1;
+    vdpSetTimingMode(vdp->cmdEngine, ((vdp->vdpRegs[1] >> 6) & vdp->cmdDrawArea) | (vdp->vdpRegs[8] & 2));
 }
 
 static void onDrawAreaStart(VDP* vdp, UInt32 time)
@@ -641,8 +650,9 @@ static void onDrawAreaStart(VDP* vdp, UInt32 time)
     vdp->timeDrawAreaStartEn = 0;
 
     vdp->drawArea = 1;
+    vdp->cmdDrawArea = 1;
     vdp->vdpStatus[2] &= ~0x40;
-    vdpSetTimingMode(vdp->cmdEngine, ((vdp->vdpRegs[1] >> 6) & vdp->drawArea) | (vdp->vdpRegs[8] & 2));
+    vdpSetTimingMode(vdp->cmdEngine, ((vdp->vdpRegs[1] >> 6) & vdp->cmdDrawArea) | (vdp->vdpRegs[8] & 2));
 }
 
 static UInt32 frameStartTime;
@@ -660,6 +670,10 @@ static void onDisplay(VDP* vdp, UInt32 time)
     sync(vdp, time);
 
     vdp->timeDisplayEn = 0;
+
+    boardCheckVdpBoostKill((UInt32)vdp->vdpRegs[23]              |
+                           ((UInt32)vdp->vdpRegs[26] <<  8)      |
+                           ((UInt32)vdp->vdpRegs[27] << 16));
 
     if (vdp->videoEnabled) {
         FrameBuffer* frameBuffer;
@@ -692,6 +706,9 @@ static void onDisplay(VDP* vdp, UInt32 time)
 
     vdp->scr0splitLine = 0;
     vdp->curLine = 0;
+    /* Line 0 is blanked whatever the last frame did, and rescheduling can drop
+    ** the timer that would have cleared this, so clear it here. */
+    vdp->cmdDrawArea = 0;
     vdp->VAdjust = (-((Int8)(vdp->vdpRegs[18]) >> 4));
 
     vdp->lastLine = isPal ? 313 : 262;
@@ -974,7 +991,7 @@ static void vdpUpdateRegisters(VDP* vdp, UInt8 reg, UInt8 value)
             scheduleScrModeChange(vdp);
         }
         
-        vdpSetTimingMode(vdp->cmdEngine, ((value >> 6) & vdp->drawArea) | (vdp->vdpRegs[8] & 2));
+        vdpSetTimingMode(vdp->cmdEngine, ((value >> 6) & vdp->cmdDrawArea) | (vdp->vdpRegs[8] & 2));
         break;
 
     case 2: 
@@ -1005,7 +1022,7 @@ static void vdpUpdateRegisters(VDP* vdp, UInt8 reg, UInt8 value)
 
     case 8:
         vdp->vramAccMask  = vdp->vramMasks[((vdp->vdpRegs[8] & 0x08) >> 2) | (((vdp->vdpRegs[0x2d] >> 6) & 1))];
-        vdpSetTimingMode(vdp->cmdEngine, ((vdp->vdpRegs[1] >> 6) & vdp->drawArea) | (value & 2));
+        vdpSetTimingMode(vdp->cmdEngine, ((vdp->vdpRegs[1] >> 6) & vdp->cmdDrawArea) | (value & 2));
         if (change & 0xb0) {
             updateOutputMode(vdp);
         }
@@ -1121,6 +1138,7 @@ static UInt8 readNoTimingCheck(VDP* vdp, UInt16 ioPort)
 
     if (vdp->vdpVersion == VDP_V9938 || vdp->vdpVersion == VDP_V9958) {
         vdpCmdExecute(vdp->cmdEngine, boardSystemTime());
+        vdpCmdStealAccessSlot(vdp->cmdEngine);
     }
 
 	value = vdp->vdpData;
@@ -1297,6 +1315,9 @@ static void write(VDP* vdp, UInt16 ioPort, UInt8 value)
 
     if (vdp->vdpVersion == VDP_TMS9929A || vdp->vdpVersion == VDP_TMS99x8A || vdp->vdpVersion == VDP_TMS9918A) {
         checkVramAccessTimeTms(vdp);
+    }
+    if (vdp->vdpVersion == VDP_V9938 || vdp->vdpVersion == VDP_V9958) {
+        vdpCmdStealAccessSlot(vdp->cmdEngine);
     }
 
     if (vdp->vramEnable) {
@@ -1900,6 +1921,9 @@ static void loadState(VDP* vdp)
     vdp->blinkCnt = saveStateGet(state, "blinkCnt",         0);
     
     vdp->drawArea = saveStateGet(state, "drawArea",         0);
+    /* Derived rather than stored: it only differs from drawArea for the fetch
+    ** window before the first display line, and the next frame resets it. */
+    vdp->cmdDrawArea = vdp->drawArea;
     
     for (i = 0; i < sizeof(vdp->paletteReg) / sizeof(vdp->paletteReg[0]); i++) {
         sprintf(tag, "paletteRegNo%d", i);
@@ -2291,6 +2315,7 @@ static void reset(VDP* vdp)
     vdp->blinkCnt        = 0;
     vdp->blinkLineBase   = 0;
     vdp->drawArea        = 0;
+    vdp->cmdDrawArea     = 0;
     vdp->lastLine        = 0;
     vdp->displayOffest   = 0;
     vdp->screenOn        = 0;
@@ -2344,6 +2369,10 @@ static void reset(VDP* vdp)
             updatePalette(vdp, i, msx2Palette[i].r, msx2Palette[i].g, msx2Palette[i].b);
         }
     }
+
+    /* The engine keeps its own copy of R#45, so a stale one would decide the
+    ** addressing of the next command the guest never asked for. */
+    vdpCmdWrite(vdp->cmdEngine, 0x0d, 0, boardSystemTime());
 
     memcpy(vdp->paletteReg, defaultPaletteRegs, sizeof(vdp->paletteReg));
 
