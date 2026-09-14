@@ -81,3 +81,13 @@ Makefile   text eol=lf
 
 # ---- Test fixtures: line-ending behavior tests, MUST keep raw bytes ----
 blueMSX/NewLine/*  binary
+
+# ---- Fork only: source archives (git archive / GitHub release) ----
+# Developer and AI-facing documents stay out of source archives. Anything new
+# under doc/fork/ is excluded by default; end-user documents are opted back in
+# one by one. doc/fork/y8960 itself must be opted in, or git archive skips the
+# whole tree before it reaches the file inside.
+CLAUDE.md                     export-ignore
+doc/fork/**                   export-ignore
+doc/fork/y8960                -export-ignore
+doc/fork/y8960/user-guide.md  -export-ignore

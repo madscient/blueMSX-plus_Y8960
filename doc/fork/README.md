@@ -124,6 +124,41 @@ MegaFlashROM SCC+ SD に触れているが、PR に本文も参照も無く、#7
 入れないと再現できない。**読み手に検証手段の無い数字は根拠にならない**ので、
 コードと生成順から辿れる事実だけで論じる形にした（2026-09-12 ユーザー判断）。
 
+## リリース
+
+`origin` の GitHub Releases に出す。決めたことは次のとおり（2026-09-15 ユーザー判断）。
+
+| | |
+|---|---|
+| タグ名 | `v<土台の blueMSX+ の版>-y8960.<通し番号>`。1 本目は `v3.1.1-y8960.1` |
+| pre-release | タグに `-` を含むので `release.yml` が自動で pre-release にする。Y8960 のハードウェアが開発中である間はこれでよい |
+| ビルド | タグを push すると上流由来の `.github/workflows/release.yml` が Final × x64 / Win32 をビルドし、zip を添付して公開する |
+| バイナリ zip | `scripts/ci-package.ps1` が組む。`ReleaseFiles/`・実行ファイル・プラグインだけで、**`doc/` は入らない**（**確認済み(読解)**） |
+| ソースアーカイブ | GitHub が自動で添付する。`.gitattributes` の `export-ignore` で **`CLAUDE.md` と `doc/fork/` を除き、`doc/fork/y8960/user-guide.md` だけを戻す** |
+| 使い方 | zip には同梱しない。リリースノートから、そのタグの `user-guide.md` へリンクする |
+
+**前提**: 上流の `release.yml` と `ci-package.ps1` をそのまま使っていること。
+上流がこれらを変えたら、タグ名の形（`v*` で起動、`-` で pre-release）と zip の中身を見直す。
+
+**`doc/fork/` の下に足したファイルは、既定でソースアーカイブから外れる。**
+利用者向けの文書を足したら `.gitattributes` に `-export-ignore` の行を足すこと。
+**入れ子のディレクトリも戻す必要がある** — ディレクトリが除外のままだと、
+`git archive` はその下を見に行かず、中のファイルを戻しても落ちる。
+
+確かめたこと（**確認済み**、`git archive --worktree-attributes HEAD | tar -t`）:
+変更前は `CLAUDE.md` と `doc/` 以下 43 件が入り、変更後は `doc/fork/y8960/user-guide.md` と
+その親ディレクトリの 4 件だけになった。`doc/fork/y8960` を戻す行を無効にした版では
+`user-guide.md` も落ちた。**GitHub の自動アーカイブが `export-ignore` に従うことは、
+公開したアーカイブを落として確かめる**（下の記録）。
+
+見送ったこと: **`user-guide.md` を zip に同梱する案。** `ci-package.ps1` は上流のファイルで、
+触ると衝突面が 1 つ増えるため。
+
+### リリースの記録
+
+| タグ | コミット | 確かめたこと |
+|---|---|---|
+
 ## Y8960 の実装状況
 
 **7 ブロックが `RomType` を持ち、マシン構成に個別に置ける。すべてに中身が入っている。**

@@ -269,6 +269,10 @@ MSX 系統の板はすべて `BOARD_MSX` になり、個々の板種別と比べ
 `Emulator/CommandLine.c`、ビルド定義 3 系統。新規は `Input/KeyMatrixInput.{c,h}`。
 内容は `automation/plan.md` §4。
 
+**`.gitattributes` に 1 節足した**（2026-09-15、リリースのため）。ソースアーカイブから
+`CLAUDE.md` と `doc/fork/` を外し、`user-guide.md` だけを戻す。内容は `doc/fork/README.md` の
+「リリース」。**上流に出す枝に混ぜない。**
+
 ## ヒアドキュメントにバックスラッシュを書かない
 
 **この作業ツリーでは、Bash ツールのヒアドキュメントがバックスラッシュを
