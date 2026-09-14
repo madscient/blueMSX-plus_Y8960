@@ -154,10 +154,22 @@ MegaFlashROM SCC+ SD に触れているが、PR に本文も参照も無く、#7
 見送ったこと: **`user-guide.md` を zip に同梱する案。** `ci-package.ps1` は上流のファイルで、
 触ると衝突面が 1 つ増えるため。
 
+**フォークのワークフローは、所有者が Actions タブで有効にするまで登録されない。**
+登録前にタグを push しても何も起きず、エラーも出ない（**確認済み** 2026-09-15:
+`gh api repos/<owner>/<repo>/actions/workflows` の `total_count` が 0 で、
+`gh workflow run` は `not found on the default branch` を返した）。有効にした後は、
+**タグを打ち直さずに** `gh workflow run release.yml --ref <タグ>` で起動できる。
+`github.ref` がタグになるので、公開の段まで走る（1 本目はこの形で公開した）。
+
+**リリースノートは自動生成の中身を差し替える。** `release.yml` は
+`generate_release_notes` で変更履歴へのリンクだけを書くので、
+公開後に `gh release edit --notes-file` で使い方へのリンクと注意を載せる。
+
 ### リリースの記録
 
 | タグ | コミット | 確かめたこと |
 |---|---|---|
+| `v3.1.1-y8960.1`（pre-release） | `61f40fe7` | Actions の run 34860219682 で x64 / Win32 のビルドと公開が成功。**公開物を落として確かめた**（**確認済み**）: バイナリ zip 2 本に `doc/` と `CLAUDE.md` が無い。GitHub のソースアーカイブ（zip / tar.gz）は `export-ignore` に従い、`doc/` 以下は `user-guide.md` だけ。x64 / Win32 の実行ファイルとも `/listromtypes` と `/listmachines` が終了コード 0 で、前者に `Y8960SCC` が出た。**Final 構成で音や画面を確かめたことはない**（手元の確認はすべて Release 構成） |
 
 ## Y8960 の実装状況
 
