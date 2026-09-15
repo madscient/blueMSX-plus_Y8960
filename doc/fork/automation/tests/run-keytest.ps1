@@ -39,8 +39,12 @@ $results = [ordered]@{
     "refuses unknown command" = (Send-KeyMatrix $h 'x 1 1') -eq 0
     "refuses missing number"  = (Send-KeyMatrix $h 'd 2 0x40 w') -eq 0
     "refuses a sign"          = (Send-KeyMatrix $h 'w -5') -eq 0
-    "accepts the typing"      = (Send-KeyMatrix $h (ConvertTo-KeyMatrix "HELLO, MSX 123!`n")) -eq 1
 }
+# A zero wait once stopped the queue for good, both from idle and straight
+# after another wait. A stopped queue also leaves the typing below unrun.
+$results["w 0 from idle drains"]  = (Send-KeyMatrix $h 'w 0') -eq 1 -and (Wait-KeyMatrix $h 5)
+$results["w 0 after a wait drains"] = (Send-KeyMatrix $h 'w 10 w 0') -eq 1 -and (Wait-KeyMatrix $h 5)
+$results["accepts the typing"]    = (Send-KeyMatrix $h (ConvertTo-KeyMatrix "HELLO, MSX 123!`n")) -eq 1
 $results["queue drains"] = Wait-KeyMatrix $h
 Start-Sleep -Seconds 1
 
