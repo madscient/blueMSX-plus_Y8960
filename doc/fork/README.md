@@ -33,7 +33,7 @@ blueMSX+ 自身が [blueMSX](https://msxblue.com/bluemsx/) の非公式フォー
 | このフォーク | `origin` = madscient/blueMSX-plus_Y8960 |
 | 直接の上流 | Hesoten/blueMSX-plus（remote 名 `upstream`） |
 | そのまた上流 | blueMSX 本家 |
-| 作業ブランチ | `feature/y8960`（分岐点は上流 `main` の `5afffd55`。上流 `develop` の `90e2920b` までマージ済み） |
+| 作業ブランチ | `feature/y8960`（分岐点は上流 `main` の `5afffd55`。上流 `develop` の `5b97360e` までマージ済み） |
 | ライセンス | **GPLv2**（blueMSX+ と同じ。ルートの `README.md` §License） |
 
 **追従は `upstream/develop` を `feature/y8960` にマージする**（2026-09-13 ユーザー判断）。
@@ -46,6 +46,7 @@ blueMSX+ 自身が [blueMSX](https://msxblue.com/bluemsx/) の非公式フォー
 | 日付 | 上流 | マージコミット | 衝突 | 確かめたこと |
 |---|---|---|---|---|
 | 2026-09-13 | `develop` `90e2920b`（40 コミット。PR #77 / #79、VDP・キーボードの修正ほか） | `d303604e` | `Sf7000PPI.c`、`romMapperOpcodeModule.c`（どちらも PR #77 とフォークの `ref` 付きの同じ修正の重なり。`ref` 付きを採った） | ビルド 0 エラー（警告 1 件は上流のみが触った `Win32ShortcutsConfig.c`）。`banktest` 19 項目と `ssgstest` の機械判定 5 項目がすべて OK（**確認済み**、画面） |
+| 2026-09-18 | `develop` `5b97360e`（17 コミット。PR #80 / #81 の取り込み、`matrix[][]` の整理、キーボード・ジョイスティック・SG-1000・Game Reader の修正ほか） | `0795608d` | 無し | ビルド 0 エラー / 0 警告。`run-keytest` 12 項目、`banktest` と `ssgstest` の機械判定がすべて OK（**確認済み**、画面） |
 
 **衝突を片側で解くときは、ファイル全体がその側になる。** `git checkout --ours` は
 自動マージできた部分も捨てる。2026-09-13 のマージでは `romMapperOpcodeModule.c` に
@@ -74,24 +75,23 @@ blueMSX+ 自身が [blueMSX](https://msxblue.com/bluemsx/) の非公式フォー
 
 ### 出した記録
 
-| | | 状態（2026-09-13 に確認） |
+| | | 状態（2026-09-18 に確認） |
 |---|---|---|
 | PR #77 | I/O ポートの解放が登録と食い違う 3 件。`fix/ioport-unregister-mismatch` | **上流 `develop` にマージされた**（マージコミット `178eaf03`） |
-| issue #78 | 1 ポートに 1 デバイスしか登録できない件。多重化の提案 | OPEN。コメント無し |
-| PR #80 | #78 の実装（`IoPort` の多重化と `ioPortUnregister` の `ref`）。`feature/ioport-multi-claim` | 2026-09-13 に提案として提出。取り込むかは上流に委ねた |
-| PR #81 | キーマトリクスの注入と `/hidden`。`feature/key-matrix-input` | 同上 |
+| issue #78 | 1 ポートに 1 デバイスしか登録できない件。多重化の提案 | OPEN のまま。PR #80 がマージされたので中身は解決している |
+| PR #80 | #78 の実装（`IoPort` の多重化と `ioPortUnregister` の `ref`）。`feature/ioport-multi-claim` | **マージされた**（`fddc5683`） |
+| PR #81 | キーマトリクスの注入と `/hidden`。`feature/key-matrix-input` | **マージされた**（`fd6e7e53`）。レビューで `w 0` の不具合の修正を求められ、応じた（`automation/plan.md` §4）。`matrix[][]` は上流がマージ後に `MsxPPI.h` の記述から組む形に整理した（`3aeb35b7`、`6f58b6d1`） |
 | issue #74 | PSG のレジスタ番号を 4bit で丸めている件 | OPEN のまま。上流は PR #75（`be45fc46`）で直しており、本フォークは cherry-pick 済み |
 
 PR #77 と issue #78 は本文を**日本語を先、英語を後**（`<details>` に格納）。
 上流の所有者と報告者がどちらも日本語話者で、かつ公開リポジトリに
 海外の利用者もいるため。**タイトルは英語**（既存の issue / PR に揃えた）。
 
-**上流とのあいだの保留は、PR #80 / #81 に集めた**（2026-09-13 ユーザー判断）。取り込むかどうかは上流の
-所有者に委ね、こちらは上流が動いたときに `develop` のマージで受け取る（入口を 1 つにする）。
+**上流に出したものは、上流が動いたときに `develop` のマージで受け取る**（2026-09-13 ユーザー判断。
+入口を 1 つにする）。PR #80 / #81 はこの形で戻ってきた（`0795608d`）。
 
-**PR #80 が決着するまで、`IoPort.{c,h}` と `ioPortUnregister` の 53 ファイルは
-上流と食い違ったままになる。** 上流が別の形で多重化を入れた場合、取り込みのときに
-この 53 ファイルがまとめて衝突面になる。
+**`IoPort.{c,h}` と `ioPortUnregister` の 53 ファイルは、もう衝突面ではない。**
+上流が PR #80 をそのまま採ったので、多重化と `ref` は上流の側にある。
 
 **PR #79 は取り込んだ（`d303604e`）。取り込む前のこのフォークには次の不具合があった。** 対象の 5 つのカートリッジ
 （MegaFlashROM SCC+ / SCC+ SD、Opcode PSG / Module、Yamanooto）は、自分のポート

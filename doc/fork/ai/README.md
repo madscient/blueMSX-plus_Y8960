@@ -202,6 +202,8 @@ Y8960 の実装で上流のファイルに手が入ることが分かってい�
 複数デバイスを登録できるようにし、`ioPortUnregister` に `ref` を足した）。
 `ioPortUnregister` の呼び出し 200 箇所を持つ **53 ファイル**にも手が入っている。
 経緯は `y8960/implementation-plan.md` §4.2。
+**この変更は上流が PR #80 として採ったので、もう衝突面ではない**（2026-09-18 の同期で
+戻ってきた。`IoPort.{c,h}` は `upstream/develop` と一致する。**確認済み**: `git diff` が空）。
 
 **Phase 0 でさらに 10 本触った**（2026-09-12）。`MediaDb.{h,cpp}`、
 `Board/Machine.c`、`Emulator/RomTypeList.c`、`Emulator/Properties.c`、
@@ -268,6 +270,9 @@ MSX 系統の板はすべて `BOARD_MSX` になり、個々の板種別と比べ
 `feature/key-matrix-input`）。`Board/Board.c`、`Win32/Win32.c`、`Win32/Win32keyboard.{c,h}`、
 `Emulator/CommandLine.c`、ビルド定義 3 系統。新規は `Input/KeyMatrixInput.{c,h}`。
 内容は `automation/plan.md` §4。
+**これも上流が PR #81 として採った**（2026-09-18 の同期で戻ってきた）。上流はその後
+`matrix[][]` を `MsxPPI.h` の記述から組む形に整理しているので、**この表をフォーク側で
+書き換えないこと。**
 
 **`.gitattributes` に 1 節足した**（2026-09-15、リリースのため）。ソースアーカイブから
 `CLAUDE.md` と `doc/fork/` を外し、`user-guide.md` だけを戻す。内容は `doc/fork/README.md` の
