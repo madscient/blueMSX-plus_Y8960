@@ -219,7 +219,8 @@ enum  {
     ROM_Y8960MIXER  = 184,           /* Y8960 MSX-MIXER */
     ROM_Y8960SCC    = 185,           /* Y8960 SCC + mapper */
     ROM_Y8960DCSG   = 186,           /* Y8960 DCSG    */
-    ROM_MAXROMID    = 186
+    ROM_Y8960       = 187,           /* the whole cartridge: every block at once */
+    ROM_MAXROMID    = 187
 };
 
 typedef struct MediaType MediaType;

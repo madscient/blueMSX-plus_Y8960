@@ -381,14 +381,14 @@ static void write(RomMapperY8960Scc* rm, UInt16 address, UInt8 value)
     }
 }
 
-int romMapperY8960SccCreate(const char* filename, UInt8* romData,
-                            int size, int slot, int sslot, int startPage)
+static int sccCreate(const char* filename, UInt8* romData, int size,
+                     int slot, int sslot, int startPage, SlotEject eject)
 {
     DeviceCallbacks callbacks = { destroy, reset, saveState, loadState };
     RomMapperY8960Scc* rm = (RomMapperY8960Scc*)calloc(1, sizeof(RomMapperY8960Scc));
 
     rm->deviceHandle = deviceManagerRegister(ROM_Y8960SCC, &callbacks, rm);
-    slotRegister(slot, sslot, startPage, Y8960_REGIONS, read, peek, write, destroy, rm);
+    slotRegister(slot, sslot, startPage, Y8960_REGIONS, read, peek, write, eject, rm);
 
     /* No callbacks on the mirrors: they are always mapped for reading, and a
     ** write that finds no callback is dropped, which is what they need. */
@@ -418,4 +418,43 @@ int romMapperY8960SccCreate(const char* filename, UInt8* romData,
     reset(rm);
 
     return 1;
+}
+
+int romMapperY8960SccCreate(const char* filename, UInt8* romData,
+                            int size, int slot, int sslot, int startPage)
+{
+    return sccCreate(filename, romData, size, slot, sslot, startPage, destroy);
+}
+
+/* Ejecting the cartridge has to take the whole card, and the other blocks
+** hold no slot of their own, so the card names them here. This is the slot's
+** eject callback only: the device manager still gets plain destroy, because
+** at shutdown it walks every block itself and doing it from here as well
+** would free each of them twice. */
+static void ejectCart(RomMapperY8960Scc* rm)
+{
+    romMapperY8960DcsgDestroy();
+    romMapperY8960MixerDestroy();
+    romMapperY8960TimerDestroy();
+    romMapperY8960SsgsDestroy();
+    romMapperY8960Opl2exDestroy();
+    romMapperY8960OpllexDestroy();
+
+    destroy(rm);
+}
+
+int romMapperY8960CartCreate(const char* filename, UInt8* romData,
+                             int size, int slot, int sslot)
+{
+    int success = sccCreate(filename, romData, size, slot, sslot,
+                            Y8960_START_PAGE, ejectCart);
+
+    success &= romMapperY8960OpllexCreate();
+    success &= romMapperY8960Opl2exCreate();
+    success &= romMapperY8960SsgsCreate();
+    success &= romMapperY8960TimerCreate();
+    success &= romMapperY8960MixerCreate();
+    success &= romMapperY8960DcsgCreate();
+
+    return success;
 }

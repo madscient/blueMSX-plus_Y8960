@@ -182,6 +182,7 @@ extern int showLoadMemoryDlg(HWND hwnd);
 #define ID_FILE_CART_ASCII16X           41119
 #define ID_FILE_CART_YAMANOOTO          41120
 #define ID_FILE_CART_FLASHROMSCC        41121
+#define ID_FILE_CART_Y8960              41122
 #define ID_FILE_CART_JOYREXPSG          41110
 #define ID_FILE_CART_EXTRAM16KB         41111
 #define ID_FILE_CART_EXTRAM32KB         41112
@@ -624,6 +625,7 @@ static HMENU menuCreateCartSpecial(int cartNo, Properties* pProperties, Shortcut
     AppendMenuU(hMenu, MF_STRING, idOffset + ID_FILE_CART_SCC, langMenuCartSCC());
     AppendMenuU(hMenu, MF_STRING, idOffset + ID_FILE_CART_SCCPLUS, langMenuCartSCCPlus());
     AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)hMenuEseSCC, langMenuCartEseSCC());
+    AppendMenuU(hMenu, MF_STRING, idOffset + ID_FILE_CART_Y8960, "Y8960 Cartridge");
     AppendMenuU(hMenu, MF_SEPARATOR, 0, NULL);
     AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)hMenuIde, langMenuCartIde());
     AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)hMenuScsi, langMenuCartScsi());
@@ -2071,6 +2073,9 @@ int menuCommand(Properties* pProperties, int command)
             return 1;
         case ID_FILE_CART_SCCPLUS:
             insertCartridge(pProperties, i, CARTNAME_SCCPLUS, NULL, ROM_SCCPLUS, 0);
+            return 1;
+        case ID_FILE_CART_Y8960:
+            insertCartridge(pProperties, i, CARTNAME_Y8960, NULL, ROM_Y8960, 0);
             return 1;
         case ID_FILE_CART_JOYREXPSG:
             insertCartridge(pProperties, i, CARTNAME_JOYREXPSG, NULL, ROM_JOYREXPSG, 0);

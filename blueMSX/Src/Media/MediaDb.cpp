@@ -138,6 +138,7 @@ RomType mediaDbStringToType(const char* romName)
     if (iequals(name, "Y8960MIXER"))       return ROM_Y8960MIXER;
     if (iequals(name, "Y8960SCC"))         return ROM_Y8960SCC;
     if (iequals(name, "Y8960DCSG"))        return ROM_Y8960DCSG;
+    if (iequals(name, "Y8960"))            return ROM_Y8960;
     if (iequals(name, "FlashRomScc"))      return ROM_FLASHROMSCC;
     if (iequals(name, "FlashRomSccDev"))   return ROM_FLASHROMSCC;
     if (iequals(name, "Flash-ROM SCC"))    return ROM_FLASHROMSCC;
@@ -696,6 +697,7 @@ extern "C" const char* romTypeToString(RomType romType)
     case ROM_Y8960MIXER:  return "Y8960 MSX-MIXER";
     case ROM_Y8960SCC:    return "Y8960 SCC";
     case ROM_Y8960DCSG:   return "Y8960 DCSG";
+    case ROM_Y8960:       return "Y8960 Cartridge";
     case ROM_FLASHROMSCC: return "Flash-ROM SCC";
     case ROM_MEGAFLSHSCCPLUS_SD: return "Mega Flash Rom SCC+ SD";
     case ROM_OBSONET:     return langRomTypeObsonet();
@@ -888,6 +890,7 @@ extern "C" const char* romTypeToShortString(RomType romType)
     case ROM_Y8960MIXER:  return "Y8960MIXER";
     case ROM_Y8960SCC:    return "Y8960SCC";
     case ROM_Y8960DCSG:   return "Y8960DCSG";
+    case ROM_Y8960:       return "Y8960";
     case ROM_FLASHROMSCC: return "FLASHROMSCC";
     case ROM_OBSONET:     return "OBSONET";
     case ROM_DUMAS:       return "DUMAS";
@@ -1120,6 +1123,7 @@ int romTypeIsMegaRom(RomType romType) {
     case ROM_NEO16:       return 1;
     case ROM_YAMANOOTO:   return 1;
     case ROM_Y8960SCC:    return 1;
+    case ROM_Y8960:       return 1;
     case ROM_FLASHROMSCC: return 1;
     case ROM_OBSONET:     return 1;
     case ROM_DUMAS:       return 1;

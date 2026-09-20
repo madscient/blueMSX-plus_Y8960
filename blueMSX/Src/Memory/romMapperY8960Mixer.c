@@ -53,6 +53,8 @@ typedef struct {
     UInt8 regs[Y8960_MIXER_REGS];
 } RomMapperY8960Mixer;
 
+static RomMapperY8960Mixer* theMixer = NULL;
+
 /* No enabler bit is assigned to this block: enabler 2 names the OPL2 pair, the
 ** DCSG pair, the SSGS and the timer, and nothing for the mixer. Its ports are
 ** therefore not gated. */
@@ -117,6 +119,15 @@ static void destroy(RomMapperY8960Mixer* rm)
     deviceManagerUnregister(rm->deviceHandle);
 
     free(rm);
+
+    theMixer = NULL;
+}
+
+void romMapperY8960MixerDestroy(void)
+{
+    if (theMixer != NULL) {
+        destroy(theMixer);
+    }
 }
 
 int romMapperY8960MixerCreate(void)
@@ -126,6 +137,8 @@ int romMapperY8960MixerCreate(void)
     RomMapperY8960Mixer* rm = (RomMapperY8960Mixer*)calloc(1, sizeof(RomMapperY8960Mixer));
 
     rm->deviceHandle = deviceManagerRegister(ROM_Y8960MIXER, &callbacks, rm);
+
+    theMixer = rm;
     rm->debugHandle  = debugDeviceRegister(DBGTYPE_AUDIO, "Y8960 MSX-MIXER", &dbgCallbacks, rm);
 
     /* Write only. Nothing says the block answers reads, and a device that

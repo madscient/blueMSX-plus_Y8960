@@ -45,6 +45,8 @@ typedef struct {
     Y8960OpllexChip* chip[2];
 } RomMapperY8960Opllex;
 
+static RomMapperY8960Opllex* theOpllex = NULL;
+
 static void writeIo(RomMapperY8960Opllex* rm, UInt16 port, UInt8 value)
 {
     int index = (port == Y8960_OPLL1_ADDRESS || port == Y8960_OPLL1_DATA) ? 1 : 0;
@@ -121,6 +123,15 @@ static void destroy(RomMapperY8960Opllex* rm)
     deviceManagerUnregister(rm->deviceHandle);
 
     free(rm);
+
+    theOpllex = NULL;
+}
+
+void romMapperY8960OpllexDestroy(void)
+{
+    if (theOpllex != NULL) {
+        destroy(theOpllex);
+    }
 }
 
 int romMapperY8960OpllexCreate(void)
@@ -129,6 +140,8 @@ int romMapperY8960OpllexCreate(void)
     RomMapperY8960Opllex* rm = (RomMapperY8960Opllex*)calloc(1, sizeof(RomMapperY8960Opllex));
 
     rm->deviceHandle = deviceManagerRegister(ROM_Y8960OPLLEX, &callbacks, rm);
+
+    theOpllex = rm;
 
     rm->chip[0] = y8960OpllexCreate(boardGetMixer(), "Y8960 OPLLEX 0");
     rm->chip[1] = y8960OpllexCreate(boardGetMixer(), "Y8960 OPLLEX 1");

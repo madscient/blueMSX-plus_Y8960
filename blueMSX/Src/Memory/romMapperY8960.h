@@ -86,16 +86,33 @@ void y8960RegisterTunnel(Y8960TunnelBlock block, Y8960TunnelWrite write, void* r
 void y8960UnregisterTunnel(Y8960TunnelBlock block, void* ref);
 
 /* One block per RomType, so a machine configuration can carry them
-** independently while the cartridge hardware is still being designed. */
-int romMapperY8960OpllexCreate(void);
-int romMapperY8960Opl2exCreate(void);
-int romMapperY8960SsgsCreate(void);
-int romMapperY8960TimerCreate(void);
-int romMapperY8960MixerCreate(void);
+** independently while the cartridge hardware is still being designed.
+**
+** The Destroy entry points exist for the whole-card cartridge below. These
+** blocks hold no slot, so ejecting the cartridge cannot reach them the way
+** it reaches a mapper; the card has to take them down by name. They are not
+** for shutdown: there the device manager destroys every block itself, and
+** calling them as well would free each block twice. */
+int  romMapperY8960OpllexCreate(void);
+void romMapperY8960OpllexDestroy(void);
+int  romMapperY8960Opl2exCreate(void);
+void romMapperY8960Opl2exDestroy(void);
+int  romMapperY8960SsgsCreate(void);
+void romMapperY8960SsgsDestroy(void);
+int  romMapperY8960TimerCreate(void);
+void romMapperY8960TimerDestroy(void);
+int  romMapperY8960MixerCreate(void);
+void romMapperY8960MixerDestroy(void);
 /* The SCC block carries the cartridge ROM and the bank mapper, so unlike the
 ** others it is created from the slot entry. */
-int romMapperY8960SccCreate(const char* filename, UInt8* romData,
-                            int size, int slot, int sslot, int startPage);
-int romMapperY8960DcsgCreate(void);
+int  romMapperY8960SccCreate(const char* filename, UInt8* romData,
+                             int size, int slot, int sslot, int startPage);
+int  romMapperY8960DcsgCreate(void);
+void romMapperY8960DcsgDestroy(void);
+
+/* The whole card: the SCC block plus the six other blocks, as a cartridge.
+** romData may be NULL, which is the card with no firmware in it. */
+int  romMapperY8960CartCreate(const char* filename, UInt8* romData,
+                              int size, int slot, int sslot);
 
 #endif

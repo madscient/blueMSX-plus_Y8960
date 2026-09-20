@@ -44,6 +44,8 @@ typedef struct {
     Y8960Opl2ex* chip;
 } RomMapperY8960Opl2ex;
 
+static RomMapperY8960Opl2ex* theOpl2ex = NULL;
+
 static int circuitOf(UInt16 port)
 {
     return (port == Y8960_OPL21_ADDRESS || port == Y8960_OPL21_DATA) ? 1 : 0;
@@ -127,6 +129,15 @@ static void destroy(RomMapperY8960Opl2ex* rm)
     deviceManagerUnregister(rm->deviceHandle);
 
     free(rm);
+
+    theOpl2ex = NULL;
+}
+
+void romMapperY8960Opl2exDestroy(void)
+{
+    if (theOpl2ex != NULL) {
+        destroy(theOpl2ex);
+    }
 }
 
 int romMapperY8960Opl2exCreate(void)
@@ -135,6 +146,8 @@ int romMapperY8960Opl2exCreate(void)
     RomMapperY8960Opl2ex* rm = (RomMapperY8960Opl2ex*)calloc(1, sizeof(RomMapperY8960Opl2ex));
 
     rm->deviceHandle = deviceManagerRegister(ROM_Y8960OPL2EX, &callbacks, rm);
+
+    theOpl2ex = rm;
 
     /* One object holds both circuits because they share the sample RAM. */
     rm->chip = y8960Opl2exCreate(boardGetMixer());

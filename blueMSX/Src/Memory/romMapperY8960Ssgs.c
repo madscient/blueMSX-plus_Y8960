@@ -43,6 +43,8 @@ typedef struct {
     Y8960SsgsChip*  chip;
 } RomMapperY8960Ssgs;
 
+static RomMapperY8960Ssgs* theSsgs = NULL;
+
 static void writeIo(RomMapperY8960Ssgs* rm, UInt16 port, UInt8 value)
 {
     if (!y8960IoEnabled(Y8960_IO_SSGS)) {
@@ -98,6 +100,15 @@ static void destroy(RomMapperY8960Ssgs* rm)
     deviceManagerUnregister(rm->deviceHandle);
 
     free(rm);
+
+    theSsgs = NULL;
+}
+
+void romMapperY8960SsgsDestroy(void)
+{
+    if (theSsgs != NULL) {
+        destroy(theSsgs);
+    }
 }
 
 int romMapperY8960SsgsCreate(void)
@@ -106,6 +117,8 @@ int romMapperY8960SsgsCreate(void)
     RomMapperY8960Ssgs* rm = (RomMapperY8960Ssgs*)calloc(1, sizeof(RomMapperY8960Ssgs));
 
     rm->deviceHandle = deviceManagerRegister(ROM_Y8960SSGS, &callbacks, rm);
+
+    theSsgs = rm;
 
     rm->chip = y8960SsgsCreate(boardGetMixer(), "Y8960 SSGS");
 

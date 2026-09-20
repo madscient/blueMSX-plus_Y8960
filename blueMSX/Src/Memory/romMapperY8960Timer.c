@@ -426,6 +426,13 @@ static void destroy(RomMapperY8960Timer* rm)
     theTimer = NULL;
 }
 
+void romMapperY8960TimerDestroy(void)
+{
+    if (theTimer != NULL) {
+        destroy(theTimer);
+    }
+}
+
 int romMapperY8960TimerCreate(void)
 {
     DeviceCallbacks callbacks = { destroy, reset, saveState, loadState };

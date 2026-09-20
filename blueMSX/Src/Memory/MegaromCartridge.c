@@ -403,6 +403,10 @@ int cartridgeInsert(int cartNo, RomType romType, const char* cart, const char* c
             case ROM_FLASHROMSCC:
                 success &= romMapperFlashRomSccCreate("FlashRomScc.rom", NULL, 0, slot, sslot, 2);
                 break;
+
+            case ROM_Y8960:
+                success &= romMapperY8960CartCreate(romName, NULL, 0, slot, sslot);
+                break;
             }
             break;
         }
@@ -784,6 +788,10 @@ int cartridgeInsert(int cartNo, RomType romType, const char* cart, const char* c
 
         case ROM_Y8960SCC:
             success &= romMapperY8960SccCreate(romName, buf, size, slot, sslot, 2);
+            break;
+
+        case ROM_Y8960:
+            success &= romMapperY8960CartCreate(romName, buf, size, slot, sslot);
             break;
 
         case ROM_SUNRISEIDE:

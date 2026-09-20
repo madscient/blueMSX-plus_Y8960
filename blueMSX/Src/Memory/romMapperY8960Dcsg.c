@@ -45,6 +45,8 @@ typedef struct {
     Y8960DcsgChip* chip[2];
 } RomMapperY8960Dcsg;
 
+static RomMapperY8960Dcsg* theDcsg = NULL;
+
 static void writeIo(RomMapperY8960Dcsg* rm, UInt16 port, UInt8 value)
 {
     int index = (port == Y8960_DCSG_PORT1) ? 1 : 0;
@@ -104,6 +106,15 @@ static void destroy(RomMapperY8960Dcsg* rm)
     deviceManagerUnregister(rm->deviceHandle);
 
     free(rm);
+
+    theDcsg = NULL;
+}
+
+void romMapperY8960DcsgDestroy(void)
+{
+    if (theDcsg != NULL) {
+        destroy(theDcsg);
+    }
 }
 
 int romMapperY8960DcsgCreate(void)
@@ -112,6 +123,8 @@ int romMapperY8960DcsgCreate(void)
     RomMapperY8960Dcsg* rm = (RomMapperY8960Dcsg*)calloc(1, sizeof(RomMapperY8960Dcsg));
 
     rm->deviceHandle = deviceManagerRegister(ROM_Y8960DCSG, &callbacks, rm);
+
+    theDcsg = rm;
 
     rm->chip[0] = y8960DcsgCreate(boardGetMixer(), "Y8960 DCSG 0");
     rm->chip[1] = y8960DcsgCreate(boardGetMixer(), "Y8960 DCSG 1");
