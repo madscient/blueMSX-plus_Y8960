@@ -218,7 +218,7 @@ Y8960 を駆動する拡張 BASIC と BIOS が
 - 基盤タイプが MSX2++ のマシンで OPLLEX / OPL2EX / DCSG が応答すること
   （MSX-TIMER と SSGS は確認済み）
 - Y8960 SCC を追加しないカートリッジ形のマシンで、ほかのブロックが常に応答すること
-- 一式をまとめて挿す **Y8960 Cartridge**（挿入・取り外しとも）
+- **Y8960 Cartridge** に ROM イメージを載せてファームウェアを動かすこと
 - ステートセーブとロード
 - ファームウェア（MsxSoundSuiteExtension）での動作
 

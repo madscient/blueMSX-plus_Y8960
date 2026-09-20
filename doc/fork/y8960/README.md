@@ -38,6 +38,7 @@ Y8960 対応は upstream には存在しない、このフォーク固有の機�
 | `tests/MSX2+ - C-BIOS + Y8960/` | 7 ブロックを置いた構成。**`y8960bas.rom` が要る** |
 | `tests/MSX2+ - C-BIOS + Y8960 (banktest)/` | 同じ構成で、Y8960 SCC に `banktest.rom` を載せたもの。本体 MSX-MUSIC は外してある |
 | `tests/MSX2+ - C-BIOS + Y8960 (cartridge)/` | Y8960 SCC を**外した**構成。`/rom1 <rom> /romtype1 Y8960SCC` でカートリッジとして挿す |
+| `tests/MSX2+ - C-BIOS + Y8960 (whole cart)/` | Y8960 を**一つも持たない**構成。`/rom1 <rom> /romtype1 Y8960` でカード一式をカートリッジとして挿す。`(banktest)` と突き合わせる相手 |
 | `tests/MSX2 - Y8960 (firmware)/` | 汎用 `MSX2`（MSX BASIC 2.1）に Y8960 の 7 ブロックを載せ、Y8960 SCC に `y8960bas.rom` を載せたもの。**`Machines/Shared Roms/` の BIOS と `y8960bas.rom` が要る** |
 | `tests/MSX2++ - C-BIOS + Y8960/` | 基盤タイプ `MSX2++`。MSX-TIMER と Y8960 SCC を置き、Y8960 SCC に `ssgstest.rom` を載せたもの |
 
@@ -89,6 +90,19 @@ py "doc/fork/y8960/tests/make-sndtest.py" <pasmo.exe> <dir>/sndtest.rom
 blueMSX+.exe /machine "MSX2+ - C-BIOS + Y8960 (cartridge)" /rom1 <dir>/sndtest.rom /romtype1 Y8960SCC
 py "doc/fork/y8960/tests/analyze-sndtest.py" "<ビルド出力>/Audio Capture/sndtest_NN.wav"
 ```
+
+カード一式をカートリッジとして挿す経路は、同じ `banktest.rom` を 2 通りに挿して
+突き合わせる。画面は `PrintWindow` で撮って MD5 を比べ、音は `/hidden` で WAV に
+録って 200ms ごとの RMS 包絡を比べる（手順と結果は `implementation-plan.md` §11 の (30)）。
+
+```sh
+cp -r "doc/fork/y8960/tests/MSX2+ - C-BIOS + Y8960 (whole cart)" "$DEST/"
+blueMSX+.exe /machine "MSX2+ - C-BIOS + Y8960 (banktest)"                                    # 対照
+blueMSX+.exe /machine "MSX2+ - C-BIOS + Y8960 (whole cart)" /rom1 <banktest.rom> /romtype1 Y8960
+```
+
+**判別力を見るには `/romtype1 Y8960SCC` で同じ ROM を挿す。** SCC ブロックだけが
+入るので、5-7 と 10 が NG になり、音は全編無音になる。
 
 `ssgstest` は `MSX2++` の構成に `ssgstest.rom` を置いて起動する。
 1 / 2 / 6 / 7 / 8 が機械判定、3 / 4 が聴く項目、5 がかな LED を見る項目。
