@@ -85,6 +85,7 @@ void langInitPolish(LanguageStrings* ls)
     ls->errorCreateTapeImage    = "Nie można utworzyć pliku obrazu taśmy.";
     ls->errorNoCasInZip         = "Nie znaleziono pliku .cas w archiwum zip.";
     ls->errorDirAsDskOverflow   = "%d plik(ów) (%d KB łącznie) nie zmieściło się w obrazie dysku 720 KB i zostały pominięte.";
+    ls->errorDiskExportFailed   = "Nie udało się zapisać obrazu dysku:\n  %s";
     ls->errorNoHelp             = "Nie znaleziono pliku pomocy blueMSX+.";
     ls->errorStartEmu           = "Nie udało się uruchomić emulatora MSX.";
     ls->errorStartEmuNoMachine           = "Nie ustawiono maszyny MSX do emulacji. Wybierz jedną w Opcje -> Emulacja -> Typ MSX.";
@@ -183,6 +184,7 @@ void langInitPolish(LanguageStrings* ls)
     ls->menuDiskInsertNew       = "Włóż nowy obraz dysku";              
     ls->menuDiskInsertCdrom     = "Insert CD-Rom";       // New in 2.7
     ls->menuDiskDirInsert       = "Podepnij folder";
+    ls->menuDiskExport          = "Eksportuj obraz dysku...";
     ls->menuDiskAutoStart       = "Resetuj po zmianie dyskietki";
     ls->menuCartAutoReset       = "Resetuj po zmianie kartridża";
     
@@ -306,6 +308,7 @@ void langInitPolish(LanguageStrings* ls)
     ls->dlgLoadVideoCapture     = "Load video capture";      // New in 2.6
     ls->dlgSaveState            = "Zapisz stan CPU";
     ls->dlgSaveCassette          = "blueMSX+ - Zapisz obraz kasety";
+    ls->dlgSaveDisk              = "blueMSX+ - Eksportuj obraz dysku";
     ls->dlgSaveVideoClipAs      = "Save video clip as...";      // New in 2.6
     ls->dlgSaveCaptureAudio     = "Zapisz nagranie audio jako";
     ls->dlgSaveCaptureVideo     = "Zapisz nagranie wideo jako";

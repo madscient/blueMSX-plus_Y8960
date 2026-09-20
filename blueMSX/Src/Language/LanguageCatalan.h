@@ -85,6 +85,7 @@ void langInitCatalan(LanguageStrings* ls)
     ls->errorCreateTapeImage    = "No s'ha pogut crear el fitxer d'imatge de cinta.";
     ls->errorNoCasInZip         = "No s'ha pogut trobar un fitxer .cas dins de l'arxiu zip.";
     ls->errorDirAsDskOverflow   = "%d fitxer(s) (%d KB en total) no caben a la imatge de disc de 720 KB i s'han ignorat.";
+    ls->errorDiskExportFailed   = "No s’ha pogut escriure la imatge de disc:\n  %s";
     ls->errorNoHelp             = "No s'ha pogut trobar el fitxer d'ajuda de blueMSX+.";
     ls->errorStartEmu           = "No s'ha pogut iniciar l'emulador MSX.";
     ls->errorStartEmuNoMachine           = "No hi ha cap màquina MSX configurada per a l'emulació. Trieu-ne una a Opcions -> Emulació -> Màquina MSX.";
@@ -183,6 +184,7 @@ void langInitCatalan(LanguageStrings* ls)
     ls->menuDiskInsertNew       = "Insereix una nova imatge de disc";
     ls->menuDiskInsertCdrom     = "Insereix un CD-Rom";       // New in 2.7
     ls->menuDiskDirInsert       = "Insereix directori";
+    ls->menuDiskExport          = "Exporta la imatge de disc...";
     ls->menuDiskAutoStart       = "Reinicia després de la inserció";
     ls->menuCartAutoReset       = "Reinicia després de la inserció/expulsió";
 
@@ -306,6 +308,7 @@ void langInitCatalan(LanguageStrings* ls)
     ls->dlgLoadVideoCapture     = "Load video capture";      
     ls->dlgSaveState            = "Anomena i desa l'estat...";
     ls->dlgSaveCassette         = "blueMSX+ - Desa la imatge de cinta";
+    ls->dlgSaveDisk             = "blueMSX+ - Exporta la imatge de disc";
     ls->dlgSaveVideoClipAs      = "Desa i anomena el videoclip...";      
     ls->dlgSaveCaptureAudio     = "Anomena i desa la gravació d'àudio";
     ls->dlgSaveCaptureVideo     = "Anomena i desa la gravació de vídeo";

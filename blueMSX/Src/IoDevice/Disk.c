@@ -135,8 +135,38 @@ void  diskEnable(int driveId, int enable)
 
 UInt8 diskPresent(int driveId)
 {
-    return driveId >= 0 && driveId < MAXDRIVES && 
+    return driveId >= 0 && driveId < MAXDRIVES &&
         (drives[driveId] != NULL || ramImageBuffer[driveId] != NULL);
+}
+
+int diskHasRamImage(int driveId)
+{
+    return driveId >= 0 && driveId < MAXDRIVES &&
+        ramImageBuffer[driveId] != NULL && ramImageSize[driveId] > 0;
+}
+
+int diskExportRamImage(int driveId, const char* fileName)
+{
+    FILE* file;
+    size_t written;
+
+    if (!diskHasRamImage(driveId) || fileName == NULL) {
+        return 0;
+    }
+
+    file = fopen(fileName, "wb");
+    if (file == NULL) {
+        return 0;
+    }
+
+    written = fwrite(ramImageBuffer[driveId], 1, ramImageSize[driveId], file);
+
+    /* fclose reports the failure of a write that fwrite still buffered. */
+    if (fclose(file) != 0) {
+        return 0;
+    }
+
+    return written == (size_t)ramImageSize[driveId];
 }
 
 int diskGetSectorsPerTrack(int driveId)

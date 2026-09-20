@@ -85,6 +85,7 @@ void langInitRussian(LanguageStrings* ls)
     ls->errorCreateTapeImage    = "Не удалось создать файл образа кассеты.";
     ls->errorNoCasInZip         = "Не нашлось .cas файла в zip архиве.";
     ls->errorDirAsDskOverflow   = "%d файл(ов) (всего %d КБ) не поместились в образ диска 720 КБ и были пропущены.";
+    ls->errorDiskExportFailed   = "Не удалось записать образ диска:\n  %s";
     ls->errorNoHelp             = "Не нашлось файла помощи blueMSX+.";
     ls->errorStartEmu           = "Не удалось начать эмуляцию.";
     ls->errorStartEmuNoMachine           = "Не выбрана MSX-машина для эмуляции. Выберите её в разделе Опции -> Эмуляция -> Машина MSX.";
@@ -183,6 +184,7 @@ void langInitRussian(LanguageStrings* ls)
     ls->menuDiskInsertNew       = "Вставить новый образ дискеты";
     ls->menuDiskInsertCdrom     = "Вставить CD-Rom диск";       // New in 2.7
     ls->menuDiskDirInsert       = "Вставить папку";
+    ls->menuDiskExport          = "Экспорт образа диска...";
     ls->menuDiskAutoStart       = "Сбросить после загрузки дискеты";
     ls->menuCartAutoReset       = "Сбросить после загрузки/удаления";
 
@@ -306,6 +308,7 @@ void langInitRussian(LanguageStrings* ls)
     ls->dlgLoadVideoCapture     = "Загрузить захваченное видео";      
     ls->dlgSaveState            = "Сохранить как...";
     ls->dlgSaveCassette         = "blueMSX+ - Сохранить образ кассеты";
+    ls->dlgSaveDisk             = "blueMSX+ - Экспорт образа диска";
     ls->dlgSaveVideoClipAs      = "Сохранить видеоклип как...";      
     ls->dlgSaveCaptureAudio     = "Сохранить запись звука как";
     ls->dlgSaveCaptureVideo     = "Сохранить запись видео как";

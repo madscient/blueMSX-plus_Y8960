@@ -45,6 +45,7 @@ void archShowNoRomInZipDialog() {}
 void archShowNoDiskInZipDialog() {}
 void archShowNoCasInZipDialog() {}
 void archShowStartEmuFailDialog(const char* machineName) {}
+void archShowDiskExportFailedDialog(const char* fileName) {}
 
 void archMaximizeWindow() {}
 void archMinimizeWindow() {}

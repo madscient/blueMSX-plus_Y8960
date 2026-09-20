@@ -302,6 +302,7 @@ char* langErrorCreateDiskImage() { return ls->errorCreateDiskImage; }
 char* langErrorCreateTapeImage() { return ls->errorCreateTapeImage; }
 char* langErrorNoCasInZip() { return ls->errorNoCasInZip; }
 char* langErrorDirAsDskOverflow() { return ls->errorDirAsDskOverflow; }
+char* langErrorDiskExportFailed() { return ls->errorDiskExportFailed; }
 char* langErrorNoHelp() { return ls->errorNoHelp; }
 char* langErrorStartEmu() { return ls->errorStartEmu; }
 char* langErrorStartEmuNoMachine()          { return ls->errorStartEmuNoMachine; }
@@ -398,6 +399,7 @@ char* langMenuCartMegaFlashRom() { return ls->menuCartMegaFlashRom; }
 char* langMenuCartFlashCart() { return ls->menuCartFlashCart; }
 
 char* langMenuDiskInsertNew() { return ls->menuDiskInsertNew; }
+char* langMenuDiskExport() { return ls->menuDiskExport; }
 char* langMenuDiskDirInsertCdrom() { return ls->menuDiskInsertCdrom; }
 char* langMenuDiskDirInsert() { return ls->menuDiskDirInsert; }
 char* langMenuDiskAutoStart() { return ls->menuDiskAutoStart; }
@@ -522,6 +524,7 @@ char* langDlgLoadState() { return ls->dlgLoadState; }
 char* langDlgLoadVideoCapture() { return ls->dlgLoadVideoCapture; }
 char* langDlgSaveState() { return ls->dlgSaveState; }
 char* langDlgSaveCassette() { return ls->dlgSaveCassette; }
+char* langDlgSaveDisk() { return ls->dlgSaveDisk; }
 char* langDlgSaveVideoClipAs() { return ls->dlgSaveVideoClipAs; }
 char* langDlgSaveCaptureAudio() { return ls->dlgSaveCaptureAudio; }
 char* langDlgSaveCaptureVideo() { return ls->dlgSaveCaptureVideo; }

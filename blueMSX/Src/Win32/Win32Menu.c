@@ -199,6 +199,9 @@ extern int showLoadMemoryDlg(HWND hwnd);
 #define ID_FILE_DISK_AUTOSTART          41303
 #define ID_FILE_DISK_INSERTNEW          41304
 #define ID_FILE_DISK_HISTORY            41305
+/* Clears the MAX_HISTORY (30) IDs that follow ID_FILE_DISK_HISTORY; the
+** per-drive block runs to 41399 (ID_FILE_DISK_OFFSET = 100). */
+#define ID_FILE_DISK_EXPORT             41340
 
 /* Inner-zip dispatch IDs for multi-disk .zip history submenus.
    ID = BASE + drive*DRIVE_STRIDE + hist_idx*MAX_INNER + inner_idx. */
@@ -911,6 +914,13 @@ static HMENU menuCreateDisk(int diskNo, Properties* pProperties, Shortcuts* shor
     if (appConfigGetInt("menu.file.disk.eject", 1) > 0) {
         sprintf(langBuffer, "%s%hs%hs", langMenuEject(), (*pProperties->media.disks[diskNo].fileName ? ": " : ""), getCleanFileName(pProperties->media.disks[diskNo].fileName));
         AppendMenuU(hMenu, MF_STRING | (*pProperties->media.disks[diskNo].fileName ? 0 : MF_GRAYED), idOffset + ID_FILE_DISK_REMOVE, langBuffer);
+    }
+
+    if (appConfigGetInt("menu.file.disk.export", 1) > 0) {
+        /* Only a directory or zip mount keeps its image in RAM, and only
+        ** there do the MSX's writes have nowhere else to go. */
+        AppendMenuU(hMenu, MF_STRING | (diskHasRamImage(diskNo) ? 0 : MF_GRAYED),
+                    idOffset + ID_FILE_DISK_EXPORT, langMenuDiskExport());
     }
 
     if (appConfigGetInt("menu.file.disk.autostart", 1) > 0) {
@@ -2218,6 +2228,9 @@ int menuCommand(Properties* pProperties, int command)
             return 0;
         case ID_FILE_DISK_INSERTNEW:
             actionDiskInsertNew(i);
+            return 0;
+        case ID_FILE_DISK_EXPORT:
+            actionDiskExport(i);
             return 0;
         case ID_FILE_DISK_REMOVE:  
             actionDiskRemove(i);

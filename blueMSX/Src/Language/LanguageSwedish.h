@@ -85,6 +85,7 @@ void langInitSwedish(LanguageStrings* ls)
     ls->errorCreateTapeImage    = "Kunde inte skapa kassettfilen.";
     ls->errorNoCasInZip         = "Kunde inte hitta en .cas fil i zip arkivet.";
     ls->errorDirAsDskOverflow   = "%d fil(er) (%d KB totalt) får inte plats i 720 KB-diskavbilden och hoppades över.";
+    ls->errorDiskExportFailed   = "Kunde inte skriva diskavbilden:\n  %s";
     ls->errorNoHelp             = "Kunde inte hitta hjälpfilen.";
     ls->errorStartEmu           = "Misslyckades att starta emulatorn.";
     ls->errorStartEmuNoMachine           = "Ingen MSX-maskin är inställd för emulering. Välj en under Egenskaper -> Emulering -> MSX familj.";
@@ -183,6 +184,7 @@ void langInitSwedish(LanguageStrings* ls)
     ls->menuDiskInsertNew       = "Sätt in ny diskett fil";
     ls->menuDiskInsertCdrom     = "Sätt in CD-Rom";      // New in 2.7
     ls->menuDiskDirInsert       = "Sätt in mapp";
+    ls->menuDiskExport          = "Exportera diskavbild...";
     ls->menuDiskAutoStart       = "Starta om efter insättning/urdragning";
     ls->menuCartAutoReset       = "Starta om efter insättning/urdragning";
 
@@ -307,6 +309,7 @@ void langInitSwedish(LanguageStrings* ls)
     ls->dlgLoadVideoCapture     = "Ladda videoinspelning";      
     ls->dlgSaveState            = "Spara CPU-tillstånd";
     ls->dlgSaveCassette         = "blueMSX+ - Spara Kassett";
+    ls->dlgSaveDisk             = "blueMSX+ - Exportera diskavbild";
     ls->dlgSaveVideoClipAs      = "Spara videoinspeling som...";      
     ls->dlgSaveCaptureAudio     = "Spara ljudinspelning som";
     ls->dlgSaveCaptureVideo     = "Spara videoinspelning som";

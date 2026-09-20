@@ -82,6 +82,7 @@ typedef struct {
     char* errorCreateTapeImage;
     char* errorNoCasInZip;
     char* errorDirAsDskOverflow;
+    char* errorDiskExportFailed;
     char* errorNoHelp;
     char* errorStartEmu;
     /* Machine-load failure details shown as the body of errorStartEmu. */
@@ -179,6 +180,7 @@ typedef struct {
     char* menuDiskInsertNew;
     char* menuDiskInsertCdrom;
     char* menuDiskDirInsert;
+    char* menuDiskExport;
     char* menuDiskAutoStart;
     char* menuCartAutoReset;
 
@@ -302,6 +304,7 @@ typedef struct {
     char* dlgLoadVideoCapture;
     char* dlgSaveState;
     char* dlgSaveCassette;
+    char* dlgSaveDisk;
     char* dlgSaveVideoClipAs;
     char* dlgSaveCaptureAudio;
     char* dlgSaveCaptureVideo;

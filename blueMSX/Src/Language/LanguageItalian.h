@@ -86,6 +86,7 @@ void langInitItalian(LanguageStrings* ls)
     ls->errorCreateTapeImage            = "Impossibile creare il file immagine cassetta.";
     ls->errorNoCasInZip                 = "Nessun file .CAS trovato nell'archivio compresso.";
     ls->errorDirAsDskOverflow           = "%d file (%d KB totali) non sono entrati nell'immagine disco da 720 KB e sono stati saltati.";
+    ls->errorDiskExportFailed           = "Impossibile scrivere l'immagine disco:\n  %s";
     ls->errorNoHelp                     = "Non trovo il file della guida in linea di blueMSX+.";
     ls->errorStartEmu                   = "Avvio dell'emulatore fallito!";
     ls->errorStartEmuNoMachine          = "Nessuna macchina MSX impostata per l'emulazione. Sceglietene una da Opzioni -> Emulazione -> Modello emulato.";
@@ -184,6 +185,7 @@ void langInitItalian(LanguageStrings* ls)
     ls->menuDiskInsertNew               = "Inserisci un nuovo disco...";
     ls->menuDiskInsertCdrom             = "Collega l'unità CD-ROM";       // New in 2.7
     ls->menuDiskDirInsert               = "Inserisci una cartella...";
+    ls->menuDiskExport                  = "Esporta immagine disco...";
     ls->menuDiskAutoStart               = "Riavvia quando inserisci";
     ls->menuCartAutoReset               = "Riavvia quando inserisci/rimuovi";
 
@@ -307,6 +309,7 @@ void langInitItalian(LanguageStrings* ls)
     ls->dlgLoadVideoCapture             = "Carica un video acquisito";                              
     ls->dlgSaveState                    = "Salva lo stato della CPU";
     ls->dlgSaveCassette                 = "blueMSX+ - Salva la cassetta come file immagine";
+    ls->dlgSaveDisk                     = "blueMSX+ - Esporta immagine disco";
     ls->dlgSaveVideoClipAs              = "Salva il filmato con nome";                              
     ls->dlgSaveCaptureAudio             = "Salva registrazione audio come";
     ls->dlgSaveCaptureVideo             = "Salva registrazione video come";

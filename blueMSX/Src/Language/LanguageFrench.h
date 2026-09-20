@@ -85,6 +85,7 @@ void langInitFrench(LanguageStrings* ls)
     ls->errorCreateTapeImage    = "Impossible de créer le fichier image cassette.";
     ls->errorNoCasInZip         = "Il n'y a pas de fichier .cas dans votre archive zip";
     ls->errorDirAsDskOverflow   = "%d fichier(s) (%d KB au total) ne tiennent pas dans l'image disque de 720 KB et ont été ignorés.";
+    ls->errorDiskExportFailed   = "Impossible d'écrire l'image disque:\n  %s";
     ls->errorNoHelp             = "Impossible de trouver le fichier d'aide.";
     ls->errorStartEmu           = "Erreur lors du lancement de l'émulateur.";
     ls->errorStartEmuNoMachine           = "Aucune machine MSX n'est configurée pour l'émulation. Choisissez-en une dans Options -> Emulation -> Type de MSX.";
@@ -183,6 +184,7 @@ void langInitFrench(LanguageStrings* ls)
     ls->menuDiskInsertNew       = "Insérer un nouveau disque";              
     ls->menuDiskInsertCdrom     = "Insérer CD-Rom";       // New in 2.7
     ls->menuDiskDirInsert       = "Insérer répertoire"; 
+    ls->menuDiskExport          = "Exporter l'image disque...";
     ls->menuDiskAutoStart       = "Reset après insertion";
     ls->menuCartAutoReset       = "Reset après insérer/éjecter";
 
@@ -306,6 +308,7 @@ void langInitFrench(LanguageStrings* ls)
     ls->dlgLoadVideoCapture     = "Charger une capture vidéo";      
     ls->dlgSaveState            = "Sauver une image du CPU";
     ls->dlgSaveCassette         = "blueMSX+ - Sauver une image de cassette";
+    ls->dlgSaveDisk             = "blueMSX+ - Exporter l'image disque";
     ls->dlgSaveVideoClipAs      = "Sauver le clip vidéo comme ...";      
     ls->dlgSaveCaptureAudio     = "Enregistrer l'audio sous";
     ls->dlgSaveCaptureVideo     = "Enregistrer la vidéo sous";

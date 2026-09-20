@@ -87,6 +87,7 @@ void langInitFinnish(LanguageStrings* ls)
     ls->errorCreateTapeImage    = "Kasettitiedoston luonti epäonnistui.";
     ls->errorNoCasInZip         = "Zip paketista ei löytynyt .CAS tiedostoa.";
     ls->errorDirAsDskOverflow   = "%d tiedosto(a) (yhteensä %d KB) ei mahtunut 720 KB:n levykuvaan ja jäi väliin.";
+    ls->errorDiskExportFailed   = "Levykuvan kirjoittaminen epäonnistui:\n  %s";
     ls->errorNoHelp             = "blueMSX+:n ohjetiedostoa ei löytynyt.";
     ls->errorStartEmu           = "MSX emulaattorin käynnistys epäonnistui.";
     ls->errorStartEmuNoMachine           = "Emulaatiolle ei ole asetettu MSX-konetta. Valitse yksi kohdasta Asetukset -> Emulaatio -> MSX malli.";
@@ -185,6 +186,7 @@ void langInitFinnish(LanguageStrings* ls)
     ls->menuDiskInsertNew       = "Uusi levytiedosto";
     ls->menuDiskInsertCdrom     = "Aseta CD-ROM";       // New in 2.7
     ls->menuDiskDirInsert       = "Aseta hakemisto";
+    ls->menuDiskExport          = "Vie levykuva...";
     ls->menuDiskAutoStart       = "Käynnistä uudelleen asettamisen jälkeen";
     ls->menuCartAutoReset       = "Käynnistä uudelleen muutettaessa";
 
@@ -307,6 +309,7 @@ void langInitFinnish(LanguageStrings* ls)
     ls->dlgLoadVideoCapture     = "Lataa videokaappaus";      
     ls->dlgSaveState            = "Tallenna tila nimellä";
     ls->dlgSaveCassette         = "blueMSX+ - Tallenna kasetti";
+    ls->dlgSaveDisk             = "blueMSX+ - Vie levykuva";
     ls->dlgSaveVideoClipAs      = "Tallenna videokaappaus nimellä";      
     ls->dlgSaveCaptureAudio     = "Tallenna äänitallennus nimellä";
     ls->dlgSaveCaptureVideo     = "Tallenna videotallennus nimellä";

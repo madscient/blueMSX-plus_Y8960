@@ -67,6 +67,7 @@ char* archFilenameGetOpenDisk(Properties* properties, int drive, int allowCreate
 char* archFilenameGetOpenHarddisk(Properties* properties, int drive, int allowCreate) { return NULL; }
 char* archFilenameGetOpenCas(Properties* properties) { return NULL; }
 char* archFilenameGetSaveCas(Properties* properties, int* type) { return NULL; }
+char* archFilenameGetSaveDisk(Properties* properties, int drive) { return NULL; }
 char* archFilenameGetOpenState(Properties* properties) { return NULL; }
 char* archFilenameGetSaveState(Properties* properties) { return NULL; }
 char* archDirnameGetOpenDisk(Properties* properties, int drive) { return NULL; }

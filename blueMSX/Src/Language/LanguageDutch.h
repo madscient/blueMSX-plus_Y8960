@@ -85,6 +85,7 @@ void langInitDutch(LanguageStrings* ls)
     ls->errorCreateTapeImage    = "Kan het cassettebestand niet aanmaken.";
     ls->errorNoCasInZip         = "Er zijn geen .CAS-bestanden gevonden in het ZIP-bestand.";
     ls->errorDirAsDskOverflow   = "%d bestand(en) (%d KB totaal) pasten niet op de 720 KB-schijfkopie en zijn overgeslagen.";
+    ls->errorDiskExportFailed   = "Kan de schijfkopie niet schrijven:\n  %s";
     ls->errorNoHelp             = "Het blueMSX+ helpbestand is niet gevonden.";
     ls->errorStartEmu           = "Het is niet gelukt om de MSX emulator te starten.";
     ls->errorStartEmuNoMachine           = "Er is geen MSX-machine ingesteld voor emulatie. Kies er een bij Opties -> Emulatie -> MSX-familie.";
@@ -183,6 +184,7 @@ void langInitDutch(LanguageStrings* ls)
     ls->menuDiskInsertNew       = "Voer Nieuw Diskettebestand in";
     ls->menuDiskInsertCdrom     = "Voer CD-ROM in";
     ls->menuDiskDirInsert       = "Voer Map in";
+    ls->menuDiskExport          = "Schijfkopie exporteren...";
     ls->menuDiskAutoStart       = "Herstart na invoeren";
     ls->menuCartAutoReset       = "Herstart na invoeren/uitwerpen";
 
@@ -306,6 +308,7 @@ void langInitDutch(LanguageStrings* ls)
     ls->dlgLoadVideoCapture     = "Laad Video-opname";
     ls->dlgSaveState            = "Opslaan CPU-status";
     ls->dlgSaveCassette         = "blueMSX+ - Opslaan Cassettebestand";
+    ls->dlgSaveDisk             = "blueMSX+ - Schijfkopie exporteren";
     ls->dlgSaveVideoClipAs      = "Videoclip opslaan als...";
     ls->dlgSaveCaptureAudio     = "Audio-opname opslaan als";
     ls->dlgSaveCaptureVideo     = "Video-opname opslaan als";

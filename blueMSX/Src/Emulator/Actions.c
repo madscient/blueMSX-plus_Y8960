@@ -154,6 +154,20 @@ void actionDiskInsertDir(int diskNo)
     archUpdateMenu(0);
 }
 
+void actionDiskExport(int diskNo)
+{
+    char* filename;
+
+    emulatorSuspend();
+    if (diskHasRamImage(diskNo)) {
+        filename = archFilenameGetSaveDisk(state.properties, diskNo);
+        if (filename != NULL && !diskExportRamImage(diskNo, filename)) {
+            archShowDiskExportFailedDialog(filename);
+        }
+    }
+    emulatorResume();
+}
+
 void actionDiskRemove(int i) {
     state.properties->media.disks[i].fileName[0] = 0;
     state.properties->media.disks[i].fileNameInZip[0] = 0;

@@ -87,6 +87,7 @@ void langInitJapanese(LanguageStrings* ls)
     ls->errorCreateTapeImage    = "テープイメージファイルを作成できませんでした。";
     ls->errorNoCasInZip         = "zipファイルの中に.casファイルが見つかりません。";
     ls->errorDirAsDskOverflow   = "%d 個のファイル (合計 %d KB) が 720 KB ディスクイメージに収まらず除外されました。";
+    ls->errorDiskExportFailed   = "ディスクイメージを書き出せませんでした:\n  %s";
     ls->errorNoHelp             = "blueMSX+ のヘルプファイルが見つかりません。";
     ls->errorStartEmu           = "blueMSX+ の開始に失敗しました。";
     ls->errorStartEmuNoMachine           = "エミュレートするマシンが設定されていません。 オプション → エミュレーション → マシン構成 から選択してください。";
@@ -185,6 +186,7 @@ void langInitJapanese(LanguageStrings* ls)
     ls->menuDiskInsertNew       = "新規ディスクイメージを挿入";
     ls->menuDiskInsertCdrom     = "CD-ROM挿入";          // New in 2.7
     ls->menuDiskDirInsert       = "ディレクトリ挿入";
+    ls->menuDiskExport          = "ディスクイメージを書き出し...";
     ls->menuDiskAutoStart       = "挿入/取り出し後リセット";
     ls->menuCartAutoReset       = "挿入/取り出し後リセット";
 
@@ -308,6 +310,7 @@ void langInitJapanese(LanguageStrings* ls)
     ls->dlgLoadVideoCapture     = "キャプチャ映像の読み込み";      
     ls->dlgSaveState            = "CPUステート 保存";
     ls->dlgSaveCassette          = "blueMSX+ - テープを保存";
+    ls->dlgSaveDisk              = "blueMSX+ - ディスクイメージの書き出し";
     ls->dlgSaveVideoClipAs      = "ビデオクリップを別名で保存...";      
     ls->dlgSaveCaptureAudio     = "録音ファイルを名前を付けて保存";
     ls->dlgSaveCaptureVideo     = "録画ファイルを名前を付けて保存";

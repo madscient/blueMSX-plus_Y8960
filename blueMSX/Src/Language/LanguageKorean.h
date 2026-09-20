@@ -85,6 +85,7 @@ void langInitKorean(LanguageStrings* ls)
     ls->errorCreateTapeImage    = "테이프 이미지 파일을 만들 수 없습니다.";
     ls->errorNoCasInZip         = "zip파일 내부의 cas를 찾을 수 없습니다.";
     ls->errorDirAsDskOverflow   = "%d 개의 파일(총 %d KB)이 720 KB 디스크 이미지에 맞지 않아 건너뛰었습니다.";
+    ls->errorDiskExportFailed   = "디스크 이미지를 쓸 수 없습니다:\n  %s";
     ls->errorNoHelp             = "blueMSX+ 도움말을 찾을 수 없습니다.";
     ls->errorStartEmu           = "MSX 에뮬레이터를 시작할 수 없습니다.";
     ls->errorStartEmuNoMachine           = "에뮬레이션에 사용할 MSX 머신이 설정되지 않았습니다. 옵션 -> 에뮬레이션 -> MSX 머신 에서 선택하세요.";
@@ -183,6 +184,7 @@ void langInitKorean(LanguageStrings* ls)
     ls->menuDiskInsertNew       = "새로운 디스크 이미지 삽입";              
     ls->menuDiskInsertCdrom     = "시디롬 삽입";       // New in 2.7
     ls->menuDiskDirInsert       = "디렉토리 삽입";
+    ls->menuDiskExport          = "디스크 이미지 내보내기...";
     ls->menuDiskAutoStart       = "삽입후에 재시작";
     ls->menuCartAutoReset       = "삽입/제거 후에 재시작";
 
@@ -306,6 +308,7 @@ void langInitKorean(LanguageStrings* ls)
     ls->dlgLoadVideoCapture     = "녹화된 영상 불러오기";      
     ls->dlgSaveState            = "CPU 상태 저장";
     ls->dlgSaveCassette          = "blueMSX+ - 테잎 이미지 저장";
+    ls->dlgSaveDisk              = "blueMSX+ - 디스크 이미지 내보내기";
     ls->dlgSaveVideoClipAs      = "다른 이름으로 영상 클립 저장...";      
     ls->dlgSaveCaptureAudio     = "오디오 녹음 다른 이름으로 저장";
     ls->dlgSaveCaptureVideo     = "동영상 녹화 다른 이름으로 저장";

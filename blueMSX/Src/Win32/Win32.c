@@ -5396,6 +5396,14 @@ void archShowDirAsDskOverflowDialog(int skippedCount, int skippedBytes) {
     exitDialogShow();
 }
 
+void archShowDiskExportFailedDialog(const char* fileName) {
+    char msg[1024];
+    enterDialogShow();
+    snprintf(msg, sizeof(msg), langErrorDiskExportFailed(), fileName ? fileName : "");
+    MessageBoxU(NULL, msg, langErrorTitle(), MB_OK | MB_ICONWARNING);
+    exitDialogShow();
+}
+
 /* IDD_LARGEMSG custom dialog backing MessageBoxLargeU: 11pt, ~800px wide,
 ** auto-sized to text, optional 48px MB_ICON*; localized button captions. */
 typedef struct {
@@ -6693,6 +6701,83 @@ char* archFilenameGetSaveCas(Properties* properties, int* type)
     replaceCharInString(extensionList, '#', 0);
 
     return archFileSave(title, extensionList, defaultDir, extensions, selectedExtension, ".cas");
+}
+
+/* Name the export after whatever is mounted -- the directory's own name, or
+** the entry name for a zip mount -- so the .dsk is recognisable later. */
+static void diskExportDefaultName(Properties* properties, int drive,
+                                  char* out, int outSize)
+{
+    char path[PROP_MAXPATH];
+    const char* src;
+    const char* base;
+    char* p;
+    size_t len;
+
+    out[0] = 0;
+
+    src = properties->media.disks[drive].fileNameInZip;
+    if (*src == 0) {
+        src = properties->media.disks[drive].fileName;
+    }
+    if (*src == 0) {
+        return;
+    }
+
+    strncpy(path, src, sizeof(path) - 1);
+    path[sizeof(path) - 1] = 0;
+
+    /* A directory mount may carry a trailing separator (drive roots do). */
+    len = strlen(path);
+    while (len > 0 && (path[len - 1] == '/' || path[len - 1] == '\\')) {
+        path[--len] = 0;
+    }
+
+    base = path;
+    for (p = path; *p; p++) {
+        if (*p == '/' || *p == '\\') {
+            base = p + 1;
+        }
+    }
+
+    strncpy(out, base, outSize - 1);
+    out[outSize - 1] = 0;
+
+    p = strrchr(out, '.');
+    if (p != NULL && p != out) {
+        *p = 0;
+    }
+}
+
+char* archFilenameGetSaveDisk(Properties* properties, int drive)
+{
+    static char fileName[MAX_PATH * 4];
+    char* title = langDlgSaveDisk();
+    char  extensionList[512];
+    char  defaultName[PROP_MAXPATH];
+    char* defaultDir = properties->diskdrive.defDir;
+    BOOL ok;
+
+    sprintf(extensionList, "%s   (*.dsk)#*.dsk#", langFileDisk());
+    replaceCharInString(extensionList, '#', 0);
+
+    diskExportDefaultName(properties, drive, defaultName, sizeof(defaultName));
+
+    fileName[0] = 0;
+
+    enterDialogShow();
+    ok = ShellSaveFileDialogEx(getMainHwnd(),
+                               title,
+                               extensionList,
+                               defaultDir,
+                               "dsk",
+                               defaultName,
+                               NULL,
+                               fileName, sizeof(fileName));
+    exitDialogShow();
+    SetCurrentDirectoryU(st.pCurDir);
+
+    return ok ? fileName : NULL;
 }
 
 char* archFilenameGetSaveState(Properties* properties)

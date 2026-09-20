@@ -52,6 +52,7 @@ void archShowNoCasInZipDialog();
 ** mode message to show (missing dir vs invalid config.ini vs no selection). */
 void archShowStartEmuFailDialog(const char* machineName);
 void archShowDirAsDskOverflowDialog(int skippedCount, int skippedBytes);
+void archShowDiskExportFailedDialog(const char* fileName);
 
 void archMaximizeWindow();
 void archMinimizeWindow();

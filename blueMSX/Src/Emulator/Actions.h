@@ -47,6 +47,7 @@ void actionCartRemove(int cartNo);
 void actionDiskInsert(int diskNo);
 void actionDiskInsertDir(int diskNo);
 void actionDiskInsertNew(int diskNo);
+void actionDiskExport(int diskNo);
 void actionDiskRemove(int diskNo);
 
 void actionHarddiskInsert(int diskNo);

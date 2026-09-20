@@ -56,6 +56,12 @@ UInt8 diskChange(int driveId, const char* fileName, const char* fileInZipFile);
 ** start); marks (driveId, path) so the next diskChange remount of the
 ** same dir doesn't repeat it. */
 void diskPreviewDirOverflow(int driveId, const char* path);
+
+/* Directory and zip mounts live in a RAM buffer, so MSX writes land
+** nowhere: exporting the buffer is the only way to keep them. */
+int diskHasRamImage(int driveId);
+int diskExportRamImage(int driveId, const char* fileName);
+
 void diskSetInfo(int driveId, char* fileName, const char* fileInZipFile);
 void  diskEnable(int driveId, int enable);
 UInt8 diskEnabled(int driveId);

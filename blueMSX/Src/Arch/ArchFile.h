@@ -52,6 +52,7 @@ char* archFilenameGetNewCas(Properties* properties);
 char* archFilenameGetOpenHarddisk(Properties* properties, int drive, int allowCreate);
 
 char* archFilenameGetSaveCas(Properties* properties, int* type);
+char* archFilenameGetSaveDisk(Properties* properties, int drive);
 char* archFileSave(char* title, char* extensionList, char* defaultDir, char* extensions, int* selectedExtension, char* defExt);
 
 char* archFilenameGetOpenState(Properties* properties);

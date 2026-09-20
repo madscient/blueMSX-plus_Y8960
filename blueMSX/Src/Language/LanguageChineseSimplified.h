@@ -85,6 +85,7 @@ void langInitChineseSimplified(LanguageStrings* ls)
     ls->errorCreateTapeImage    = "无法创建磁带映像文件。";
     ls->errorNoCasInZip         = "无法在 zip 压缩包内找到 .cas 文件。";
     ls->errorDirAsDskOverflow   = "%d 个文件 (总共 %d KB) 未能适配 720 KB 磁盘镜像，已跳过。";
+    ls->errorDiskExportFailed   = "无法写入磁盘镜像:\n  %s";
     ls->errorNoHelp             = "无法找到 blueMSX+ 帮助文件。";
     ls->errorStartEmu           = "无法启动 MSX 模拟器。";
     ls->errorStartEmuNoMachine           = "尚未设置用于模拟的 MSX 机器。请在 选项 -> 模拟 -> MSX 机型 中选择一个。";
@@ -183,6 +184,7 @@ void langInitChineseSimplified(LanguageStrings* ls)
     ls->menuDiskInsertNew       = "插入新的软盘映像";              
     ls->menuDiskInsertCdrom     = "Insert CD-Rom";       // New in 2.7
     ls->menuDiskDirInsert       = "插入目录";
+    ls->menuDiskExport          = "导出磁盘镜像...";
     ls->menuDiskAutoStart       = "插入后重置";
     ls->menuCartAutoReset       = "插入/移除后重置";
 
@@ -306,6 +308,7 @@ void langInitChineseSimplified(LanguageStrings* ls)
     ls->dlgLoadVideoCapture     = "读取截取视频";      
     ls->dlgSaveState            = "保存 CPU 状态";
     ls->dlgSaveCassette          = "blueMSX+ - 保存磁带映像";
+    ls->dlgSaveDisk              = "blueMSX+ - 导出磁盘镜像";
     ls->dlgSaveVideoClipAs      = "另存剪裁视频为...";     
     ls->dlgSaveCaptureAudio     = "音频录制另存为";
     ls->dlgSaveCaptureVideo     = "视频录制另存为";
