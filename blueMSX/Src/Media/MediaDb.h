@@ -210,7 +210,10 @@ enum  {
     ROM_NEO16       = 177,           /* NEO-16 mapper */
     ROM_YAMANOOTO   = 178,           /* Yamanooto */
     ROM_FLASHROMSCC = 179,           /* Flash-ROM SCC (Developer Edition) */
-    ROM_MAXROMID    = 179
+    /* 180-187 are taken by a fork (madscient/blueMSX-plus_Y8960) whose
+    ** released machine configurations already store them. */
+    ROM_MAKOTO      = 188,           /* Makoto YM2608 (OPNA) cartridge */
+    ROM_MAXROMID    = 188
 };
 
 typedef struct MediaType MediaType;

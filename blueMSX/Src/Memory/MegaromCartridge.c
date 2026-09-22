@@ -117,6 +117,7 @@
 #include "romMapperNettouYakyuu.h"
 #include "romMapperNet.h"
 #include "romMapperJoyrexPsg.h"
+#include "romMapperMakoto.h"
 #include "romMapperArc.h"
 #include "romMapperDooly.h"
 #include "romMapperSg1000RamExpander.h"
@@ -224,6 +225,10 @@ int cartridgeInsert(int cartNo, RomType romType, const char* cart, const char* c
 
     case ROM_JOYREXPSG:
         success &= romMapperJoyrexPsgCreate();
+        break;
+
+    case ROM_MAKOTO:
+        success &= romMapperMakotoCreate();
         break;
 
     case ROM_GIDE:
