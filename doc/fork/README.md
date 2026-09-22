@@ -132,7 +132,7 @@ MegaFlashROM SCC+ SD に触れているが、PR に本文も参照も無く、#7
 
 | | |
 |---|---|
-| タグ名 | `v<土台の blueMSX+ の版>-y8960.<通し番号>`。1 本目は `v3.1.1-y8960.1` |
+| タグ名 | `v<土台の blueMSX+ の版>-y8960.<通し番号>`。1 本目は `v3.1.1-y8960.1`。Makoto 対応（`feature/makoto-opna`）は同じ形で `-makoto.<通し番号>`（2026-09-22 ユーザー判断） |
 | pre-release | タグに `-` を含むので `release.yml` が自動で pre-release にする。Y8960 のハードウェアが開発中である間はこれでよい |
 | ビルド | タグを push すると上流由来の `.github/workflows/release.yml` が Final × x64 / Win32 をビルドし、zip を添付して公開する |
 | バイナリ zip | `scripts/ci-package.ps1` が組む。`ReleaseFiles/`・実行ファイル・プラグインだけで、**`doc/` は入らない**（**確認済み(読解)**） |
@@ -172,6 +172,7 @@ MegaFlashROM SCC+ SD に触れているが、PR に本文も参照も無く、#7
 | タグ | コミット | 確かめたこと |
 |---|---|---|
 | `v3.1.1-y8960.1`（pre-release） | `61f40fe7` | Actions の run 34860219682 で x64 / Win32 のビルドと公開が成功。**公開物を落として確かめた**（**確認済み**）: バイナリ zip 2 本に `doc/` と `CLAUDE.md` が無い。GitHub のソースアーカイブ（zip / tar.gz）は `export-ignore` に従い、`doc/` 以下は `user-guide.md` だけ。x64 / Win32 の実行ファイルとも `/listromtypes` と `/listmachines` が終了コード 0 で、前者に `Y8960SCC` が出た。**Final 構成で音や画面を確かめたことはない**（手元の確認はすべて Release 構成） |
+| `v3.1.1-makoto.1`（pre-release） | `2ade339f`（`feature/makoto-opna`） | Makoto 対応。Y8960 は含まない。Actions の run 35725735949 で成功。**公開物を落として確かめた**（**確認済み**）: バイナリ zip 2 本とソースアーカイブに `doc/` と `CLAUDE.md` が無い（枝にもともと無い）。リズム ROM も入っていない。x64 / Win32 とも `/listspecials` に `MAKOTO` が出た。使い方とリズム ROM は利用者が用意する旨はリリースノートに書いた（枝に利用者向け文書を置かないため）。**ymfm の BSD-3-Clause の表示はバイナリ zip に入っていない**（`doc/fork/opna/plan.md` §5） |
 
 ## Y8960 の実装状況
 
