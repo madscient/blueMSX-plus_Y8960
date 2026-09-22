@@ -16,13 +16,23 @@ the full text in the Licenses folder:
   blueMSX+ as a whole; blueMSX, openMSX,        GPL-2.0        Licenses/GPL-2.0.txt
   Nuked OPLL (Nuke.YKT),
   Scale2x (Andrea Mazzoleni) derived code
-  Emu2413 (Mitsutaka Okazaki)                   MIT            Licenses/Emu2413-MIT.txt
+  Emu2413 (Mitsutaka Okazaki), also the base    MIT            Licenses/Emu2413-MIT.txt
+    of the Y8960 OPLLEX core
   Emu8950 (Mitsutaka Okazaki)                   MIT            Licenses/Emu8950-MIT.txt
-  ymfm (Aaron Giles)                            BSD-3-Clause   Licenses/ymfm-BSD-3-Clause.txt
+  ymfm (Aaron Giles): the Y8960 OPLLEX          BSD-3-Clause   Licenses/ymfm-BSD-3-Clause.txt
+    rhythm voice data is taken from its
+    YM2413 tables
   blueMSX+ files by Hesoten                     BSD-3-Clause   Licenses/blueMSX+-BSD-3-Clause.txt
   WinPcap packet.dll definitions                BSD-3-Clause   Licenses/WinPcap-BSD-3-Clause.txt
     (NetGroup, Politecnico di Torino)
   Blowfish (Paul Kocher)                        LGPL-2.1       Licenses/LGPL-2.1.txt
+
+The Y8960 OPLLEX voice data (the preset tables of its four banks) is from
+"Copyright free OPLL(x) ROM patches" by David Viens and Hubert Lamontagne,
+https://github.com/plgDavid/misc/wiki/Copyright-free-OPLL(x)-ROM-patches ,
+licensed under Creative Commons Attribution-ShareAlike (CC BY-SA; the source
+does not state a version). The values are arranged into the four banks the
+Y8960 selects from; that data stays under CC BY-SA.
 
 TinyXML and zlib / minizip are used under zlib-style licenses, which ask for
 no notice in a binary distribution.
@@ -52,6 +62,12 @@ blueMSX+ は GNU 一般公衆利用許諾書 第 2 版（GPLv2）のソースコ
 
 一部は他の作者によるもので、それぞれのライセンスに従います。配布物への表示を求める
 ものは上の表のとおりで、全文を Licenses フォルダに収めています。
+
+Y8960 の OPLLEX の音色データ（4 つのバンクのプリセット）は、David Viens 氏と
+Hubert Lamontagne 氏の "Copyright free OPLL(x) ROM patches"（上記 URL）に由来し、
+クリエイティブ・コモンズ 表示-継承（CC BY-SA。出典は版を明記していません）の
+もとで使っています。Y8960 が選ぶ 4 つのバンクに並べ直しており、このデータは
+CC BY-SA のままです。
 
 TinyXML と zlib / minizip は、zlib 型のライセンス（バイナリでの配布に表示を
 求めない）のもとで使っています。
