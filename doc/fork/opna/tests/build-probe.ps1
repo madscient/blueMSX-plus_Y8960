@@ -20,5 +20,5 @@ New-Item -ItemType Directory -Force $objDir | Out-Null
 $cl = "cl /nologo /W3 /O2 /EHsc /D_CRT_SECURE_NO_WARNINGS $($inc -join ' ') " +
       "opna-probe.cpp opna-host-stub.cpp `"$Glue`" $($ymfm -join ' ') /Fo`"$objDir\\`" /Fe:`"$Out`""
 $vcvars = Join-Path $vs "VC\Auxiliary\Build\vcvars64.bat"
-cmd /c "`"$vcvars`" >nul && cd /d `"$here`" && $cl" | Select-String -Pattern " error | warning " | ForEach-Object { $_.Line }
+cmd /c "`"$vcvars`" >nul 2>&1 && cd /d `"$here`" && $cl" | Select-String -Pattern " error | warning " | ForEach-Object { $_.Line }
 exit $LASTEXITCODE

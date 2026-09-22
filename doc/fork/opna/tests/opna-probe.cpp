@@ -215,6 +215,19 @@ int main(int argc, char** argv)
         ym2608Destroy(c);
     }
 
+    /* With the line wired, a chip left alone after reset must not interrupt:
+    ** ymfm enables every IRQ source at reset, and an interrupt nobody
+    ** acknowledges would stop the MSX while it boots. */
+    {
+        probePendingIrq = 0;
+        probeIrqCalls = 0;
+        YM2608* c = ym2608Create(NULL, CLOCK, RAMSIZE, NULL, 0, 0x1000);
+        run(c, 50);
+        ym2608Read(c, 2);
+        check(probePendingIrq == 0, "no irq after reset, left alone", "pending %.0f, expected %.0f", probePendingIrq, 0);
+        ym2608Destroy(c);
+    }
+
     /* The same timer with the line wired: the interrupt is raised, and
     ** resetting the flag lowers it again. */
     {
