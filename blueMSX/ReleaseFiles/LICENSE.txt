@@ -1,0 +1,64 @@
+blueMSX+ license notices
+========================
+
+blueMSX+ contains source code licensed under the GNU General Public License
+version 2, so the program as a whole is distributed under the GNU General
+Public License version 2 (Licenses/GPL-2.0.txt). You may copy, modify and
+redistribute it under those terms. The source code of this build is published
+together with it, on the page this package was downloaded from.
+
+Parts of the program come from other authors under their own licenses. Those
+whose terms require a notice to accompany the program are listed here, with
+the full text in the Licenses folder:
+
+  Component                                    License        Text
+  -------------------------------------------  -------------  ------------------------------
+  blueMSX+ as a whole; blueMSX, openMSX,        GPL-2.0        Licenses/GPL-2.0.txt
+  Nuked OPLL (Nuke.YKT),
+  Scale2x (Andrea Mazzoleni) derived code
+  Emu2413 (Mitsutaka Okazaki)                   MIT            Licenses/Emu2413-MIT.txt
+  Emu8950 (Mitsutaka Okazaki)                   MIT            Licenses/Emu8950-MIT.txt
+  ymfm (Aaron Giles)                            BSD-3-Clause   Licenses/ymfm-BSD-3-Clause.txt
+  blueMSX+ files by Hesoten                     BSD-3-Clause   Licenses/blueMSX+-BSD-3-Clause.txt
+  WinPcap packet.dll definitions                BSD-3-Clause   Licenses/WinPcap-BSD-3-Clause.txt
+    (NetGroup, Politecnico di Torino)
+  Blowfish (Paul Kocher)                        LGPL-2.1       Licenses/LGPL-2.1.txt
+
+TinyXML and zlib / minizip are used under zlib-style licenses, which ask for
+no notice in a binary distribution.
+
+Some sound chip code comes from MAME and related projects: the YM2151 and
+VLM5030 emulators, and fmopl / ymdeltat by Tatsuyuki Satoh (after the YM2610
+emulator by Hiromitsu Shioya). These files state no license of their own.
+
+The files bundled in the machine folders carry their own licenses:
+
+  C-BIOS                        cbios.txt in each C-BIOS machine folder
+  Nextor                        LICENSE-Nextor.md in each C-BIOS FDD machine folder
+  TC8566AF FDC driver           LICENSE-TC8566AF.txt in each C-BIOS FDD machine folder
+  Kanji ROM image               Machines/Shared Roms/LICENSE-KANJI.txt
+
+The license of each source file is stated in its header; blueMSX/license.txt
+in the source code gives an overview.
+
+
+ライセンスについて
+==================
+
+blueMSX+ は GNU 一般公衆利用許諾書 第 2 版（GPLv2）のソースコードを含むため、
+全体として GPLv2（Licenses/GPL-2.0.txt）のもとで配布しています。その条件のもとで
+複製・改変・再配布できます。このビルドのソースコードは、このパッケージの配布元の
+ページで一緒に公開しています。
+
+一部は他の作者によるもので、それぞれのライセンスに従います。配布物への表示を求める
+ものは上の表のとおりで、全文を Licenses フォルダに収めています。
+
+TinyXML と zlib / minizip は、zlib 型のライセンス（バイナリでの配布に表示を
+求めない）のもとで使っています。
+
+音源のコードの一部は MAME などに由来します（YM2151 と VLM5030 のエミュレータ、
+Tatsuyuki Satoh 氏の fmopl / ymdeltat。後者は Hiromitsu Shioya 氏の YM2610 エミュレータが元）。
+これらのファイルは独自のライセンスの記述を持ちません。
+
+機種フォルダに同梱しているファイルのライセンスは、上の 2 つ目の表のファイルを
+参照してください。
