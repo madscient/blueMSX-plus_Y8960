@@ -176,6 +176,36 @@ int main(int argc, char** argv)
             ym2608Destroy(c);
         }
         check(level[0] < 50, "rhythm silent without rom", "rms %.1f (limit %.0f)", level[0], 50);
+
+        /* A drum is a one-shot: it must end on its own. */
+        if (rom.size() >= 0x2000) {
+            YM2608* c = ym2608Create(NULL, CLOCK, RAMSIZE, &rom[0], (int)rom.size(), 0);
+            reg(c, 0, 0x11, 0x3f);
+            reg(c, 0, 0x18, 0xdf);
+            reg(c, 0, 0x10, 0x01);
+            run(c, 1000);
+            double tail = rms(run(c, 500));
+            check(tail < 50, "rhythm ends by itself", "rms %.1f 1-1.5 s after key-on (limit %.0f)", tail, 50);
+            ym2608Destroy(c);
+
+            /* The rhythm section of opnatest.asm, as it writes it. */
+            c = ym2608Create(NULL, CLOCK, RAMSIZE, &rom[0], (int)rom.size(), 0);
+            reg(c, 0, 0x29, 0x80);
+            reg(c, 0, 0x27, 0x30);
+            reg(c, 0, 0x11, 0x3f);
+            reg(c, 0, 0x18, 0xdf);
+            reg(c, 0, 0x19, 0xdf);
+            for (int k = 0; k < 4; k++) {
+                reg(c, 0, 0x10, 0x01);
+                run(c, 133);
+                reg(c, 0, 0x10, 0x02);
+                run(c, 133);
+            }
+            run(c, 1000);
+            tail = rms(run(c, 500));
+            check(tail < 50, "rhythm pattern ends by itself", "rms %.1f 1-1.5 s after (limit %.0f)", tail, 50);
+            ym2608Destroy(c);
+        }
         if (rom.size() >= 0x2000) {
             check(level[1] > 1000, "rhythm sounds with rom", "rms %.1f (limit %.0f)", level[1], 1000);
         }
