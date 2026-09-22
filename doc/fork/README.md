@@ -25,6 +25,7 @@ blueMSX+ 自身が [blueMSX](https://msxblue.com/bluemsx/) の非公式フォー
 | `build/README.md` | ビルド環境。このマシンの事情と手順、ヘッドレスで確かめられること |
 | `automation/plan.md` | キー入力の注入とウィンドウを出さない実行の計画（上流候補） |
 | `disk-export/plan.md` | メモリ上のディスクイメージを書き出す機能の計画と経緯（上流候補） |
+| `opna/plan.md` | Makoto（YM2608 OPNA カートリッジ）対応の計画と経緯（上流候補） |
 | `ai/README.md` | **AI 向けの作業規則。** 確度・コミットの分け方・出す前の点検 |
 
 ## 上流との関係
