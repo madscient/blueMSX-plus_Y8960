@@ -275,8 +275,11 @@ WAV を録り、`analyze-opnatest.py` で判定した。機種は `MSX2+ - C-BIO
 
 ## 5. リリース
 
-`v3.1.1-makoto.1`（pre-release、`feature/makoto-opna` の `2ade339f`）。タグ名は Y8960 と同じ形
-（2026-09-22 ユーザー判断）。確かめたことは `doc/fork/README.md` の「リリースの記録」。
+**公開中は `v3.1.1-makoto.2`**（pre-release、`feature/makoto-opna` の `b2d4d185`）。
+`v3.1.1-makoto.1`（`2ade339f`）はライセンス表示を欠いていたので**下書き（draft）に戻した**
+（2026-09-22 ユーザー指示）。GitHub のリリースに非公開の設定は無く、下書きが一般から隠す手段。
+タグは残る。タグ名は Y8960 と同じ形（2026-09-22 ユーザー判断）。確かめたことは
+`doc/fork/README.md` の「リリースの記録」。
 
 | | |
 |---|---|
@@ -284,11 +287,35 @@ WAV を録り、`analyze-opnatest.py` で判定した。機種は `MSX2+ - C-BIO
 | 使い方 | リリースノートに直接書いた。枝は上流候補なので利用者向け文書を置かない |
 | リズム ROM | 同梱しない。**利用者が自分で入手する**旨をリリースノートの「同梱していないもの」に書いた（2026-09-22 ユーザー指示） |
 
-**未解決: ymfm の BSD-3-Clause の表示がバイナリ zip に入っていない。** 第 2 条はバイナリでの
-再配布に著作権表示・条件・免責の同梱を求める。`scripts/ci-package.ps1` は `ReleaseFiles/` を丸ごと
-入れるが、そこにライセンス文書はトップレベルに 1 つも無い（blueMSX+ 本体の GPL も無い。
-上流の配布物に共通の状態）。手当てとしてリリースノートに全文を載せたが、「同梱物」と言えるかは
-**未確認**。直すなら `ReleaseFiles/` にライセンス文書を置いて次の版を出す（利用者の判断待ち）。
+**ライセンス表示**: makoto.1 の zip にはライセンス文書が 1 つも無かった（ymfm の BSD-3-Clause も、
+blueMSX+ 本体の GPL も。上流の配布物に共通の状態）。`scripts/ci-package.ps1` は `ReleaseFiles/` を
+丸ごと入れるので、**`ReleaseFiles/LICENSE.txt` と `ReleaseFiles/Licenses/` を足して**（`b2d4d185`）
+makoto.2 を出した。載せたものと理由:
+
+| 文書 | 対象 | なぜ要るか |
+|---|---|---|
+| `GPL-2.0.txt`（gnu.org の公式テキスト） | blueMSX+ 全体、openMSX・Nuked OPLL・Scale2x 由来 | GPLv2 第 1 条は受け手に本文を渡すことを求める |
+| `LGPL-2.1.txt`（同） | `Src/Utils/blowfish.c`（Paul Kocher） | LGPL の条件 |
+| `Emu2413-MIT.txt` / `Emu8950-MIT.txt` | Mitsutaka Okazaki | MIT は複製物に表示を求める |
+| `ymfm-BSD-3-Clause.txt` | Aaron Giles | BSD-3 第 2 条 |
+| `blueMSX+-BSD-3-Clause.txt` | Hesoten の 6 本（`SdCard`、`AnalogFilter`、`Utf8Conv.h`、`Win32MediaFoundation`、`Win32TextUtf8.h`、`Win32Toast`） | 同上 |
+| `WinPcap-BSD-3-Clause.txt` | `ThirdParty/WinPCap/Packet32.h`（`Win32Eth.c` が取り込む） | 同上 |
+
+ビルドに入っているかは vcxproj を XML として読んで確かめた（**確認済み**）。`Midi_w32.c`（BSD）は
+プロジェクトに無いので載せていない。**`grep` で数えた最初の判定は取りこぼしていた**
+（`Win32Toast.cpp` を「無い」と出した）ので、項目の出入りは XML で決めること。
+
+表示を求めないので名前だけ挙げたもの: TinyXML・zlib/minizip（zlib 型）。MAME 由来の
+`MameYM2151.c`・`MameVLM5030.c`・`Fmopl.c`・`Ymdeltat.c` は**ヘッダにライセンスの記述が無い**
+（`license.txt` は Fmopl / Ymdeltat を「fMSX-SDL - GPL」とするが、ヘッダと食い違う。**未確認**）ので、
+作者の表示だけにした。**元の blueMSX のコードを zlib 型と書くのは誤り** — `license.txt` 自身が
+「多くは GPLv2 のヘッダを持つ」と注記している。
+
+`LICENSE.txt` はフォークの名前を書かず、「ソースは配布元のページで一緒に公開」とした。
+`b2d4d185` は上流にもそのまま出せる形である（上流の zip も同じ状態のため）。
+
+**Y8960 の `v3.1.1-y8960.1` も同じくライセンス文書を欠く**（同じ `ci-package.ps1` で組んでいる。
+**zip を開いての確認はしていない**）。`feature/y8960` への取り込みと再リリースは未着手。
 
 **メニューとマシン構成エディタからの挿入は画面で試していない**（**確認済み(読解)**: Joyrex PSG と
 同じ経路に足した）。エミュレータの中で試したのは `/special2 MAKOTO` だけ。
@@ -301,3 +328,4 @@ WAV を録り、`analyze-opnatest.py` で判定した。機種は `MSX2+ - C-BIO
 - 2026-09-22 利用者が RAM 容量（256 KB）と /IRQ の配線（繋がっている）を示し、§3.2 の残りを確定した。/IRQ を繋ぎ、リセット後に割り込みが立たないことを probe に足した。
 - 2026-09-22 利用者が Makoto 専用のデプロイ先を用意した（ローカルのパスはここに書かない）。exe を差し替え、リズム ROM を `Machines/Shared Roms/` に置いた。差し替え前の exe は同じ場所に別名で残してある。§4.2 のエミュレータでの試験。
 - 2026-09-22 両方の枝を push し、`v3.1.1-makoto.1` を公開した（§5）。リズム ROM を利用者が入手する旨をリリースノートに足した（ユーザー指示）。
+- 2026-09-22 配布 zip にライセンス文書が無いことを利用者と確かめ、`ReleaseFiles/` に置いて `v3.1.1-makoto.2` を出し、makoto.1 を下書きに戻した（ユーザー指示）。
