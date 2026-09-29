@@ -214,7 +214,7 @@ git log --oneline HEAD..upstream/develop -- \
 
 フォークを足したら、この列挙にフォーク元を足す。
 出てきた修正を移植するかどうかは、ブロックごとの方針で決める。SCC は移植する
-（`y8960/implementation-plan.md` §5.7）。
+（`y8960/implementation-plan.md` §5.7）。SSGS はノイズの修正を移植した（同 §9.11）。
 **`Src/Memory/IoPort.{c,h}` は 2026-09-12 に実際に変更した**（1 ポートに
 複数デバイスを登録できるようにし、`ioPortUnregister` に `ref` を足した）。
 `ioPortUnregister` の呼び出し 200 箇所を持つ **53 ファイル**にも手が入っている。

@@ -550,7 +550,9 @@ static Int32* y8960SsgsSync(void* ref, UInt32 count)
             while (c->noisePhase >> 28) {
                 c->noisePhase  -= 0x10000000;
                 c->noiseVolume ^= ((c->noiseRand + 1) >> 1) & 1;
-                c->noiseRand    = (c->noiseRand ^ (0x28000 * (c->noiseRand & 1))) >> 1;
+                /* Bit 1 of the mask must stay clear: the line above tracks bit 0
+                ** of the next state by XOR-ing bits 0 and 1 of the current one. */
+                c->noiseRand    = (c->noiseRand ^ (0x24000 * (c->noiseRand & 1))) >> 1;
             }
 
             /* Update envelope phase */
