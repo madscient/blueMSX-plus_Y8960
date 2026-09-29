@@ -35,7 +35,7 @@ blueMSX+ 自身が [blueMSX](https://msxblue.com/bluemsx/) の非公式フォー
 | このフォーク | `origin` = madscient/blueMSX-plus_Y8960 |
 | 直接の上流 | Hesoten/blueMSX-plus（remote 名 `upstream`） |
 | そのまた上流 | blueMSX 本家 |
-| 作業ブランチ | `feature/y8960`（分岐点は上流 `main` の `5afffd55`。上流 `develop` の `5b97360e` までマージ済み） |
+| 作業ブランチ | `feature/y8960`（分岐点は上流 `main` の `5afffd55`。上流 `develop` の `9fd3d21e` までマージ済み） |
 | ライセンス | **GPLv2**（blueMSX+ と同じ。ルートの `README.md` §License） |
 
 **追従は `upstream/develop` を `feature/y8960` にマージする**（2026-09-13 ユーザー判断）。
@@ -49,6 +49,7 @@ blueMSX+ 自身が [blueMSX](https://msxblue.com/bluemsx/) の非公式フォー
 |---|---|---|---|---|
 | 2026-09-13 | `develop` `90e2920b`（40 コミット。PR #77 / #79、VDP・キーボードの修正ほか） | `d303604e` | `Sf7000PPI.c`、`romMapperOpcodeModule.c`（どちらも PR #77 とフォークの `ref` 付きの同じ修正の重なり。`ref` 付きを採った） | ビルド 0 エラー（警告 1 件は上流のみが触った `Win32ShortcutsConfig.c`）。`banktest` 19 項目と `ssgstest` の機械判定 5 項目がすべて OK（**確認済み**、画面） |
 | 2026-09-18 | `develop` `5b97360e`（17 コミット。PR #80 / #81 の取り込み、`matrix[][]` の整理、キーボード・ジョイスティック・SG-1000・Game Reader の修正ほか） | `0795608d` | 無し | ビルド 0 エラー / 0 警告。`run-keytest` 12 項目、`banktest` と `ssgstest` の機械判定がすべて OK（**確認済み**、画面） |
+| 2026-09-29 | `develop` `9fd3d21e`（36 コミット。SCC の精度修正、VDP コマンドのウェイト、PSG、既定の FM コアを emu2413 / emu8950 に、Game Reader、C-BIOS v1.0.1 ほか） | `6569450c` | 無し | ビルド 0 エラー / 7 警告（すべて Y8960 が触っていない `Win32*.c` と `SimpleDebugger`）。上流の SCC 修正 7 件を `Y8960Scc.c` に移植した後（`a96f5c71`、`y8960/implementation-plan.md` §5.7）に、`banktest` の機械判定 15 項目、`ssgstest` の機械判定 5 項目、`run-keytest` 12 項目がすべて OK、`sndtest` が PASS（**確認済み**、画面と録音） |
 
 **衝突を片側で解くときは、ファイル全体がその側になる。** `git checkout --ours` は
 自動マージできた部分も捨てる。2026-09-13 のマージでは `romMapperOpcodeModule.c` に

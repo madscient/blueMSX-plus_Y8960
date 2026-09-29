@@ -198,6 +198,23 @@ Y8960 の実装で上流のファイルに手が入ることが分かってい�
 `SCC.{c,h}` と `SN76489.{c,h}` には一度手を入れたが、**取り消してフォークにした**
 （`y8960/implementation-plan.md` §11 の 2026-09-12 (10)）。
 残る `AY8910.c` / `Emu2413/` / `OpenMsxY8950Latest/` も同じ扱いにする。
+
+**フォークしたコアには、上流の修正がマージで入らない。** 衝突もしないので黙って漏れる。
+**上流を取り込む前に**、フォーク元のファイルに入ったコミットを数える。マージの後で
+`HEAD..upstream/develop` を見ても 0 件になるので、**マージの前に**走らせる。
+
+```sh
+# フォーク元: Y8960Scc <- SCC.c, Y8960Dcsg <- SN76489.c, Y8960Ssgs <- AY8910.c,
+#             Y8960OpllCore <- Emu2413/, Y8960Opl2Core / Opl2Adpcm <- OpenMsxY8950Latest/
+git log --oneline HEAD..upstream/develop -- \
+  blueMSX/Src/SoundChips/SCC.c blueMSX/Src/SoundChips/SN76489.c \
+  blueMSX/Src/SoundChips/AY8910.c \
+  blueMSX/Src/SoundChips/Emu2413 blueMSX/Src/SoundChips/OpenMsxY8950Latest
+```
+
+フォークを足したら、この列挙にフォーク元を足す。
+出てきた修正を移植するかどうかは、ブロックごとの方針で決める。SCC は移植する
+（`y8960/implementation-plan.md` §5.7）。
 **`Src/Memory/IoPort.{c,h}` は 2026-09-12 に実際に変更した**（1 ポートに
 複数デバイスを登録できるようにし、`ioPortUnregister` に `ref` を足した）。
 `ioPortUnregister` の呼び出し 200 箇所を持つ **53 ファイル**にも手が入っている。

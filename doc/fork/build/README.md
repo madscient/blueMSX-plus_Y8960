@@ -12,6 +12,7 @@ CI が実際に通している唯一の構成なので、ローカルもそれ�
 | 呼び名 | OS |
 |---|---|
 | **Win10 機** | Windows 10 Pro 19045 / x64 |
+| **Win11 機** | Windows 11 Pro 26200 / x64 |
 
 ## 1. 環境（Win10 機、2026-09-12 時点）
 
@@ -505,3 +506,23 @@ ROM タイプを使う機種が `unknown machine` になる（**確認済み**�
   ROM は追跡されていない
 - **`msvc2026`（v145）と `Win32` プラットフォーム、`Debug` / `Final` 構成は
   試していない**
+
+### 2026-09-29（Win11 機の立ち上げ）
+
+- **VS は 18（Community）だけで、x64 の PlatformToolset は `v145` と `ClangCL`**。
+  v143 が無いので、§6 の 1 に従い **`msvc2026` を使った**。MSBuild は
+  `vswhere -version "[18.0,19.0)"` で取る。§2 のコマンドの `cd` 先を `msvc2026` にする
+- **Release / x64 のビルドが通ることを確認（確認済み）**。0 エラー / 7 警告 / 3 分 48 秒。
+  警告は Win10 機と同じ系統（`GetVersionExA` の C4996 ほか）で、Y8960 のファイルには出ていない。
+  出力は `blueMSX/Make/msvc2026/x64/Release/`（gitignore 済み。**確認済み**: `git check-ignore`）
+- **このビルドの後、`build_info.txt` と `build_number.h` は書き換わっていなかった**
+  （**確認済み**: `git status` がクリーン）。`msvc2026` の Release/x64 に限った観測で、
+  `msvc2022` や他の構成では確かめていない。§2 の戻す手順は、コミットの前に `git status` を見て要るときだけ踏む
+- **pasmo が無い。** 試験 ROM は z88dk の `z80asm` で組めた。`make-*.py` は
+  `pasmo --bin <src> <out>` の形で呼ぶので、その形を `z80asm -b` に中継するバッチを
+  作業ツリーの外に置いて渡した。z80asm はソースの隣に中間ファイルを書くので、
+  中継はソースを写してから組む。`sndtest` `banktest` `ssgstest` `keytest` の 4 本が組め、
+  どれも走った（`../y8960/implementation-plan.md` §11 の (31)）。**pasmo の出力とバイト単位で
+  一致するかは確かめていない**
+- `ReleaseFiles` のコピー（§4）と、試験用の機種構成（`../y8960/tests/` の 4 構成）を
+  出力先の `Machines` に置いた。実機の BIOS ROM は重ねていない（C-BIOS 系で足りる）
