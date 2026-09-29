@@ -2895,7 +2895,7 @@ openMSX_Y8960 も同じ理由でフォークにしている。
 #### 引っかかったこと
 
 **Git Bash が `/nologo` をパスに変換する。** `msbuild ... /nologo` を
-Bash ツールから渡すと `D:/Programs/x64/Git/nologo` に化け、
+Bash ツールから渡すと `<Git のインストール先>/nologo` に化け、
 `MSB1008: 1 つのプロジェクトのみを指定できます` で落ちる。
 **`-nologo` `-m` `-t:` `-p:` のダッシュ形式を使う**（`build/README.md` §3.5）。
 
