@@ -55,6 +55,11 @@ typedef enum {
     /* Keep after MIDI: mixerRecalculateType indexes the channel array with
     ** the MIDI type value, so anything inserted before it breaks that. */
     MIXER_CHANNEL_CASSETTE,
+    /* The two outputs of a YM2608 (OPNA). A board mixes them outside the
+    ** chip, so the balance between them is not the chip's: each has its
+    ** own level here. */
+    MIXER_CHANNEL_OPNA_FM,
+    MIXER_CHANNEL_OPNA_SSG,
     MIXER_CHANNEL_TYPE_COUNT
 } MixerAudioType;
 
