@@ -1,11 +1,13 @@
 param(
     [Parameter(Mandatory = $true)][string]$Src,
     [string]$Glue = "",
-    [string]$Out = "opna-probe.exe"
+    [string]$Out = "opna-probe.exe",
+    [string]$ObjDir = ""
 )
 # Builds opna-probe.exe against blueMSX/Src. -Glue replaces YM2608.cpp with
 # another copy (a deliberately broken one), which is how the probe is shown
-# to catch what it claims to check.
+# to catch what it claims to check. Neither the objects nor the exe are
+# ignored by git here, so point -Out and -ObjDir outside the working tree.
 $ErrorActionPreference = "Stop"
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 if ($Glue -eq "") { $Glue = Join-Path $Src "SoundChips\YM2608.cpp" }
@@ -15,10 +17,11 @@ $inc = "Common SoundChips Board Debugger Utils Media Memory Emulator Arch IoDevi
     ForEach-Object { "/I`"" + (Join-Path $Src $_) + "`"" }
 $ymfm = "ymfm_opn.cpp ymfm_adpcm.cpp ymfm_ssg.cpp".Split(" ") |
     ForEach-Object { "`"" + (Join-Path $Src "SoundChips\ymfm\$_") + "`"" }
-$objDir = Join-Path $here ("obj-" + [IO.Path]::GetFileNameWithoutExtension($Out))
+$objDir = $ObjDir
+if ($objDir -eq "") { $objDir = Join-Path $here ("obj-" + [IO.Path]::GetFileNameWithoutExtension($Out)) }
 New-Item -ItemType Directory -Force $objDir | Out-Null
 $cl = "cl /nologo /W3 /O2 /EHsc /D_CRT_SECURE_NO_WARNINGS $($inc -join ' ') " +
-      "opna-probe.cpp opna-host-stub.cpp `"$Glue`" $($ymfm -join ' ') /Fo`"$objDir\\`" /Fe:`"$Out`""
+      "opna-probe.cpp opna-native-check.cpp opna-host-stub.cpp `"$Glue`" $($ymfm -join ' ') /Fo`"$objDir\\`" /Fe:`"$Out`""
 $vcvars = Join-Path $vs "VC\Auxiliary\Build\vcvars64.bat"
 cmd /c "`"$vcvars`" >nul 2>&1 && cd /d `"$here`" && $cl" | Select-String -Pattern " error | warning " | ForEach-Object { $_.Line }
 exit $LASTEXITCODE
