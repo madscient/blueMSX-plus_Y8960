@@ -197,7 +197,7 @@ Y8960 の実装で上流のファイルに手が入ることが分かってい�
 本体のチップそのものではなく等価回路なので、共有すると挙動の分岐を表現できない。
 `SCC.{c,h}` と `SN76489.{c,h}` には一度手を入れたが、**取り消してフォークにした**
 （`y8960/implementation-plan.md` §11 の 2026-09-12 (10)）。
-残る `AY8910.c` / `Emu2413/` / `OpenMsxY8950Latest/` も同じ扱いにする。
+残る `AY8910.c` / `Emu2413/` / `OpenMsxY8950Latest*.cpp`（openMSX の Y8950 の移植版）も同じ扱いにする。
 
 **フォークしたコアには、上流の修正がマージで入らない。** 衝突もしないので黙って漏れる。
 **上流を取り込む前に**、フォーク元のファイルに入ったコミットを数える。マージの後で
@@ -205,12 +205,21 @@ Y8960 の実装で上流のファイルに手が入ることが分かってい�
 
 ```sh
 # フォーク元: Y8960Scc <- SCC.c, Y8960Dcsg <- SN76489.c, Y8960Ssgs <- AY8910.c,
-#             Y8960OpllCore <- Emu2413/, Y8960Opl2Core / Opl2Adpcm <- OpenMsxY8950Latest/
+#             Y8960OpllCore <- Emu2413/,
+#             Y8960Opl2Core / Opl2Adpcm <- OpenMsxY8950Latest{,Adpcm}.{cpp,h}（移植版）
 git log --oneline HEAD..upstream/develop -- \
   blueMSX/Src/SoundChips/SCC.c blueMSX/Src/SoundChips/SN76489.c \
   blueMSX/Src/SoundChips/AY8910.c \
-  blueMSX/Src/SoundChips/Emu2413 blueMSX/Src/SoundChips/OpenMsxY8950Latest
+  blueMSX/Src/SoundChips/Emu2413 blueMSX/Src/SoundChips/OpenMsxY8950Latest \
+  blueMSX/Src/SoundChips/OpenMsxY8950Latest.cpp blueMSX/Src/SoundChips/OpenMsxY8950Latest.h \
+  blueMSX/Src/SoundChips/OpenMsxY8950LatestAdpcm.cpp blueMSX/Src/SoundChips/OpenMsxY8950LatestAdpcm.h
 ```
+
+**OPL2EX のフォーク元は、ディレクトリ `OpenMsxY8950Latest/` ではなく同名の `.cpp` / `.h` である。**
+ディレクトリは openMSX の原文の写しで、blueMSX+ が動かしているのは移植版のほう。
+**ディレクトリの指定は `.cpp` に当たらない**ので、両方を挙げてある。
+**名前が似たディレクトリとファイルが並んでいるときは、フォークのファイル冒頭の由来の記述で
+どちらがフォーク元かを決める。**
 
 フォークを足したら、この列挙にフォーク元を足す。
 出てきた修正を移植するかどうかは、ブロックごとの方針で決める。SCC は移植する

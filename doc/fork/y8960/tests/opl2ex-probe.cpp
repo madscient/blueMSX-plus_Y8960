@@ -15,7 +15,7 @@
 **   set SRC=..\..\..\..\blueMSX\Src
 **   cl /nologo /W3 /O2 /EHsc /std:c++20 /D_CRT_SECURE_NO_WARNINGS ^
 **      /I%SRC%\SoundChips /I%SRC%\Board /I%SRC%\Common /I%SRC%\Utils ^
-**      /I%SRC%\Debugger /I%SRC%\Emulator ^
+**      /I%SRC%\Debugger /I%SRC%\Emulator /I%SRC%\Media /I%SRC%\VideoChips ^
 **      opl2ex-probe.cpp opl2ex-host-stub.c ^
 **      %SRC%\SoundChips\Y8960Opl2Core.cpp %SRC%\SoundChips\Y8960Opl2Adpcm.cpp
 **   opl2ex-probe.exe
