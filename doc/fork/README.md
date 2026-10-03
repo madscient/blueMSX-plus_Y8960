@@ -81,6 +81,12 @@ blueMSX+ 自身が [blueMSX](https://msxblue.com/bluemsx/) の非公式フォー
 **その結果を PR に書いても上流の作業は減らない**（上流は自分で CI を回す）。
 報告のために回す必要はない。
 
+### これから出すもの
+
+| | | 状態 |
+|---|---|---|
+| issue（未発行） | **Z80 を標準の 2 倍以上に速くした MSX2+ の機種が、起動ロゴで止まる。** 設定の「VDP command wait」を下げると起動する。このフォークの変更とは無関係で、上流の最新（`83d8f0f1`）を土台にしたビルドでも再現する | **利用者が後で issue を出す**（2026-10-04）。調べた結果と、issue に書ける事実は `opna/plan.md` §4.9（Makoto の試験の途中で見つけたので、そこに記録がある） |
+
 ### 出した記録
 
 | | | 状態（2026-10-04 に確認） |
@@ -182,6 +188,7 @@ MegaFlashROM SCC+ SD に触れているが、PR に本文も参照も無く、#7
 | `v3.1.1-makoto.1`（**下書きに戻した**。ライセンス表示を欠くため） | `2ade339f`（`feature/makoto-opna`） | Makoto 対応。Y8960 は含まない。Actions の run 35725735949 で成功。**公開物を落として確かめた**（**確認済み**）: バイナリ zip 2 本とソースアーカイブに `doc/` と `CLAUDE.md` が無い（枝にもともと無い）。リズム ROM も入っていない。x64 / Win32 とも `/listspecials` に `MAKOTO` が出た。使い方とリズム ROM は利用者が用意する旨はリリースノートに書いた（枝に利用者向け文書を置かないため）。**ymfm の BSD-3-Clause の表示はバイナリ zip に入っていない**（`doc/fork/opna/plan.md` §5） |
 | `v3.1.1-makoto.2`（pre-release） | `b2d4d185`（`feature/makoto-opna`） | makoto.1 にライセンス文書（`LICENSE.txt` と `Licenses/` の 7 本）を足した版。Actions の run 35728110343 で成功。**公開物を落として確かめた**（**確認済み**）: zip 2 本の最上位に `LICENSE.txt`、`Licenses/` に 7 本。`doc/`・`CLAUDE.md`・リズム ROM は無い。x64 / Win32 とも `/listspecials` に `MAKOTO`。ログインせずに見て、リリース一覧は makoto.2 だけ、makoto.1 の zip の URL は 404（タグのページは注釈だけを出す） |
 | `v3.1.1-makoto.3`（pre-release） | `588325e5`（`feature/makoto-opna`） | FM と SSG を実レートで回して sinc で変換する版（`doc/fork/opna/plan.md` §4.5）。Actions の run 37149676836 で成功。**公開物を落として確かめた**（**確認済み**）: zip 2 本の最上位に `LICENSE.txt`、`Licenses/` に 7 本。`doc/`・`CLAUDE.md` は無く、リズム ROM も無い（8,192 バイトのファイルが 1 本も無い）。ソースアーカイブにも `doc/` と `CLAUDE.md` は無い。x64 / Win32 とも `/listspecials` に `MAKOTO`。**x64 / Win32 の exe（Final 構成）で試験 ROM を走らせ、6 区間すべて OK**（リズム ROM だけを足した。Final 構成と Win32 で音を確かめたのはこの版が初めて）。ログインせずに見て、リリースのページと x64 の zip が 200。リリースの題名は自動で `v3.1.1-makoto.3` になるので、`blueMSX+ v3.1.1-makoto.3` に直した。makoto.2 は公開したまま |
+| `v3.1.1-makoto.4`（pre-release） | `f7a4d0f8`（`feature/makoto-opna`） | ymfm の ADPCM-B に上流の PR #40 を入れ、FM と SSG を別々の種別のミキサーチャンネルにした版（`doc/fork/opna/plan.md` §4.6、§4.7）。Actions の run 37155442592 で成功。**公開物を落として確かめた**（**確認済み**）: zip 2 本の最上位に `LICENSE.txt`、`Licenses/` に 7 本。`doc/`・`CLAUDE.md` は無く、リズム ROM も無い（8,192 バイトのファイルが 1 本も無い）。ソースアーカイブにも `doc/` と `CLAUDE.md` は無い。x64 / Win32 とも `/listspecials` に `MAKOTO`。**x64 / Win32 の exe（Final 構成）で試験 ROM の 6 区間がすべて OK**（リズム ROM だけを足した）。x64 の exe で、`bluemsx.ini` の `MIXER_CHANNEL_OPNA_SSG.enable=no` で SSG の区間だけが消え、`MIXER_CHANNEL_OPNA_FM.enable=no` で FM とリズムの区間だけが消えた。x64 の exe で、実機 BIOS の機種（`MSX2+ - Sony HB-F1XDJ`）でも 6 区間 OK。ログインせずに見て、リリースのページと zip 2 本が 200。題名を `blueMSX+ v3.1.1-makoto.4` に直した。makoto.2 と makoto.3 は公開したまま |
 
 ## Y8960 の実装状況
 
