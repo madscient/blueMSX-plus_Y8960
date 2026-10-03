@@ -227,4 +227,4 @@ Y8960 を駆動する拡張 BASIC と BIOS が
 OPLLEX のプリセット音色データは
 ["Copyright free OPLL(x) ROM patches"](https://github.com/plgDavid/misc/wiki/Copyright-free-OPLL(x)-ROM-patches)
 （David Viens、Hubert Lamontagne）を使用しています。
-ライセンスは [CC BY-SA](https://creativecommons.org/licenses/by-sa/4.0/) です。
+ライセンスは CC BY-SA（表示-継承）です。出典は版を明記していません。
