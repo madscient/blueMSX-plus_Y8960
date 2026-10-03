@@ -2,7 +2,7 @@ param(
     [Parameter(Mandatory = $true)][string]$Exe,
     [Parameter(Mandatory = $true)][string]$Rom,
     [Parameter(Mandatory = $true)][string]$Root,
-    [string]$Machine = "MSX2+ - Sony HB-F1XDJ+",
+    [string]$Machine = "MSX2+ - C-BIOS - JP",
     [int]$Seconds = 22,
     [string]$Special = "MAKOTO",
     [string]$Install = ""
