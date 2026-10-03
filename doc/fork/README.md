@@ -35,7 +35,7 @@ blueMSX+ 自身が [blueMSX](https://msxblue.com/bluemsx/) の非公式フォー
 | このフォーク | `origin` = madscient/blueMSX-plus_Y8960 |
 | 直接の上流 | Hesoten/blueMSX-plus（remote 名 `upstream`） |
 | そのまた上流 | blueMSX 本家 |
-| 作業ブランチ | `feature/y8960`（分岐点は上流 `main` の `5afffd55`。上流 `develop` の `9fd3d21e` までマージ済み） |
+| 作業ブランチ | `feature/y8960`（分岐点は上流 `main` の `5afffd55`。上流 `develop` の `83d8f0f1` までマージ済み） |
 | ライセンス | **GPLv2**（blueMSX+ と同じ。ルートの `README.md` §License） |
 
 **追従は `upstream/develop` を `feature/y8960` にマージする**（2026-09-13 ユーザー判断）。
@@ -50,6 +50,11 @@ blueMSX+ 自身が [blueMSX](https://msxblue.com/bluemsx/) の非公式フォー
 | 2026-09-13 | `develop` `90e2920b`（40 コミット。PR #77 / #79、VDP・キーボードの修正ほか） | `d303604e` | `Sf7000PPI.c`、`romMapperOpcodeModule.c`（どちらも PR #77 とフォークの `ref` 付きの同じ修正の重なり。`ref` 付きを採った） | ビルド 0 エラー（警告 1 件は上流のみが触った `Win32ShortcutsConfig.c`）。`banktest` 19 項目と `ssgstest` の機械判定 5 項目がすべて OK（**確認済み**、画面） |
 | 2026-09-18 | `develop` `5b97360e`（17 コミット。PR #80 / #81 の取り込み、`matrix[][]` の整理、キーボード・ジョイスティック・SG-1000・Game Reader の修正ほか） | `0795608d` | 無し | ビルド 0 エラー / 0 警告。`run-keytest` 12 項目、`banktest` と `ssgstest` の機械判定がすべて OK（**確認済み**、画面） |
 | 2026-09-29 | `develop` `9fd3d21e`（36 コミット。SCC の精度修正、VDP コマンドのウェイト、PSG、既定の FM コアを emu2413 / emu8950 に、Game Reader、C-BIOS v1.0.1 ほか） | `6569450c` | 無し | ビルド 0 エラー / 7 警告（すべて Y8960 が触っていない `Win32*.c` と `SimpleDebugger`）。上流の SCC 修正 7 件を `Y8960Scc.c` に移植した後（`a96f5c71`、`y8960/implementation-plan.md` §5.7）に、`banktest` の機械判定 15 項目、`ssgstest` の機械判定 5 項目、`run-keytest` 12 項目がすべて OK、`sndtest` が PASS（**確認済み**、画面と録音） |
+| 2026-10-04 | `develop` `83d8f0f1`（15 コミット。PR #96 / #97 / #98。turbo R の R800 のタイミング、Ports ページとプリンタ出力、パッケージファイルのハンドル判定） | `0e7f9de7` | `Board/MSX.c`（上流の R800 ウェイト設定とフォークの MSX2++ の PSG 分岐が隣り合う。両方を残した） | ビルド 0 エラー / 6 警告（すべて上流と同一の `Win32*.c`。Y8960 の 15 本は再コンパイルされ、警告なし）。フォーク元の音源コアへの上流の修正は 0 件で、移植は無し。`banktest` の機械判定 15 項目、`ssgstest` の機械判定 5 項目、`run-keytest` 12 項目がすべて OK、`sndtest` が PASS（**確認済み**、画面と録音。`y8960/implementation-plan.md` §11 の (32)） |
+
+**`Board/MSX.c` の `machineInitialize` から `msxPsgCreate` までは、上流とフォークの両方が触っている。**
+フォークは PSG の生成を `BOARD_MSX2PP` で分岐し、上流は同じ場所に R800 のウェイト設定を置いた
+（2026-10-04 の同期で衝突）。上流がこの区間をまた触れば衝突しうる。解くときは両方を残す。
 
 **衝突を片側で解くときは、ファイル全体がその側になる。** `git checkout --ours` は
 自動マージできた部分も捨てる。2026-09-13 のマージでは `romMapperOpcodeModule.c` に
@@ -78,7 +83,7 @@ blueMSX+ 自身が [blueMSX](https://msxblue.com/bluemsx/) の非公式フォー
 
 ### 出した記録
 
-| | | 状態（2026-09-18 に確認） |
+| | | 状態（2026-10-04 に確認） |
 |---|---|---|
 | PR #77 | I/O ポートの解放が登録と食い違う 3 件。`fix/ioport-unregister-mismatch` | **上流 `develop` にマージされた**（マージコミット `178eaf03`） |
 | issue #78 | 1 ポートに 1 デバイスしか登録できない件。多重化の提案 | OPEN のまま。PR #80 がマージされたので中身は解決している |

@@ -73,13 +73,18 @@ Configuration は `Debug` / `Release` / `Final` の 3 つ、Platform は `x64` /
 `tail` のものになるので、ビルドが失敗しても後続の `&&` が通ってしまう。
 ログはファイルにリダイレクトして、終了コードを直接見る。
 
-### ビルドは追跡ファイルを 2 本書き換える
+### Win32 のビルドは追跡ファイルを 2 本書き換える
 
-`blueMSX/Src/BuildInfo/build_info.txt` と `build_number.h` は**ビルドのたびに
-番号が上がり、`build_number.h` には日時が焼かれる**。どちらも追跡されており、
+`blueMSX/Src/BuildInfo/build_info.txt` と `build_number.h` は、**プラットフォームが `Win32` の
+ビルドのたびに番号が上がり、`build_number.h` には日時が焼かれる**。どちらも追跡されており、
 上流ではリリース時にしか動かない。
 
-**コミットの前に戻す。**
+**`x64` のビルドでは書き換わらない。** 書き換えるのは `build_info.txt` に付いたカスタムビルドの
+`buildnumber.exe` で、このステップは `|Win32` の 6 構成にしか定義されていない
+（**確認済み(読解)**: `msvc2022` と `msvc2026` の `blueMSX.vcxproj`。**確認済み**: Release / x64 の
+ビルド後に `git status` に出なかった。`msvc2022` は 2026-10-04、`msvc2026` は 2026-09-29。§7）。
+
+**`Win32` でビルドしたら、コミットの前に戻す。** `x64` でも `git status` は見る。
 
 ```sh
 git checkout -- blueMSX/Src/BuildInfo/build_info.txt blueMSX/Src/BuildInfo/build_number.h
@@ -522,7 +527,21 @@ ROM タイプを使う機種が `unknown machine` になる（**確認済み**�
   `pasmo --bin <src> <out>` の形で呼ぶので、その形を `z80asm -b` に中継するバッチを
   作業ツリーの外に置いて渡した。z80asm はソースの隣に中間ファイルを書くので、
   中継はソースを写してから組む。`sndtest` `banktest` `ssgstest` `keytest` の 4 本が組め、
-  どれも走った（`../y8960/implementation-plan.md` §11 の (31)）。**pasmo の出力とバイト単位で
-  一致するかは確かめていない**
+  どれも走った（`../y8960/implementation-plan.md` §11 の (31)）。pasmo の出力とバイト単位で
+  一致するかは、この時点では確かめていない（Win10 機で確かめた。下の 2026-10-04）
 - `ReleaseFiles` のコピー（§4）と、試験用の機種構成（`../y8960/tests/` の 4 構成）を
   出力先の `Machines` に置いた。実機の BIOS ROM は重ねていない（C-BIOS 系で足りる）
+
+### 2026-10-04（Win10 機、上流 `83d8f0f1` の同期）
+
+- **pasmo も z80asm も PATH に無い**（**確認済み**: `Get-Command`）。どちらもこのマシンには在るので、
+  場所を名指しで渡す。場所はマシンごとに違うのでこの文書には書かない
+- **z88dk の `z80asm`（中継越し）と pasmo は、試験 ROM 4 本でバイト単位で同じ出力になる**
+  （**確認済み**: `banktest` `ssgstest` `sndtest` `keytest` を両方で組み、ハッシュを比べた。
+  版の表示は pasmo が `0.5.4.beta2`、z80asm が `22110-51889e5300-20231220`）。Win11 機で残っていた
+  「pasmo の出力と一致するか」は、この 2 つの版についてはこれで決着した。**どちらで組んでもよい**
+- **z80asm は環境変数 `Z80ASM` を追加のコマンドラインオプションとして読む。** 中継にアセンブラの場所を
+  この名前の変数で渡すと、z80asm が自分の実行ファイルをソースとして読み、`invalid character` で止まる
+  （**確認済み**: 変数名だけを変えたら通った）。場所を渡す変数は別の名前にする
+- **このビルドでも `build_info.txt` と `build_number.h` は書き換わらなかった**（**確認済み**: ビルド後の
+  `git status` に出なかった）。x64 では書き換えるステップが走らないため（§2）
