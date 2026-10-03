@@ -86,6 +86,8 @@ blueMSX+ 自身が [blueMSX](https://msxblue.com/bluemsx/) の非公式フォー
 | | | 状態 |
 |---|---|---|
 | issue（未発行） | **Z80 を標準の 2 倍以上に速くした MSX2+ の機種が、起動ロゴで止まる。** 設定の「VDP command wait」を下げると起動する。このフォークの変更とは無関係で、上流の最新（`83d8f0f1`）を土台にしたビルドでも再現する | **利用者が後で issue を出す**（2026-10-04）。調べた結果と、issue に書ける事実は `opna/plan.md` §4.9（Makoto の試験の途中で見つけたので、そこに記録がある） |
+| PR（未作成） | **本体 MSX-AUDIO の openMSX バックエンドが、ADPCM のサンプルの終端を、ソフトウェアがチップに触るまで認識しない。** その間は停止番地の先を復号し続け、EOS も立たない。このフォークの変更とは無関係で、該当するファイルは上流の最新（`83d8f0f1`）と同一 | **PR を出す**（2026-10-04 ユーザー判断）。上流の既存の issue / PR に無いことは確かめた。直し方は、終端の同期点を板のタイマで実装する形。**まだ実装していない**。測った値は `y8960/implementation-plan.md` §11 の (33)、調べた範囲と選択肢は同 §9.13 と §9.12（Y8960 の OPL2EX を突き合わせる途中で見つけたので、そこに記録がある） |
+| （出さない） | 本体 MSX-AUDIO の既定の emu8950 バックエンドが、ADPCM の止まったあとも最後の値を出し続け、`07h` = 00h でも止まらない | **PR にも issue にもしない**（2026-10-04 ユーザー判断）。根は digital-sound-antiques/emu8950 に在り、そちらに issue が出ている（#7、#8）。要るなら、それを上流に知らせるだけにする。同 §9.13 |
 
 ### 出した記録
 
@@ -198,7 +200,7 @@ MegaFlashROM SCC+ SD に触れているが、PR に本文も参照も無く、#7
 | ブロック | 状態 | 土台 |
 |---|---|---|
 | OPLLEX | 実装済み・**音を確認** | `Src/SoundChips/Emu2413/` のフォーク |
-| OPL2EX | 実装済み・**音を確認** | `Src/SoundChips/OpenMsxY8950Latest/` のフォーク |
+| OPL2EX | 実装済み・**音を確認** | `Src/SoundChips/OpenMsxY8950Latest.cpp` ほか（openMSX の Y8950 の移植版）のフォーク |
 | SSGS | 実装済み・**音を確認**（カートリッジ / 内蔵とも） | `Src/SoundChips/AY8910.c` のフォーク |
 | MSX-TIMER | 実装済み・**音は持たない** | 新規 |
 | MSX-MIXER | **入口のみ**（実機側が未実装） | 新規 |
@@ -268,6 +270,27 @@ blueMSX+ のファイルは冒頭に帰属を持つ。**どれも消さない。
 
 `Src/SoundChips/Y8960OpllCore.c` は Emu2413 のフォークなので MIT 表示を引き継ぎ、
 音色データの CC BY-SA 表示を併せて持つ。
+
+**このファイルの中身は、書いた人ごとに条件が違う。** GPLv2 のリポジトリに在ることは、
+各部分の条件を変えない。
+
+| 部分 | 書いた人 | 条件 |
+|---|---|---|
+| emu2413 本体 | Mitsutaka Okazaki | MIT（`Src/SoundChips/Emu2413/LICENSE`） |
+| セーブステート用の 2 関数と変更表記 | Hesoten（blueMSX+） | 明記なし。GPLv2 のプロジェクトの中で書かれた |
+| Y8960 向けの変更（4 面の音色表の器、バンクレジスタ、改名） | madscient | このフォークの著者自身 |
+| 音色データ | David Viens、Hubert Lamontagne | CC BY-SA。出典は版を書いていない |
+
+**このファイルを GPL でないリポジトリへ持ち出すときは、Hesoten の部分を外す。**
+madscient/DSAemuEngine（MIT）の写しはそうなっている（**確認済み** 2026-10-04: 2 つのファイルの差は、
+変更表記、`Y8960OPLL_RateConv_getBufferLength`、`Y8960OPLL_relinkAfterRestore` と、コメントの
+言い回し 3 か所だけ）。**openMSX 由来の OPL2EX のコア（`Y8960Opl2Core.*` / `Y8960Opl2Adpcm.*`）は
+持ち出せない。** GPL でしか許諾されていない。
+
+**音色データの「継承」がプログラムの側に及ぶかは、作者の意向が分かっていない。**
+出典を明らかにしたまま、作者の反応を待つ（2026-10-04 ユーザー判断。
+`y8960/implementation-plan.md` §9.14）。配布物の `LICENSE.txt` は、データは CC BY-SA のまま、
+という立場で書いてある。
 
 音色データを別の出所から持ち込むときは、その出所の表示も要る。
 **"Copyright free OPLL(x) ROM patches" (David Viens / Hubert Lamontagne、
