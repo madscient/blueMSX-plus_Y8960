@@ -1,6 +1,6 @@
-"""Assemble opnatest.asm into a 16 KB plain ROM.
+"""Assemble opnatest.asm, or another source beside it, into a 16 KB plain ROM.
 
-Usage:  py make-opnatest.py <pasmo.exe> <output.rom>
+Usage:  py make-opnatest.py <pasmo.exe> <output.rom> [source.asm]
 """
 import os
 import subprocess
@@ -10,9 +10,10 @@ ROM_SIZE = 0x4000
 
 here = os.path.dirname(os.path.abspath(__file__))
 pasmo, out = sys.argv[1], sys.argv[2]
+source = sys.argv[3] if len(sys.argv) > 3 else "opnatest.asm"
 tmp = out + ".raw"
 
-subprocess.run([pasmo, "--bin", os.path.join(here, "opnatest.asm"), tmp], check=True)
+subprocess.run([pasmo, "--bin", os.path.join(here, source), tmp], check=True)
 
 with open(tmp, "rb") as f:
     code = f.read()

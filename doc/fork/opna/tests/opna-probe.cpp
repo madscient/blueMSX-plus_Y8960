@@ -22,23 +22,35 @@
 ** Two more modes print measurements and judge nothing:
 **   opna-probe.exe --survey   level and residue of the conversion, by pitch
 **   opna-probe.exe --bench    host time per emulated second, idle and playing
+**
+** And two carry a state from one build of the probe to another, to see what
+** a build makes of a state an earlier one wrote:
+**   opna-probe.exe --save-state <file>
+**   opna-probe.exe --load-state <file> playing|stopped
+** The state is saved while an FM tone sounds and ADPCM-B plays in a loop.
+** After the load the FM tone must be back; ADPCM-B must go on ("playing"),
+** or be silent with nothing else added ("stopped").
 */
 #include <stdio.h>
 #include <math.h>
 #include <string.h>
 #include <chrono>
+#include <map>
 #include <vector>
 extern "C" {
 #include "YM2608.h"
 }
 
 extern "C" std::vector<Int32> probeCapture;
+extern "C" std::map<int, double> probeTypePeak;
 extern "C" UInt32 probePendingIrq;
 extern "C" int    probeIrqCalls;
 extern "C" UInt8* probeAdpcmRam;
 void probeAdvance(UInt32 ticks);
 void probeSetTime(UInt32 t);
 extern UInt32 probeTimerLateness;
+bool probeStateToFile(const char* path);
+bool probeStateFromFile(const char* path);
 int nativeCheck();
 
 static const double BOARD_HZ = 6 * 3579545.0;
@@ -117,6 +129,8 @@ static double rms(const std::vector<double>& s)
 struct Fit {
     double level;       /* amplitude of the harmonic asked for */
     double residue;     /* fitted power over what is left, in dB */
+    double left;        /* rms of what is left */
+    double dc;          /* the constant that was fitted */
 };
 
 static Fit fitHarmonics(const std::vector<double>& s, double f0, int which)
@@ -167,6 +181,8 @@ static Fit fitHarmonics(const std::vector<double>& s, double f0, int which)
     Fit fit;
     fit.level   = sqrt(x[2 * which - 1] * x[2 * which - 1] + x[2 * which] * x[2 * which]);
     fit.residue = left > 0 ? 10 * log10(fitted / left) : 200.0;
+    fit.left    = sqrt(left);
+    fit.dc      = x[0];
     return fit;
 }
 
@@ -204,6 +220,66 @@ static void fmTone(YM2608* c, int fnum, int block, int multiple = 1)
     reg(c, 0, 0xa4, (block << 3) | (fnum >> 8));
     reg(c, 0, 0xa0, fnum & 0xff);
     reg(c, 0, 0x28, 0x10);
+}
+
+/* ADPCM-B data that decodes to a tone of 16 samples a cycle. Each nibble is
+** the one that brings the YM2608's decoder closest to a sine: a nibble moves
+** the output by (2n + 1) / 8 of the step size, up or down by its top bit,
+** and then scales the step size. */
+static std::vector<UInt8> adpcmTone(int bytes)
+{
+    static const int scale[8] = { 57, 57, 57, 57, 77, 102, 128, 153 };
+    std::vector<UInt8> data(bytes);
+    int accumulator = 0;
+    int step = 127;
+
+    for (int n = 0; n < 2 * bytes; n++) {
+        double target = 12000.0 * sin(2 * 3.14159265358979323846 * n / 16.0);
+        int best = 0;
+        double bestError = 1e30;
+        for (int nibble = 0; nibble < 16; nibble++) {
+            int delta = (2 * (nibble & 7) + 1) * step / 8;
+            int value = accumulator + ((nibble & 8) ? -delta : delta);
+            if (value > 32767) value = 32767;
+            if (value < -32768) value = -32768;
+            if (fabs(value - target) < bestError) { bestError = fabs(value - target); best = nibble; }
+        }
+        int delta = (2 * (best & 7) + 1) * step / 8;
+        accumulator += (best & 8) ? -delta : delta;
+        if (accumulator > 32767) accumulator = 32767;
+        if (accumulator < -32768) accumulator = -32768;
+        step = step * scale[best & 7] / 64;
+        if (step < 127) step = 127;
+        if (step > 24576) step = 24576;
+        if (n & 1) data[n / 2] |= (UInt8)best;
+        else       data[n / 2]  = (UInt8)(best << 4);
+    }
+    return data;
+}
+
+static const int ADPCM_BYTES = 8192;
+
+/* Puts the tone into the sample RAM and plays it, once or in a loop, at half
+** the FM rate: 1736.1 Hz, for 0.59 s a pass. Register 110h is cleared so
+** that status 1 shows EOS, which it masks after reset. */
+static void adpcmPlay(YM2608* c, bool repeat)
+{
+    std::vector<UInt8> data = adpcmTone(ADPCM_BYTES);
+    ym2608GetDebugInfo(c, NULL);
+    memcpy(probeAdpcmRam, &data[0], data.size());
+    reg(c, 1, 0x10, 0x00);
+    reg(c, 1, 0x00, 0x01);
+    reg(c, 1, 0x01, 0xc0);
+    reg(c, 1, 0x02, 0x00);
+    reg(c, 1, 0x03, 0x00);
+    reg(c, 1, 0x04, (ADPCM_BYTES / 4 - 1) & 0xff);
+    reg(c, 1, 0x05, (ADPCM_BYTES / 4 - 1) >> 8);
+    reg(c, 1, 0x0c, 0xff);
+    reg(c, 1, 0x0d, 0xff);
+    reg(c, 1, 0x09, 0x00);
+    reg(c, 1, 0x0a, 0x80);
+    reg(c, 1, 0x0b, 0xff);
+    reg(c, 1, 0x00, repeat ? 0xb0 : 0xa0);
 }
 
 static std::vector<UInt8> readFile(const char* path)
@@ -320,10 +396,58 @@ static void bench()
     }
 }
 
+static int saveStateMode(const char* path)
+{
+    YM2608* c = ym2608Create(NULL, CLOCK, RAMSIZE, NULL, 0, 0);
+    fmTone(c, 1024, 7);
+    adpcmPlay(c, true);
+    run(c, 100);
+    ym2608SaveState(c);
+    bool ok = probeStateToFile(path);
+    printf("%s  %-34s %s\n", ok ? "OK" : "NG", "state written", path);
+    ym2608Destroy(c);
+    return ok ? 0 : 1;
+}
+
+/* The FM tone is fitted, and what the fit leaves over is ADPCM-B, or
+** whatever a misread state plays in its place. A stopped ADPCM-B must not
+** leave a constant behind either: its output rests at zero. */
+static int loadStateMode(const char* path, bool playing)
+{
+    if (!probeStateFromFile(path)) {
+        printf("NG  %-34s %s\n", "state read", path);
+        return 1;
+    }
+    YM2608* c = ym2608Create(NULL, CLOCK, RAMSIZE, NULL, 0, 0);
+    ym2608LoadState(c);
+    run(c, 50);
+    Fit fit = fitHarmonics(run(c, 300), fmHz(1024, 7, 1, 144), 1);
+    check(fit.level > 1000, "fm tone is back after the load", "level %.0f (limit %.0f)", fit.level, 1000);
+    if (playing) {
+        check(fit.left > 500, "adpcm-b goes on after the load", "rms beside the fm tone %.1f (limit %.0f)", fit.left, 500);
+    }
+    else {
+        check(fit.left < 50, "adpcm-b is silent after the load", "rms beside the fm tone %.1f (limit %.0f)", fit.left, 50);
+        check(fabs(fit.dc) < 20, "adpcm-b rests at zero after the load", "constant %.1f (limit +-%.0f)", fit.dc, 20);
+
+        /* Its registers came through: the start command alone plays the
+        ** block at the level and the rate that were set before the save. */
+        reg(c, 1, 0x00, 0xb0);
+        run(c, 50);
+        fit = fitHarmonics(run(c, 300), fmHz(1024, 7, 1, 144), 1);
+        check(fit.left > 500, "adpcm-b starts again from its registers", "rms beside the fm tone %.1f (limit %.0f)", fit.left, 500);
+    }
+    ym2608Destroy(c);
+    printf("%d failed\n", failures);
+    return failures;
+}
+
 int main(int argc, char** argv)
 {
     if (argc > 1 && strcmp(argv[1], "--survey") == 0) { survey(); return 0; }
     if (argc > 1 && strcmp(argv[1], "--bench") == 0)  { bench();  return 0; }
+    if (argc > 2 && strcmp(argv[1], "--save-state") == 0) { return saveStateMode(argv[2]); }
+    if (argc > 3 && strcmp(argv[1], "--load-state") == 0) { return loadStateMode(argv[2], strcmp(argv[3], "playing") == 0); }
 
     std::vector<UInt8> rom;
     if (argc > 1) rom = readFile(argv[1]);
@@ -512,6 +636,87 @@ int main(int argc, char** argv)
         }
     }
 
+    /* ADPCM-B at the ends of a block, as measured on real chips: a write
+    ** reaches the last byte of the end address, and a read reaches the last
+    ** byte of the limit address before it goes back to address 0. The read
+    ** is given its RAM directly, so that it does not lean on the write. */
+    {
+        YM2608* c = ym2608Create(NULL, CLOCK, RAMSIZE, NULL, 0, 0);
+        ym2608GetDebugInfo(c, NULL);
+        reg(c, 1, 0x00, 0x01);
+        reg(c, 1, 0x00, 0x60);
+        reg(c, 1, 0x01, 0x00);
+        reg(c, 1, 0x02, 0x00);
+        reg(c, 1, 0x03, 0x00);
+        reg(c, 1, 0x04, 0x00);
+        reg(c, 1, 0x05, 0x00);
+        for (int i = 0; i < 4; i++) reg(c, 1, 0x08, 0xa1 + i);
+        reg(c, 1, 0x00, 0x01);
+        int written = 1;
+        for (int i = 0; i < 4; i++) if (probeAdpcmRam[i] != 0xa1 + i) written = 0;
+        check(written && probeAdpcmRam[4] == 0xff, "adpcm-b write reaches the end", "last byte of the block %.0f, expected %.0f", probeAdpcmRam[3], 0xa4);
+        ym2608Destroy(c);
+
+        c = ym2608Create(NULL, CLOCK, RAMSIZE, NULL, 0, 0);
+        ym2608GetDebugInfo(c, NULL);
+        for (int i = 0; i < 8; i++) probeAdpcmRam[i] = (UInt8)(0xb1 + i);
+        reg(c, 1, 0x00, 0x01);
+        reg(c, 1, 0x00, 0x20);
+        reg(c, 1, 0x01, 0x00);
+        reg(c, 1, 0x02, 0x00);
+        reg(c, 1, 0x03, 0x00);
+        reg(c, 1, 0x04, 0xff);
+        reg(c, 1, 0x05, 0xff);
+        reg(c, 1, 0x0c, 0x00);
+        reg(c, 1, 0x0d, 0x00);
+        ym2608Write(c, 2, 0x08);
+        ym2608Read(c, 3);
+        ym2608Read(c, 3);
+        int wrapped = 1;
+        int fourth = 0;
+        for (int i = 0; i < 8; i++) {
+            probeAdvance(us(30));
+            int value = ym2608Read(c, 3);
+            if (value != 0xb1 + (i & 3)) wrapped = 0;
+            if (i == 3) fourth = value;
+        }
+        check(wrapped, "adpcm-b read reaches the limit", "fourth byte read %.0f, expected %.0f", fourth, 0xb4);
+        ym2608Destroy(c);
+    }
+
+    /* ADPCM-B playback out of the sample RAM: the pitch that delta-N gives,
+    ** an end without a loop, and the EOS flag, which the end sets and only
+    ** the flag reset of register 110h clears. With the loop it goes on, and
+    ** every pass starts the decoder afresh, so a later pass is as loud as
+    ** the first. */
+    {
+        YM2608* c = ym2608Create(NULL, CLOCK, RAMSIZE, NULL, 0, 0);
+        adpcmPlay(c, false);
+        run(c, 50);
+        std::vector<double> firstPass = run(c, 300);
+        double f = frequency(firstPass);
+        double expect = CLOCK / 144.0 / 2 / 16;
+        check(fabs(f - expect) / expect < 0.01, "adpcm-b frequency", "measured %.2f Hz, expected %.2f Hz", f, expect);
+        int during = ym2608Read(c, 2) & 0x04;
+        run(c, 600);
+        double tail = rms(run(c, 200));
+        int after = ym2608Read(c, 2) & 0x04;
+        check(tail < 50, "adpcm-b ends by itself", "rms %.1f 1 s after the start (limit %.0f)", tail, 50);
+        check(during == 0 && after != 0, "adpcm-b eos at the end", "flag %.0f while playing, %.0f after", during, after);
+        reg(c, 1, 0x10, 0x80);
+        int cleared = ym2608Read(c, 2) & 0x04;
+        check(cleared == 0, "adpcm-b eos cleared by flag reset", "flag %.0f after 80h to 110h, expected %.0f", cleared, 0);
+        ym2608Destroy(c);
+
+        c = ym2608Create(NULL, CLOCK, RAMSIZE, NULL, 0, 0);
+        adpcmPlay(c, true);
+        run(c, 1500);
+        double level = rms(run(c, 200));
+        double first = rms(firstPass);
+        check(level > 1000 && fabs(level / first - 1) < 0.05, "adpcm-b repeats", "rms %.1f in the third pass, %.1f in the first", level, first);
+        ym2608Destroy(c);
+    }
+
     /* Save state: what plays after a load equals what played after the save.
     ** The same comparison against a run without the load must differ, or the
     ** check could not tell anything. */
@@ -531,6 +736,24 @@ int main(int argc, char** argv)
         std::vector<double> b = run(c, 10);
         check(a == b && a.size() > 0, "save and load replay the same", "%.0f samples, equal %.0f", (double)a.size(), a == b);
         check(!(a == drift), "the comparison can fail", "unloaded run equal %.0f, expected %.0f", a == drift, 0);
+        ym2608Destroy(c);
+    }
+
+    /* The same with ADPCM-B playing in a loop. */
+    {
+        YM2608* c = ym2608Create(NULL, CLOCK, RAMSIZE, NULL, 0, 0);
+        adpcmPlay(c, true);
+        run(c, 100);
+        ym2608Read(c, 0);
+        probeSetTime(1000000);
+        ym2608SaveState(c);
+        std::vector<double> a = run(c, 10);
+        std::vector<double> drift = run(c, 10);
+        probeSetTime(1000000);
+        ym2608LoadState(c);
+        std::vector<double> b = run(c, 10);
+        check(a == b && a.size() > 0, "save and load replay adpcm-b", "%.0f samples, equal %.0f", (double)a.size(), a == b);
+        check(!(a == drift), "the adpcm-b comparison can fail", "unloaded run equal %.0f, expected %.0f", a == drift, 0);
         ym2608Destroy(c);
     }
 
@@ -636,6 +859,25 @@ int main(int argc, char** argv)
         double expect = fmHz(618, 4, 1, 48);
         check(fabs(f - expect) / expect < 0.01, "load at prescaler 2 into a new chip", "measured %.2f Hz, expected %.2f Hz", f, expect);
         ym2608Destroy(c);
+    }
+
+    /* FM and SSG go to the mixer as channels of two types, so that each has
+    ** a level of its own: an FM tone shows up on one type only, an SSG tone
+    ** on another only. */
+    {
+        int type[2] = { -1, -1 };
+        int types[2] = { 0, 0 };
+        for (int k = 0; k < 2; k++) {
+            YM2608* c = ym2608Create(NULL, CLOCK, RAMSIZE, NULL, 0, 0);
+            if (k == 0) fmTone(c, 618, 4); else ssgTone(c, 284);
+            probeTypePeak.clear();
+            run(c, 50);
+            for (std::map<int, double>::iterator it = probeTypePeak.begin(); it != probeTypePeak.end(); ++it) {
+                if (it->second > 100) { type[k] = it->first; types[k]++; }
+            }
+            ym2608Destroy(c);
+        }
+        check(types[0] == 1 && types[1] == 1 && type[0] != type[1], "fm and ssg on separate channels", "fm on type %.0f, ssg on type %.0f", type[0], type[1]);
     }
 
     printf("%d failed\n", failures);
