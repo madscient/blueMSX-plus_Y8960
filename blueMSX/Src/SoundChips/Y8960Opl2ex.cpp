@@ -205,6 +205,10 @@ UInt8 y8960Opl2exRead(Y8960Opl2ex* dev, int index, int port)
 {
     Circuit& c = *dev->circuit[index];
 
+    /* A read brings the ADPCM up to date, and that can end a sample. What
+    ** the mixer has not been given by then would come out silent. */
+    mixerSync(c.mixer);
+
     if ((port & 1) == 0) {
         return c.chip.readStatus((y8960opl2::EmuTime)boardSystemTime());
     }

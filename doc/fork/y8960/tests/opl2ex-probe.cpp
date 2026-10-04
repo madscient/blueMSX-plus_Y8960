@@ -3,7 +3,9 @@
 ** It links the core with a stub board, so it needs neither a machine nor a
 ** ROM and runs headless. The checks cover the three things the fork changed:
 ** the four waveforms a YM3812 has, the sample RAM the two circuits share, and
-** the MSX-AUDIO registers the cartridge does not carry.
+** the MSX-AUDIO registers the cartridge does not carry. They also cover the
+** end of an ADPCM sample, which the core has to bring about by itself: on
+** time, with its interrupt, whatever the software is doing meanwhile.
 **
 ** Every check is written so that it fails if the change were not there. The
 ** waveform checks compare the four against each other before trusting any of
@@ -31,6 +33,14 @@
 
 using namespace y8960opl2;
 
+extern "C" {
+extern UInt32* boardSysTime;
+extern UInt32  y8960ProbePendingIrq;
+extern UInt32  probeTimerLateness;
+extern void  (*probeMixerSyncHook)(void);
+void probeRun(UInt32 span);
+}
+
 static const EmuTime T = 0;
 
 static int fails = 0;
@@ -40,6 +50,117 @@ static void check(const char* what, bool ok)
     printf("%-62s %s\n", what, ok ? "ok" : "FAIL");
     if (!ok) fails++;
 }
+
+static const UInt32 TICK = 432;             /* board cycles per chip sample */
+static const UInt32 SEC  = 6 * 3579545;     /* board cycles per second */
+static const uint8_t EOS = 0x10;
+
+/* One circuit, a sample in its RAM, and the audio the mixer has been given.
+** The audio is rendered where the real mixer would be synced: before every
+** write, from the board's mixer timer, and wherever the core asks. */
+struct Player {
+    SampleRam ram;
+    Y8950     chip;
+    std::vector<int32_t> out;
+    UInt32    rendered;
+
+    static Player* current;
+    static void hook() { if (current) current->render(); }
+
+    explicit Player(DeviceConfig& cfg)
+        : ram(256 * 1024), chip("probe", cfg, ram, 0, 0x2000, *boardSysTime)
+        , rendered(*boardSysTime)
+    {
+        current = this;
+        probeMixerSyncHook = hook;
+        chip.reset(*boardSysTime);
+    }
+    ~Player() { current = nullptr; }
+
+    void render()
+    {
+        unsigned n = (*boardSysTime - rendered) / TICK;
+        if (n == 0) return;
+        size_t at = out.size();
+        out.resize(at + n);
+        chip.generateMono(&out[at], n);
+        rendered += n * TICK;
+    }
+
+    void wr(uint8_t rg, uint8_t v)
+    {
+        render();
+        chip.writeReg(rg, v, *boardSysTime);
+    }
+
+    /* `len` bytes of noise from address 0, and `behind` in what follows. */
+    void load(unsigned len, uint8_t behind)
+    {
+        unsigned seed = 12345;
+        for (unsigned i = 0; i < len; i++) {
+            seed = seed * 1103515245u + 12345u;
+            ram.write(0, i, uint8_t(seed >> 16));
+        }
+        for (unsigned i = len; i < len + 2048; i++) ram.write(0, i, behind);
+    }
+
+    /* Plays from address 0. EOS is the only flag left to raise the interrupt. */
+    void play(uint8_t stopL, uint8_t stopH, uint16_t delta, uint8_t reg7)
+    {
+        wr(0x08, 0x00);
+        wr(0x09, 0x00); wr(0x0A, 0x00);
+        wr(0x0B, stopL); wr(0x0C, stopH);
+        wr(0x10, uint8_t(delta)); wr(0x11, uint8_t(delta >> 8));
+        wr(0x12, 0xFF);
+        wr(0x04, 0x80);
+        wr(0x04, 0x68);
+        y8960ProbePendingIrq = 0;
+        out.clear();
+        wr(0x07, reg7);
+    }
+
+    /* 256 bytes at DELTA-N 8000h: 512 nibbles, the last decoded 1023 samples
+    ** after START and lasting two. */
+    void playShort(uint8_t reg7, uint8_t behind = 0xFF, uint16_t delta = 0x8000)
+    {
+        load(256, behind);
+        play(0x3F, 0x00, delta, reg7);
+    }
+
+    bool eos() const { return (chip.peekRawStatus() & EOS) != 0; }
+
+    /* The chip sample, counted from now, at which EOS first shows. Only the
+    ** board time moves; nothing reads or writes the chip. */
+    long eosTick(unsigned maxTicks)
+    {
+        for (unsigned i = 1; i <= maxTicks; i++) {
+            probeRun(TICK);
+            if (eos()) return (long)i;
+        }
+        return -1;
+    }
+
+    /* Time goes by with nothing touching the chip but the board's own mixer
+    ** timer, which syncs fifty times a second. */
+    void runMixed(UInt32 span)
+    {
+        const UInt32 period = SEC / 50;
+        while (span > 0) {
+            UInt32 step = span < period ? span : period;
+            probeRun(step);
+            render();
+            span -= step;
+        }
+    }
+
+    int lastSound() const
+    {
+        for (int i = (int)out.size() - 1; i >= 0; i--) if (out[i] != 0) return i;
+        return -1;
+    }
+};
+
+Player* Player::current = nullptr;
 
 static double rms(Y8950& chip, int n)
 {
@@ -291,6 +412,219 @@ int main()
         chip.writeReg(0x16, 0xFF, T);
         chip.writeReg(0x15, 0x7F, T);
         check("15h-17h no longer drive a DAC", rms(chip, 2000) == 0.0);
+    }
+
+    /* The board fires a timer once the instruction that crossed it has
+    ** finished, so always a little late. */
+    probeTimerLateness = 60;
+
+    /* ---- a sample ends by itself ---------------------------------------- */
+    {
+        *boardSysTime = 1000;
+        Player p(cfg);
+        p.playShort(0xA0);
+        bool quietBefore = (y8960ProbePendingIrq == 0);
+        long at = p.eosTick(3000);
+        printf("  EOS %ld samples after START, interrupt lines %04x\n",
+               at, (unsigned)y8960ProbePendingIrq);
+        check("a sample ends by itself: EOS with nothing touching the chip",
+              at >= 1023 && at <= 1026);
+        check("and the interrupt comes with it, not before",
+              quietBefore && y8960ProbePendingIrq != 0);
+    }
+
+    /* ---- what the mixer is given ---------------------------------------- */
+    {
+        std::vector<int32_t> a, b, c;
+        int lastA, lastC;
+        {
+            *boardSysTime = 1000;
+            Player p(cfg);
+            p.playShort(0xA0, 0xFF);
+            p.runMixed(3000 * TICK);
+            a = p.out; lastA = p.lastSound();
+        }
+        {
+            *boardSysTime = 1000;
+            Player p(cfg);
+            p.playShort(0xA0, 0x80);
+            p.runMixed(3000 * TICK);
+            b = p.out;
+        }
+        {
+            /* The mixer synced at every chip sample: the audio as it is when
+            ** nothing is late. */
+            *boardSysTime = 1000;
+            Player p(cfg);
+            p.playShort(0xA0, 0xFF);
+            for (int i = 0; i < 3000; i++) { probeRun(TICK); p.render(); }
+            c = p.out; lastC = p.lastSound();
+        }
+        printf("  last sample that sounds: %d under the mixer timer, %d synced every sample\n",
+               lastA, lastC);
+        check("nothing behind the stop address is decoded", a == b);
+
+        /* The same at a DELTA-N that leaves a remainder at every nibble. The
+        ** sample a nibble is decoded in already carries a part of it then. */
+        std::vector<int32_t> d, e;
+        {
+            *boardSysTime = 1000;
+            Player p(cfg);
+            p.playShort(0xA0, 0xFF, 0x9D3F);
+            p.runMixed(3000 * TICK);
+            d = p.out;
+        }
+        {
+            *boardSysTime = 1000;
+            Player p(cfg);
+            p.playShort(0xA0, 0x80, 0x9D3F);
+            p.runMixed(3000 * TICK);
+            e = p.out;
+        }
+        {
+            size_t differ = 0, first = 0;
+            for (size_t i = 0; i < d.size() && i < e.size(); i++) {
+                if (d[i] != e[i]) { if (!differ) first = i; differ++; }
+            }
+            printf("  at DELTA-N 9D3Fh: %u samples differ with what lies behind, the first at %u\n",
+                   (unsigned)differ, (unsigned)first);
+        }
+        check("nor at a DELTA-N that leaves a remainder", d == e);
+        check("the sample is heard to its end",
+              lastA >= 1020 && lastA <= 1024 && lastA == lastC);
+        check("and sounds the same as when nothing is late", a == c);
+    }
+
+    /* ---- the status polled, as a wait for EOS does ------------------------ */
+    {
+        static const UInt32 steps[] = { 180, 431, 432, 864, 100 * TICK };
+        bool ok = true;
+        for (unsigned i = 0; i < sizeof steps / sizeof steps[0]; i++) {
+            *boardSysTime = 1000;
+            Player p(cfg);
+            p.playShort(0xA0);
+            UInt32 t0 = *boardSysTime;
+            long at = -1;
+            for (UInt64 done = 0; done < 2ull * SEC; done += steps[i]) {
+                probeRun(steps[i]);
+                p.chip.readStatus(*boardSysTime);
+                if (p.eos()) { at = (long)((*boardSysTime - t0) / TICK); break; }
+            }
+            /* EOS can only be seen at a poll, so at the first one after it. */
+            long latest = (long)(((1026ull * TICK + steps[i] - 1) / steps[i]) * steps[i] / TICK);
+            printf("  polled every %u board cycles: EOS seen at sample %ld\n",
+                   (unsigned)steps[i], at);
+            if (at < 1023 || at > latest) ok = false;
+        }
+        check("polling the status does not hold the sample back", ok);
+    }
+
+    /* ---- the 32 bit board time wraps, every 200 s -------------------------- */
+    {
+        *boardSysTime = 0u - 100 * TICK;
+        Player p(cfg);
+        p.playShort(0xA0);
+        long at = p.eosTick(3000);
+        printf("  START 100 samples before the wrap: EOS %ld samples after START\n", at);
+        check("a sample playing across the board time's wrap ends on time",
+              at >= 1023 && at <= 1026);
+    }
+    {
+        *boardSysTime = 0u - 100 * TICK;
+        Player p(cfg);
+        probeRun(200 * TICK);
+        p.playShort(0xA0);
+        long at = p.eosTick(3000);
+        printf("  reset before the wrap, START after it: EOS %ld samples after START\n", at);
+        check("a sample started after the wrap ends on time", at >= 1023 && at <= 1026);
+    }
+    {
+        /* Nothing syncs the chip for longer than the board time's whole range. */
+        *boardSysTime = 1000;
+        Player p(cfg);
+        for (int i = 0; i < 250; i++) probeRun(SEC);
+        p.playShort(0xA0);
+        long at = p.eosTick(3000);
+        printf("  START after 250 s of nothing: EOS %ld samples after START\n", at);
+        check("a sample started after a long idle time ends on time",
+              at >= 1023 && at <= 1026);
+    }
+
+    /* ---- a sample longer than a board timer reaches ------------------------ */
+    {
+        /* 65536 bytes at DELTA-N 0400h: 131072 nibbles, 64 samples each. */
+        *boardSysTime = 1000;
+        Player p(cfg);
+        p.play(0xFF, 0x3F, 0x0400, 0xA0);
+        const double expect = 131072.0 * 64 / (3579545.0 / 72);
+        bool early = false;
+        int sec = 0;
+        for (; sec < 200 && !p.eos(); sec++) {
+            probeRun(SEC);
+            if (p.eos() && sec + 1 < (int)expect) early = true;
+        }
+        printf("  %.1f s long: EOS seen in second %d\n", expect, sec);
+        check("a sample longer than a board timer reaches ends on time",
+              !early && sec == (int)expect + 1);
+    }
+
+    /* ---- repeat ----------------------------------------------------------- */
+    {
+        *boardSysTime = 1000;
+        Player p(cfg);
+        p.playShort(0xB0);
+        int passes = 0;
+        for (int i = 0; i < 10300; i++) {
+            probeRun(TICK);
+            if (p.eos()) { passes++; p.wr(0x04, 0x80); p.wr(0x04, 0x68); }
+        }
+        p.out.clear();
+        p.runMixed(200 * TICK);
+        printf("  10300 samples of a 1024 sample loop: EOS %d times, still sounding: %s\n",
+               passes, p.lastSound() >= 0 ? "yes" : "no");
+        check("a repeating sample raises EOS at every pass and plays on",
+              passes == 10 && p.lastSound() >= 0);
+    }
+
+    /* ---- a write in the instruction that crossed a sync point -------------- */
+    {
+        /* A long sample is walked a second at a time. The write below syncs
+        ** the chip past the first of those sync points before it has fired. */
+        *boardSysTime = 1000;
+        Player p(cfg);
+        p.play(0xFF, 0x3F, 0x0400, 0xA0);
+        probeRun(SEC - 5 * TICK);
+        *boardSysTime += 8 * TICK;
+        p.wr(0x12, 0xFF);
+        probeRun(TICK);
+        bool notYet = !p.eos();
+        probeRun(3 * SEC);
+        check("a write that syncs past a pending sync point does no harm",
+              notYet && !p.eos());
+    }
+
+    /* ---- a state saved and loaded while a sample plays --------------------- */
+    {
+        *boardSysTime = 50u * SEC;
+        Player p(cfg);
+        p.playShort(0xA0);
+        probeRun(500 * TICK);
+        /* The stub keeps no state: what a load reads back is what the chip
+        ** holds once the save has run. */
+        p.chip.blueMsxSaveStateImpl(nullptr);
+        /* The board time a load brings back has nothing to do with the one
+        ** that was running. */
+        *boardSysTime = 1000;
+        p.rendered = *boardSysTime;
+        p.out.clear();
+        p.chip.blueMsxLoadStateImpl(nullptr);
+        long at = p.eosTick(3000);
+        printf("  saved and loaded 500 samples in: EOS %ld samples after the load, "
+               "last sample that sounds %d\n", at, p.lastSound());
+        check("a sample playing at a save ends on time once loaded",
+              at >= 523 && at <= 527);
+        check("and its audio goes on from where it was",
+              p.lastSound() >= 520 && p.lastSound() <= 525);
     }
 
     printf("\n%s\n", fails ? "FAILURES PRESENT" : "all checks passed");
