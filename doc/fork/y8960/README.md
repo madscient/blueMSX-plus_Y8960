@@ -32,6 +32,7 @@ Y8960 対応は upstream には存在しない、このフォーク固有の機�
 | `tests/banktest.asm` + `make-banktest.py` | MSX 側で走る回帰テスト。バンクマッパー・窓・ミラー・タイマ・DCSG・OPLLEX・OPL2EX・SSGS。128KB に展開 |
 | `tests/sndtest.asm` + `make-sndtest.py` + `analyze-sndtest.py` | DCSG のゲートとトンネル、SCC の音。録音した WAV を判定する。16KB |
 | `tests/ssgstest.asm` + `make-ssgstest.py` | 基盤タイプ `MSX2++` で SSGS が本体の PSG として働くか、窓とイネーブラが無いか。16KB の素の ROM |
+| `tests/adpcmtest.asm` + `make-adpcmtest.py` | OPL2EX の ADPCM がサンプルを時刻どおりに終えるか。`C0h`/`C1h` を叩くので、本体の MSX-AUDIO にも使える。16KB |
 | `tests/opllex-bank-probe.c` | OPLLEX のコア単体試験（ヘッドレス） |
 | `tests/opl2ex-probe.cpp` + `opl2ex-host-stub.c` | OPL2EX のコア単体試験（ヘッドレス） |
 | `tests/ssgs-probe.c` + `ssgs-host-stub.c` | SSGS のコア単体試験（ヘッドレス） |
@@ -41,6 +42,7 @@ Y8960 対応は upstream には存在しない、このフォーク固有の機�
 | `tests/MSX2+ - C-BIOS + Y8960 (whole cart)/` | Y8960 を**一つも持たない**構成。`/rom1 <rom> /romtype1 Y8960` でカード一式をカートリッジとして挿す。`(banktest)` と突き合わせる相手 |
 | `tests/MSX2 - Y8960 (firmware)/` | 汎用 `MSX2`（MSX BASIC 2.1）に Y8960 の 7 ブロックを載せ、Y8960 SCC に `y8960bas.rom` を載せたもの。**`Machines/Shared Roms/` の BIOS と `y8960bas.rom` が要る** |
 | `tests/MSX2++ - C-BIOS + Y8960/` | 基盤タイプ `MSX2++`。MSX-TIMER と Y8960 SCC を置き、Y8960 SCC に `ssgstest.rom` を載せたもの |
+| `tests/MSX2+ - C-BIOS + MSX-AUDIO/` | Y8960 を**持たず**、本体に MSX-AUDIO（ROM 無しの Y8950）を置いた構成。`adpcmtest.rom` を素の ROM として挿し、本体の MSX-AUDIO のバックエンドを試す |
 
 コア単体試験のビルド手順は各ファイルの冒頭にある。
 
@@ -110,6 +112,30 @@ blueMSX+.exe /machine "MSX2+ - C-BIOS + Y8960 (whole cart)" /rom1 <banktest.rom>
 ```sh
 cp -r "doc/fork/y8960/tests/MSX2++ - C-BIOS + Y8960" "$DEST/"
 py "doc/fork/y8960/tests/make-ssgstest.py" <pasmo.exe> "$DEST/MSX2++ - C-BIOS + Y8960/ssgstest.rom"
+```
+
+`adpcmtest` は 2 行を出す。どちらも機械判定で、`/hidden` で回せる。
+
+```sh
+py "doc/fork/y8960/tests/make-adpcmtest.py" <pasmo.exe> <dir>/adpcmtest.rom
+blueMSX+.exe /machine "MSX2+ - C-BIOS + Y8960 (cartridge)" /rom1 <dir>/adpcmtest.rom /romtype1 Y8960SCC
+```
+
+```
+1 POLL: OK 04F5        2 WAIT: OK
+```
+
+1 の数字は EOS を待つループが回った回数で、サンプルの長さ 20.6ms は 04F8h 回に当たる。
+時計が進まないコアでは 1 が `NG` になる（1 秒待っても EOS が立たない）。
+
+**本体の MSX-AUDIO に掛けるときは、バックエンドを設定で選ぶ。** 既定は emu8950 なので、
+openMSX バックエンドを試すなら `/rootdir` の先の `bluemsx.ini` に
+`sound.chip.y8950BackendActive=2` を書く。**書き方を誤ると黙って既定値で走る**
+（`doc/fork/build/README.md` §5.3）。
+
+```sh
+cp -r "doc/fork/y8960/tests/MSX2+ - C-BIOS + MSX-AUDIO" "$DEST/"
+blueMSX+.exe /machine "MSX2+ - C-BIOS + MSX-AUDIO" /rom1 <dir>/adpcmtest.rom /rootdir <dir>
 ```
 
 **起動するとウィンドウが出る。** 画面の読み取り方と注意は
