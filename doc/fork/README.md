@@ -72,21 +72,21 @@ blueMSX+ 自身が [blueMSX](https://msxblue.com/bluemsx/) の非公式フォー
 `upstream/develop` から枝を切り直し、上流に当たる形で書き直す。
 このフォーク側の都合（Y8960 のための API 変更など）を混ぜないこと。
 
-**fork からの PR は CI が自動で走らない。** GitHub が
-`action_required` で止め、上流の所有者の承認を待つ
-（**確認済み** 2026-09-12: PR #77 で `mergeStateStatus` が `BLOCKED`、
-`mergeable` は `MERGEABLE`）。**こちらからは動かせない。**
+**fork からの PR の CI は、最初は所有者の承認を待った。いまは自動で走る。**
+PR #77（2026-09-12）では GitHub が `action_required` で止め、上流の所有者の承認を待った
+（**確認済み**: `mergeStateStatus` が `BLOCKED`、`mergeable` は `MERGEABLE`）。
+**PR #99（2026-10-04）では、作成の数秒後に 4 構成のビルドが走り出した**（**確認済み**:
+`gh api .../actions/runs/<id>/jobs` で 4 本とも `in_progress`）。何が変わったのかは確かめていない。
 
-ローカルで同じ 4 構成（Debug / Release × x64 / Win32）を回すことはできるが、
-**その結果を PR に書いても上流の作業は減らない**（上流は自分で CI を回す）。
-報告のために回す必要はない。
+**だから、上流の 4 構成（Debug / Release × x64 / Win32）は PR を出せば確かめられる。**
+ローカルで 4 構成を回して結果を PR に書いても、上流の作業は減らない（上流は自分で CI を回す）。
+報告のために回す必要はない。PR を出したら `gh pr checks <番号> -R Hesoten/blueMSX-plus` で結果を見る。
 
 ### これから出すもの
 
 | | | 状態 |
 |---|---|---|
 | issue（未発行） | **Z80 を標準の 2 倍以上に速くした MSX2+ の機種が、起動ロゴで止まる。** 設定の「VDP command wait」を下げると起動する。このフォークの変更とは無関係で、上流の最新（`83d8f0f1`）を土台にしたビルドでも再現する | **利用者が後で issue を出す**（2026-10-04）。調べた結果と、issue に書ける事実は `opna/plan.md` §4.9（Makoto の試験の途中で見つけたので、そこに記録がある） |
-| PR（未作成） | **本体 MSX-AUDIO の openMSX バックエンドが、ADPCM のサンプルの終端を、ソフトウェアがチップに触るまで認識しない。** その間は停止番地の先を復号し続け、EOS も立たない。このフォークの変更とは無関係で、該当するファイルは上流の最新（`83d8f0f1`）と同一 | **PR を出す**（2026-10-04 ユーザー判断）。上流の既存の issue / PR に無いことは確かめた。**枝 `fix/y8950-adpcm-end-of-sample` を用意した**（`upstream/develop` `83d8f0f1` の上に 2 コミット、ソース 3 本）。**push と PR の作成はユーザーの合図待ち**。修正の内容と試験は `y8960/implementation-plan.md` §11 の (35)。測った値は `y8960/implementation-plan.md` §11 の (33)、調べた範囲と選択肢は同 §9.13 と §9.12（Y8960 の OPL2EX を突き合わせる途中で見つけたので、そこに記録がある） |
 | （出さない） | 本体 MSX-AUDIO の既定の emu8950 バックエンドが、ADPCM の止まったあとも最後の値を出し続け、`07h` = 00h でも止まらない | **PR にも issue にもしない**（2026-10-04 ユーザー判断）。根は digital-sound-antiques/emu8950 に在り、そちらに issue が出ている（#7、#8）。要るなら、それを上流に知らせるだけにする。同 §9.13 |
 
 ### 出した記録
@@ -97,6 +97,7 @@ blueMSX+ 自身が [blueMSX](https://msxblue.com/bluemsx/) の非公式フォー
 | issue #78 | 1 ポートに 1 デバイスしか登録できない件。多重化の提案 | OPEN のまま。PR #80 がマージされたので中身は解決している |
 | PR #80 | #78 の実装（`IoPort` の多重化と `ioPortUnregister` の `ref`）。`feature/ioport-multi-claim` | **マージされた**（`fddc5683`） |
 | PR #81 | キーマトリクスの注入と `/hidden`。`feature/key-matrix-input` | **マージされた**（`fd6e7e53`）。レビューで `w 0` の不具合の修正を求められ、応じた（`automation/plan.md` §4）。`matrix[][]` は上流がマージ後に `MsxPPI.h` の記述から組む形に整理した（`3aeb35b7`、`6f58b6d1`） |
+| PR #99 | 本体 MSX-AUDIO の openMSX バックエンドが、ADPCM のサンプルを時刻どおりに終えるようにする。`fix/y8950-adpcm-end-of-sample`（`upstream/develop` `83d8f0f1` の上に 2 コミット、ソース 3 本） | **OPEN**（2026-10-04 作成）。修正の内容と試験は `y8960/implementation-plan.md` §11 の (35)。Y8960 の OPL2EX を突き合わせる途中で見つけたので、記録はそこにある |
 | issue #74 | PSG のレジスタ番号を 4bit で丸めている件 | OPEN のまま。上流は PR #75（`be45fc46`）で直しており、本フォークは cherry-pick 済み |
 
 PR #77 と issue #78 は本文を**日本語を先、英語を後**（`<details>` に格納）。
