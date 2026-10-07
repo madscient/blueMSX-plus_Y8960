@@ -603,6 +603,39 @@ int main()
               notYet && !p.eos());
     }
 
+    /* ---- the stop address moved while a sample plays ----------------------- */
+    {
+        /* 600 samples in, the play pointer stands at nibble 300. The next
+        ** nibble is one sample away. */
+        long ahead, behind;
+        bool quietBefore;
+        {
+            *boardSysTime = 1000;
+            Player p(cfg);
+            p.playShort(0xA0);
+            probeRun(600 * TICK);
+            p.wr(0x0B, 0x31);               /* to nibble 399, still ahead */
+            ahead = p.eosTick(3000);
+        }
+        {
+            *boardSysTime = 1000;
+            Player p(cfg);
+            p.playShort(0xA0);
+            probeRun(600 * TICK);
+            p.wr(0x0B, 0x10);               /* to nibble 135, already passed */
+            quietBefore = (y8960ProbePendingIrq == 0);
+            behind = p.eosTick(3000);
+        }
+        printf("  stop address moved 600 samples in: EOS %ld samples later when it is ahead, "
+               "%ld when it is behind\n", ahead, behind);
+        check("a stop address moved ahead of playback ends the sample there",
+              ahead >= 199 && ahead <= 202);
+        check("one moved behind playback ends it at the next nibble",
+              behind >= 1 && behind <= 3);
+        check("and the interrupt comes with it",
+              quietBefore && y8960ProbePendingIrq != 0);
+    }
+
     /* ---- a state saved and loaded while a sample plays --------------------- */
     {
         *boardSysTime = 50u * SEC;
