@@ -209,7 +209,7 @@ MegaFlashROM SCC+ SD に触れているが、PR に本文も参照も無く、#7
 
 | ブロック | 状態 | 土台 |
 |---|---|---|
-| OPLLEX | 実装済み・**音を確認** | `Src/SoundChips/Emu2413/` のフォーク |
+| OPLLEX | 実装済み・**音を確認** | `Src/SoundChips/Emu2413/`（emu2413 v1.5.9）のフォーク。レート変換器は v1.6.4 のもの |
 | OPL2EX | 実装済み・**音を確認** | `Src/SoundChips/OpenMsxY8950Latest.cpp` ほか（openMSX の Y8950 の移植版）のフォーク |
 | SSGS | 実装済み・**音を確認**（カートリッジ / 内蔵とも） | `Src/SoundChips/AY8910.c` のフォーク |
 | MSX-TIMER | 実装済み・**音は持たない** | 新規 |

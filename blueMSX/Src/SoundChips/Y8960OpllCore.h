@@ -13,6 +13,13 @@
    linked into the same binary for the machine's own MSX-MUSIC.
 
    The preset tables are NOT Okazaki's; see the comment above the tables.
+
+   Carried over from emu2413 v1.6.4 (by way of madscient/DSAemuEngine, whose
+   fork of the same core took them first): the rate converter, the integer
+   output timing and the 4.12 fixed-point pan_fine. The converter takes L and
+   R at the same phase, so it also covers the Y8960OPLL_calcStereo fix of
+   v1.6.3. The other changes of v1.6.x (save state, reset, tables, OPLL_calc
+   speedup) are not carried over.
 */
 #ifndef _Y8960_OPLL_CORE_H_
 #define _Y8960_OPLL_CORE_H_
@@ -106,10 +113,12 @@ typedef struct __Y8960OPLL_SLOT {
 /* rate conveter */
 typedef struct __Y8960OPLL_RateConv {
   int ch;
-  double timer;
+  uint32_t timer; /* fractional phase of the output in 0.32 fixed point */
+  uint32_t timer_step; /* fractional part of f_ratio in 0.32 fixed point */
   double f_ratio;
   int16_t *sinc_table;
-  int16_t **buf;
+  int16_t **buf; /* ring buffer of LW samples per channel, stored twice so that the latest LW samples are contiguous */
+  int *pos;
 } Y8960OPLL_RateConv;
 
 Y8960OPLL_RateConv *Y8960OPLL_RateConv_new(double f_inp, double f_out, int ch);
@@ -128,9 +137,13 @@ typedef struct __Y8960OPLL {
 
   uint32_t adr;
 
-  double inp_step;
-  double out_step;
-  double out_time;
+  /* in units of 1/(clk * rate) sec, so that all steps are integers */
+  uint32_t inp_step;
+  uint32_t out_step;
+  uint32_t out_time;
+  /* inp_recip = ceil(2^inp_shift / inp_step), to get the rate converter phase without division */
+  uint32_t inp_recip;
+  uint32_t inp_shift;
 
   uint8_t reg[Y8960OPLL_REG_COUNT];
   uint8_t test_flag;
@@ -157,7 +170,7 @@ typedef struct __Y8960OPLL {
   Y8960OPLL_PATCH user_patch[2];
 
   uint8_t pan[16];
-  float pan_fine[16][2];
+  int32_t pan_fine[16][2]; /* 4.12 fixed point */
 
   uint32_t mask;
 

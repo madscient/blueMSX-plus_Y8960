@@ -305,8 +305,9 @@ static INLINE int max(int i, int j) { return (i > j) ? i : j; }
  */
 #define LW 16
 
-/* resolution of sinc(x) table. sinc(x) where 0.0<=x<1.0 corresponds to sinc_table[0...SINC_RESO-1] */
-#define SINC_RESO 256
+/* number of phases between two input samples. must be a power of 2. */
+#define SINC_RESO_BITS 8
+#define SINC_RESO (1 << SINC_RESO_BITS)
 #define SINC_AMP_BITS 12
 
 // double hamming(double x) { return 0.54 - 0.46 * cos(2 * PI * x); }
@@ -321,15 +322,18 @@ Y8960OPLL_RateConv *Y8960OPLL_RateConv_new(double f_inp, double f_out, int ch) {
 
   conv->ch = ch;
   conv->f_ratio = f_inp / f_out;
-  conv->buf = malloc(sizeof(void *) * ch);
+  conv->timer_step = (uint32_t)((conv->f_ratio - floor(conv->f_ratio)) * 4294967296.0);
+  conv->buf = malloc(sizeof(conv->buf[0]) * ch);
+  conv->pos = malloc(sizeof(conv->pos[0]) * ch);
   for (i = 0; i < ch; i++) {
-    conv->buf[i] = malloc(sizeof(conv->buf[0][0]) * LW);
+    conv->buf[i] = malloc(sizeof(conv->buf[0][0]) * LW * 2);
   }
 
-  /* create sinc_table for positive 0 <= x < LW/2 */
-  conv->sinc_table = malloc(sizeof(conv->sinc_table[0]) * SINC_RESO * LW / 2);
-  for (i = 0; i < SINC_RESO * LW / 2; i++) {
-    const double x = (double)i / SINC_RESO;
+  /* sinc_table[p * LW + k] is the coefficient for buf[k] at phase dn = p / SINC_RESO (0 <= p <= SINC_RESO).
+     The coefficients for p and SINC_RESO - p are the same in reverse order, but both are kept to avoid a branch. */
+  conv->sinc_table = malloc(sizeof(conv->sinc_table[0]) * (SINC_RESO + 1) * LW);
+  for (i = 0; i < (SINC_RESO + 1) * LW; i++) {
+    const double x = fabs((i % LW) - (LW / 2 - 1) - (double)(i / LW) / SINC_RESO);
     if (f_out < f_inp) {
       /* for downsampling */
       conv->sinc_table[i] = (int16_t)((1 << SINC_AMP_BITS) * windowed_sinc(x / conv->f_ratio) / conv->f_ratio);
@@ -342,18 +346,24 @@ Y8960OPLL_RateConv *Y8960OPLL_RateConv_new(double f_inp, double f_out, int ch) {
   return conv;
 }
 
-static INLINE int16_t lookup_sinc_table(int16_t *table, double x) {
-  int16_t index = (int16_t)(x * SINC_RESO);
-  if (index < 0)
-    index = -index;
-  return table[min(SINC_RESO * LW / 2 - 1, index)];
+/* p is the output phase in SINC_RESO units (0 <= p <= SINC_RESO). */
+static INLINE int16_t rateconv_get(Y8960OPLL_RateConv *conv, int ch, uint32_t p) {
+  const int16_t *buf = conv->buf[ch] + conv->pos[ch];
+  const int16_t *coef = conv->sinc_table + p * LW;
+  int32_t sum = 0;
+  int k;
+  for (k = 0; k < LW; k++) {
+    sum += buf[k] * coef[k];
+  }
+  return sum >> SINC_AMP_BITS;
 }
 
 void Y8960OPLL_RateConv_reset(Y8960OPLL_RateConv *conv) {
   int i;
   conv->timer = 0;
   for (i = 0; i < conv->ch; i++) {
-    memset(conv->buf[i], 0, sizeof(conv->buf[i][0]) * LW);
+    conv->pos[i] = 0;
+    memset(conv->buf[i], 0, sizeof(conv->buf[i][0]) * LW * 2);
   }
 }
 
@@ -362,29 +372,16 @@ int Y8960OPLL_RateConv_getBufferLength(void) { return LW; }
 /* put original data to this converter at f_inp. */
 void Y8960OPLL_RateConv_putData(Y8960OPLL_RateConv *conv, int ch, int16_t data) {
   int16_t *buf = conv->buf[ch];
-  int i;
-  for (i = 0; i < LW - 1; i++) {
-    buf[i] = buf[i + 1];
-  }
-  buf[LW - 1] = data;
+  int pos = conv->pos[ch];
+  buf[pos] = buf[pos + LW] = data;
+  conv->pos[ch] = (pos + 1 == LW) ? 0 : pos + 1;
 }
 
 /* get resampled data from this converter at f_out. */
 /* this function must be called f_out / f_inp times per one putData call. */
 int16_t Y8960OPLL_RateConv_getData(Y8960OPLL_RateConv *conv, int ch) {
-  int16_t *buf = conv->buf[ch];
-  int32_t sum = 0;
-  int k;
-  double dn;
-  conv->timer += conv->f_ratio;
-  dn = conv->timer - floor(conv->timer);
-  conv->timer = dn;
-
-  for (k = 0; k < LW; k++) {
-    double x = ((double)k - (LW / 2 - 1)) - dn;
-    sum += buf[k] * lookup_sinc_table(conv->sinc_table, x);
-  }
-  return sum >> SINC_AMP_BITS;
+  conv->timer += conv->timer_step;
+  return rateconv_get(conv, ch, (uint32_t)(((uint64_t)conv->timer + (1u << (31 - SINC_RESO_BITS))) >> (32 - SINC_RESO_BITS)));
 }
 
 void Y8960OPLL_RateConv_delete(Y8960OPLL_RateConv *conv) {
@@ -393,6 +390,7 @@ void Y8960OPLL_RateConv_delete(Y8960OPLL_RateConv *conv) {
     free(conv->buf[i]);
   }
   free(conv->buf);
+  free(conv->pos);
   free(conv->sinc_table);
   free(conv);
 }
@@ -1128,9 +1126,9 @@ INLINE static void mix_output_stereo(Y8960OPLL *opll) {
   out[0] = out[1] = 0;
   for (i = 0; i < 14; i++) {
     if (opll->pan[i] & 2)
-      out[0] += (int16_t)(opll->ch_out[i] * opll->pan_fine[i][0]);
+      out[0] += (int16_t)(opll->ch_out[i] * opll->pan_fine[i][0] / 4096);
     if (opll->pan[i] & 1)
-      out[1] += (int16_t)(opll->ch_out[i] * opll->pan_fine[i][1]);
+      out[1] += (int16_t)(opll->ch_out[i] * opll->pan_fine[i][1] / 4096);
   }
   if (opll->conv) {
     Y8960OPLL_RateConv_putData(opll->conv, 0, out[0]);
@@ -1190,8 +1188,14 @@ static void reset_rate_conversion_params(Y8960OPLL *opll) {
   const double f_inp = opll->clk / 72.0;
 
   opll->out_time = 0;
-  opll->out_step = f_inp;
-  opll->inp_step = f_out;
+  opll->out_step = opll->clk;
+  opll->inp_step = opll->rate * 72;
+  /* the largest inp_shift such that inp_recip fits in 32 bits */
+  opll->inp_shift = 32;
+  while ((((uint64_t)1 << (opll->inp_shift + 1)) - 1) / opll->inp_step < 0xffffffff) {
+    opll->inp_shift++;
+  }
+  opll->inp_recip = (uint32_t)((((uint64_t)1 << opll->inp_shift) - 1) / opll->inp_step + 1);
 
   if (opll->conv) {
     Y8960OPLL_RateConv_delete(opll->conv);
@@ -1237,7 +1241,7 @@ void Y8960OPLL_reset(Y8960OPLL *opll) {
 
   for (i = 0; i < 15; i++) {
     opll->pan[i] = 3;
-    opll->pan_fine[i][1] = opll->pan_fine[i][0] = 1.0f;
+    opll->pan_fine[i][1] = opll->pan_fine[i][0] = 4096;
   }
 
   for (i = 0; i < Y8960OPLL_REG_COUNT; i++)
@@ -1524,8 +1528,8 @@ void Y8960OPLL_writeIO(Y8960OPLL *opll, uint32_t adr, uint8_t val) {
 void Y8960OPLL_setPan(Y8960OPLL *opll, uint32_t ch, uint8_t pan) { opll->pan[ch & 15] = pan; }
 
 void Y8960OPLL_setPanFine(Y8960OPLL *opll, uint32_t ch, float pan[2]) {
-  opll->pan_fine[ch & 15][0] = pan[0];
-  opll->pan_fine[ch & 15][1] = pan[1];
+  opll->pan_fine[ch & 15][0] = (int32_t)floor(pan[0] * 4096.0 + 0.5);
+  opll->pan_fine[ch & 15][1] = (int32_t)floor(pan[1] * 4096.0 + 0.5);
 }
 
 void Y8960OPLL_dumpToPatch(const uint8_t *dump, Y8960OPLL_PATCH *patch) {
@@ -1593,6 +1597,16 @@ void Y8960OPLL_resetPatch(Y8960OPLL *opll) {
       Y8960OPLL_copyPatch(opll, bank, i, &default_patch[bank][i]);
 }
 
+/* output phase of the rate converter: round(dn * SINC_RESO), where dn = (inp_step - out_time) / inp_step
+   (or 0 if out_time is 0) is the position of the output sample between the last two input samples.
+   It is derived from out_time every time, so that it never drifts. */
+static INLINE uint32_t get_conv_phase(Y8960OPLL *opll) {
+  uint32_t d = opll->out_time ? opll->inp_step - opll->out_time : 0;
+  /* dn in 0.32 fixed point */
+  uint32_t dn = (uint32_t)(((uint64_t)d * opll->inp_recip) >> (opll->inp_shift - 32));
+  return (uint32_t)(((uint64_t)dn + (1u << (31 - SINC_RESO_BITS))) >> (32 - SINC_RESO_BITS));
+}
+
 int16_t Y8960OPLL_calc(Y8960OPLL *opll) {
   while (opll->out_step > opll->out_time) {
     opll->out_time += opll->inp_step;
@@ -1601,7 +1615,7 @@ int16_t Y8960OPLL_calc(Y8960OPLL *opll) {
   }
   opll->out_time -= opll->out_step;
   if (opll->conv) {
-    opll->mix_out[0] = Y8960OPLL_RateConv_getData(opll->conv, 0);
+    opll->mix_out[0] = rateconv_get(opll->conv, 0, get_conv_phase(opll));
   }
   return opll->mix_out[0];
 }
@@ -1614,13 +1628,9 @@ void Y8960OPLL_calcStereo(Y8960OPLL *opll, int32_t out[2]) {
   }
   opll->out_time -= opll->out_step;
   if (opll->conv) {
-    /* The converter keeps one phase for both sides and advances it on every
-    ** read, so the right side would be taken a step after the left
-    ** (digital-sound-antiques/emu2413#20). Put the phase back between them. */
-    double timer = opll->conv->timer;
-    out[0] = Y8960OPLL_RateConv_getData(opll->conv, 0);
-    opll->conv->timer = timer;
-    out[1] = Y8960OPLL_RateConv_getData(opll->conv, 1);
+    uint32_t p = get_conv_phase(opll);
+    out[0] = rateconv_get(opll->conv, 0, p);
+    out[1] = rateconv_get(opll->conv, 1, p);
   } else {
     out[0] = opll->mix_out[0];
     out[1] = opll->mix_out[1];
