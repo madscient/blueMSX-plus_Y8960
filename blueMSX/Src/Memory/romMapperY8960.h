@@ -35,15 +35,15 @@
 **
 ** A Y8960 built into an MSX2++ has neither window nor enablers, and every
 ** block answers there without being opened. It keeps its bank memory and its
-** SCC; only the window goes. */
+** SCC; only the window goes.
+**
+** The specification of 2026-10-16 struck the second OPLL and OPL2 circuits
+** and the DCSG out, and may yet move what remains; the window offsets and
+** the enabler bits are gathered at the top of romMapperY8960Scc.c. */
 typedef enum {
-    Y8960_IO_OPLL0,     /* 7CH-7DH, enabler 1 bit 0 */
-    Y8960_IO_OPLL1,     /* 7AH-7BH, enabler 1 bit 1 */
-    Y8960_IO_OPL20,     /* C0H-C1H, enabler 2 bit 0 */
-    Y8960_IO_OPL21,     /* C2H-C3H, enabler 2 bit 1 */
-    Y8960_IO_DCSG0,     /* 3EH,     enabler 2 bit 2 */
-    Y8960_IO_DCSG1,     /* 3FH,     enabler 2 bit 3 */
-    Y8960_IO_SSGS,      /* A0H-A2H, enabler 2 bit 4 */
+    Y8960_IO_OPLL,      /* 7CH-7DH, enabler 1 bit 0 */
+    Y8960_IO_OPL2,      /* C0H-C1H, enabler 2 bit 0 */
+    Y8960_IO_SSGS,      /* A0H-A1H, enabler 2 bit 4 */
     Y8960_IO_TIMER      /* B0H-B3H, enabler 2 bit 7 */
 } Y8960IoBlock;
 
@@ -56,28 +56,18 @@ int y8960IoEnabled(Y8960IoBlock block);
 ** machine that follows an MSX2++ does not inherit it. */
 void y8960SetBuiltIn(int builtIn);
 
-/* The window also tunnels writes straight into the sound blocks, at
-** 7FEAh-7FF5h. Unlike the direct I/O ports these are NOT gated by the
-** enablers: the enablers themselves are only reachable through this window,
-** so gating the tunnels would leave no way to open anything.
-**
-** Inside the window the first circuit of a pair sits at the higher address,
-** which is the opposite of the direct I/O ports for OPL2 and DCSG. The two
-** orderings were settled separately, for compatibility with earlier designs,
-** so neither can be derived from the other. */
+/* The window also tunnels writes straight into the sound blocks. Unlike the
+** direct I/O ports these are NOT gated by the enablers: the enablers
+** themselves are only reachable through this window, so gating the tunnels
+** would leave no way to open anything. */
 typedef enum {
     Y8960_TUN_SSGS,     /* 7FEAh register, 7FEBh value */
-    Y8960_TUN_OPL21,    /* 7FECh address,  7FEDh data  */
-    Y8960_TUN_OPL20,    /* 7FEEh address,  7FEFh data  */
-    Y8960_TUN_DCSG1,    /* 7FF0h, single byte          */
-    Y8960_TUN_DCSG0,    /* 7FF1h, single byte          */
-    Y8960_TUN_OPLL1,    /* 7FF2h address,  7FF3h data  */
-    Y8960_TUN_OPLL0,    /* 7FF4h address,  7FF5h data  */
+    Y8960_TUN_OPL2,     /* 7FEEh address,  7FEFh data  */
+    Y8960_TUN_OPLL,     /* 7FF4h address,  7FF5h data  */
     Y8960_TUN_COUNT
 } Y8960TunnelBlock;
 
-/* port is 0 for the address or register number and 1 for the data; blocks
-** that take a single byte only ever see 0. */
+/* port is 0 for the address or register number and 1 for the data. */
 typedef void (*Y8960TunnelWrite)(void* ref, int port, UInt8 value);
 
 /* A block registers itself when it is created and clears the entry when it
@@ -107,10 +97,8 @@ void romMapperY8960MixerDestroy(void);
 ** others it is created from the slot entry. */
 int  romMapperY8960SccCreate(const char* filename, UInt8* romData,
                              int size, int slot, int sslot, int startPage);
-int  romMapperY8960DcsgCreate(void);
-void romMapperY8960DcsgDestroy(void);
 
-/* The whole card: the SCC block plus the six other blocks, as a cartridge.
+/* The whole card: the SCC block plus the five other blocks, as a cartridge.
 ** romData may be NULL, which is the card with no firmware in it. */
 int  romMapperY8960CartCreate(const char* filename, UInt8* romData,
                               int size, int slot, int sslot);

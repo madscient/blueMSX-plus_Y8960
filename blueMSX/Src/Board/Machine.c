@@ -1298,11 +1298,6 @@ int machineInitialize(Machine* machine, UInt8** mainRam, UInt32* mainRamSize, UI
             continue;
         }
 
-        if (machine->slotInfo[i].romType == ROM_Y8960DCSG) {
-            success &= romMapperY8960DcsgCreate();
-            continue;
-        }
-
         if (machine->slotInfo[i].romType == ROM_TURBORIO) {
             success &= romMapperTurboRIOCreate();
             continue;

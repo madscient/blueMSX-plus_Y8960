@@ -828,7 +828,6 @@
     <ClCompile Include="..\..\Src\Memory\romMapperY8960Timer.c" />
     <ClCompile Include="..\..\Src\Memory\romMapperY8960Mixer.c" />
     <ClCompile Include="..\..\Src\Memory\romMapperY8960Scc.c" />
-    <ClCompile Include="..\..\Src\Memory\romMapperY8960Dcsg.c" />
     <ClCompile Include="..\..\Src\Memory\romMapperYamanooto.c" />
     <ClCompile Include="..\..\Src\Memory\SlotManager.c" />
     <ClCompile Include="..\..\Src\Memory\sramLoader.c" />
@@ -948,7 +947,6 @@
     <ClCompile Include="..\..\Src\SoundChips\SamplePlayer.c" />
     <ClCompile Include="..\..\Src\SoundChips\SCC.c" />
     <ClCompile Include="..\..\Src\SoundChips\Y8960Scc.c" />
-    <ClCompile Include="..\..\Src\SoundChips\Y8960Dcsg.c" />
     <ClCompile Include="..\..\Src\SoundChips\Y8960OpllCore.c" />
     <ClCompile Include="..\..\Src\SoundChips\Y8960Opllex.c" />
     <ClCompile Include="..\..\Src\SoundChips\Y8960Ssgs.c" />
@@ -1321,7 +1319,6 @@
     <ClInclude Include="..\..\Src\SoundChips\SamplePlayer.h" />
     <ClInclude Include="..\..\Src\SoundChips\SCC.h" />
     <ClInclude Include="..\..\Src\SoundChips\Y8960Scc.h" />
-    <ClInclude Include="..\..\Src\SoundChips\Y8960Dcsg.h" />
     <ClInclude Include="..\..\Src\SoundChips\Y8960OpllCore.h" />
     <ClInclude Include="..\..\Src\SoundChips\Y8960Opllex.h" />
     <ClInclude Include="..\..\Src\SoundChips\Y8960Ssgs.h" />

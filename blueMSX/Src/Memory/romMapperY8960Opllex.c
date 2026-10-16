@@ -31,94 +31,69 @@
 #include "AudioMixer.h"
 #include <stdlib.h>
 
-/* The first circuit answers at MSX-MUSIC's own addresses so that software
-** written for a built-in FM sound chip drives it unchanged; the second sits
-** below it. Which enabler bit opens which is the FM-PAC reading, not the
-** current RTL's -- see romMapperY8960.h and the plan's section 3.3. */
-#define Y8960_OPLL0_ADDRESS 0x7C
-#define Y8960_OPLL0_DATA    0x7D
-#define Y8960_OPLL1_ADDRESS 0x7A
-#define Y8960_OPLL1_DATA    0x7B
+/* MSX-MUSIC's own addresses, so that software written for a built-in FM
+** sound chip drives it unchanged. */
+#define Y8960_OPLL_ADDRESS 0x7C
+#define Y8960_OPLL_DATA    0x7D
 
 typedef struct {
     int              deviceHandle;
-    Y8960OpllexChip* chip[2];
+    Y8960OpllexChip* chip;
 } RomMapperY8960Opllex;
 
 static RomMapperY8960Opllex* theOpllex = NULL;
 
 static void writeIo(RomMapperY8960Opllex* rm, UInt16 port, UInt8 value)
 {
-    int index = (port == Y8960_OPLL1_ADDRESS || port == Y8960_OPLL1_DATA) ? 1 : 0;
-
-    if (!y8960IoEnabled(index ? Y8960_IO_OPLL1 : Y8960_IO_OPLL0)) {
+    if (!y8960IoEnabled(Y8960_IO_OPLL)) {
         return;
     }
 
-    if (port == Y8960_OPLL0_DATA || port == Y8960_OPLL1_DATA) {
-        y8960OpllexWriteData(rm->chip[index], value);
+    if (port == Y8960_OPLL_DATA) {
+        y8960OpllexWriteData(rm->chip, value);
     }
     else {
-        y8960OpllexWriteAddress(rm->chip[index], value);
+        y8960OpllexWriteAddress(rm->chip, value);
     }
 }
 
 /* The tunnel is not gated: the enablers live in the same window and could not
 ** be reached otherwise. */
-static void tunnel0(void* ref, int port, UInt8 value)
+static void tunnel(void* ref, int port, UInt8 value)
 {
     RomMapperY8960Opllex* rm = (RomMapperY8960Opllex*)ref;
 
     if (port) {
-        y8960OpllexWriteData(rm->chip[0], value);
+        y8960OpllexWriteData(rm->chip, value);
     }
     else {
-        y8960OpllexWriteAddress(rm->chip[0], value);
-    }
-}
-
-static void tunnel1(void* ref, int port, UInt8 value)
-{
-    RomMapperY8960Opllex* rm = (RomMapperY8960Opllex*)ref;
-
-    if (port) {
-        y8960OpllexWriteData(rm->chip[1], value);
-    }
-    else {
-        y8960OpllexWriteAddress(rm->chip[1], value);
+        y8960OpllexWriteAddress(rm->chip, value);
     }
 }
 
 static void reset(RomMapperY8960Opllex* rm)
 {
-    y8960OpllexReset(rm->chip[0]);
-    y8960OpllexReset(rm->chip[1]);
+    y8960OpllexReset(rm->chip);
 }
 
 static void saveState(RomMapperY8960Opllex* rm)
 {
-    y8960OpllexSaveState(rm->chip[0]);
-    y8960OpllexSaveState(rm->chip[1]);
+    y8960OpllexSaveState(rm->chip);
 }
 
 static void loadState(RomMapperY8960Opllex* rm)
 {
-    y8960OpllexLoadState(rm->chip[0]);
-    y8960OpllexLoadState(rm->chip[1]);
+    y8960OpllexLoadState(rm->chip);
 }
 
 static void destroy(RomMapperY8960Opllex* rm)
 {
-    y8960UnregisterTunnel(Y8960_TUN_OPLL0, rm);
-    y8960UnregisterTunnel(Y8960_TUN_OPLL1, rm);
+    y8960UnregisterTunnel(Y8960_TUN_OPLL, rm);
 
-    ioPortUnregister(Y8960_OPLL0_ADDRESS, rm);
-    ioPortUnregister(Y8960_OPLL0_DATA, rm);
-    ioPortUnregister(Y8960_OPLL1_ADDRESS, rm);
-    ioPortUnregister(Y8960_OPLL1_DATA, rm);
+    ioPortUnregister(Y8960_OPLL_ADDRESS, rm);
+    ioPortUnregister(Y8960_OPLL_DATA, rm);
 
-    y8960OpllexDestroy(rm->chip[0]);
-    y8960OpllexDestroy(rm->chip[1]);
+    y8960OpllexDestroy(rm->chip);
 
     deviceManagerUnregister(rm->deviceHandle);
 
@@ -143,18 +118,14 @@ int romMapperY8960OpllexCreate(void)
 
     theOpllex = rm;
 
-    rm->chip[0] = y8960OpllexCreate(boardGetMixer(), "Y8960 OPLLEX 0");
-    rm->chip[1] = y8960OpllexCreate(boardGetMixer(), "Y8960 OPLLEX 1");
+    rm->chip = y8960OpllexCreate(boardGetMixer(), "Y8960 OPLLEX");
 
     /* Write only, as the FM-PAC's own 7Ch-7Dh are: these addresses are shared
     ** with the machine's MSX-MUSIC when one is present. */
-    ioPortRegister(Y8960_OPLL0_ADDRESS, NULL, writeIo, rm);
-    ioPortRegister(Y8960_OPLL0_DATA, NULL, writeIo, rm);
-    ioPortRegister(Y8960_OPLL1_ADDRESS, NULL, writeIo, rm);
-    ioPortRegister(Y8960_OPLL1_DATA, NULL, writeIo, rm);
+    ioPortRegister(Y8960_OPLL_ADDRESS, NULL, writeIo, rm);
+    ioPortRegister(Y8960_OPLL_DATA, NULL, writeIo, rm);
 
-    y8960RegisterTunnel(Y8960_TUN_OPLL0, tunnel0, rm);
-    y8960RegisterTunnel(Y8960_TUN_OPLL1, tunnel1, rm);
+    y8960RegisterTunnel(Y8960_TUN_OPLL, tunnel, rm);
 
     reset(rm);
 

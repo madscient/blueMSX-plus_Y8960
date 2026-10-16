@@ -204,7 +204,8 @@ MegaFlashROM SCC+ SD に触れているが、PR に本文も参照も無く、#7
 
 ## Y8960 の実装状況
 
-**7 ブロックが `RomType` を持ち、マシン構成に個別に置ける。すべてに中身が入っている。**
+**6 ブロックが `RomType` を持ち、マシン構成に個別に置ける。すべてに中身が入っている。**
+DCSG と、OPLLEX / OPL2EX の 2 回路目は 2026-10-16 の仕様書でハードウェアから消え、外した（RomType 206 は欠番）。
 加えて基盤タイプ `MSX2++`（Y8960 内蔵、SSGS が本体の PSG）がある。
 
 | ブロック | 状態 | 土台 |
@@ -215,15 +216,14 @@ MegaFlashROM SCC+ SD に触れているが、PR に本文も参照も無く、#7
 | MSX-TIMER | 実装済み・**音は持たない** | 新規 |
 | MSX-MIXER | **入口のみ**（実機側が未実装） | 新規 |
 | Y8960 SCC + マッパー | 実装済み・**音を確認** | `Src/SoundChips/Y8960Scc.c`（`SCC.c` のフォーク）+ 新規マッパー |
-| DCSG | 実装済み・**音を確認** | `Src/SoundChips/Y8960Dcsg.c`（`SN76489.c` のフォーク） |
 | I/O イネーブラ / MMIO 窓 | 実装済み | SCC のマッパーが持つ |
 
-**5 つの音源ブロックすべてを、エミュレータの中で人が聴いて確かめた。**
-SCC と DCSG は録音からも判定している（`y8960/tests/sndtest.asm`）。
+**4 つの音源ブロックすべてを、エミュレータの中で人が聴いて確かめた。**
+SCC は録音からも判定している（`y8960/tests/sndtest.asm`）。
 **タイマ割り込みが CPU に届くことも確かめた**（`banktest` の 19）。
 詳細は `y8960/implementation-plan.md` の §0 と各 §「確かめたこと」。
 
-**カートリッジ内の音源ブロックは、SCC や DCSG そのものではなく等価回路である。**
+**カートリッジ内の音源ブロックは、SCC そのものではなく等価回路である。**
 だから本体のコアを共有せず、フォークとして実装している
 （openMSX_Y8960 と同じ方針。経緯は `y8960/implementation-plan.md` §11 の
 2026-09-12 (10)）。**上流の `SCC.{c,h}` と `SN76489.{c,h}` には手を入れていない。**
@@ -276,7 +276,7 @@ blueMSX+ のファイルは冒頭に帰属を持つ。**どれも消さない。
 | `Src/SoundChips/Emu2413/` | MIT (Mitsutaka Okazaki) |
 | `Src/SoundChips/NukedOPLL/` | GPLv2 |
 | `Src/SoundChips/OpenMsxY8950Latest/` | GPL（openMSX 由来） |
-| `Src/SoundChips/AY8910.c` / `SN76489.c` / `SCC.c` | GPLv2（blueMSX 由来） |
+| `Src/SoundChips/AY8910.c` / `SCC.c` | GPLv2（blueMSX 由来） |
 
 `Src/SoundChips/Y8960OpllCore.c` は Emu2413 のフォークなので MIT 表示を引き継ぎ、
 音色データの CC BY-SA 表示を併せて持つ。

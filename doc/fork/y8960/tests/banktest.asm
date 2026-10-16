@@ -23,17 +23,15 @@ REG_MOD equ     04ffbh          ; RAM mode register, visible in both modes
 REG_B1R equ     04ffdh          ; BANK1 register, RAM mode
 SCC_B1  equ     07800h          ; SCC window inside BANK1
 
-ENA1    equ     07ff6h          ; I/O enabler 1: b0 = OPLL1, b1 = OPLL2
-ENA2    equ     07fffh          ; I/O enabler 2: b0 = OPL2-1, b1 = OPL2-2
-TUN0A   equ     07ff4h          ; tunnel to OPLL circuit 1, address
-TUN0D   equ     07ff5h          ; tunnel to OPLL circuit 1, data
-TUNC0A  equ     07feeh          ; tunnel to OPL2 circuit 1, address
-TUNC0D  equ     07fefh          ; tunnel to OPL2 circuit 1, data
+ENA1    equ     07ff6h          ; I/O enabler 1: b0 = OPLL
+ENA2    equ     07fffh          ; I/O enabler 2: b0 = OPL2, b4 = SSGS, b7 = TIMER
+TUN0A   equ     07ff4h          ; tunnel to the OPLL, address
+TUN0D   equ     07ff5h          ; tunnel to the OPLL, data
+TUNC0A  equ     07feeh          ; tunnel to the OPL2, address
+TUNC0D  equ     07fefh          ; tunnel to the OPL2, data
 
-OPL20A  equ     0c0h            ; OPL2 circuit 1: address / status
-OPL20D  equ     0c1h            ; OPL2 circuit 1: data
-OPL21A  equ     0c2h            ; OPL2 circuit 2
-OPL21D  equ     0c3h
+OPL20A  equ     0c0h            ; OPL2: address / status
+OPL20D  equ     0c1h            ; OPL2: data
 
 TUNGA   equ     07feah          ; tunnel to the SSGS, register
 TUNGD   equ     07febh          ; tunnel to the SSGS, value
@@ -282,40 +280,12 @@ t7_wait:
 
         ld      hl, msg_t7ok
         call    print
-        jr      t8
+        jr      t9
 
 t7_fail:
         ld      hl, msg_t7ng
         call    print
-        jr      t8
-
-; --- 8. DCSG: the enabler gates the direct port, the tunnel ignores it
-;
-; Nothing here can be read back - the chip is write only. These writes are
-; for a probe placed in the DCSG block; the values are distinct so its log
-; shows which write arrived. The same gates are judged without a probe by
-; sndtest.asm, from a recording.
-t8:
-        ld      a, 080h                 ; timer on, both DCSG closed
-        ld      (07fffh), a
-        ld      a, 011h
-        out     (03eh), a               ; must not arrive
-
-        ld      a, 084h                 ; timer + DCSG0 (bit 2)
-        ld      (07fffh), a
-        ld      a, 022h
-        out     (03eh), a               ; must arrive on channel 0
-
-        ld      a, 033h
-        out     (03fh), a               ; DCSG1 still closed, must not arrive
-
-        ld      a, 044h
-        ld      (07ff1h), a             ; tunnel to DCSG0, never gated
-        ld      a, 055h
-        ld      (07ff0h), a             ; tunnel to DCSG1, never gated
-
-        ld      hl, msg_t8
-        call    print
+        jr      t9
 
 ; The memory mapped window is not tested here.
 ;
@@ -373,16 +343,7 @@ t9:
         xor     a
         out     (07dh), a
 
-; D: the second circuit, on 7Ah-7Bh, with the first one shut
-        ld      hl, msg_t9d
-        call    print
-        ld      a, 002h
-        ld      (ENA1), a
-        call    note1
-        call    delay
-        call    off1
-
-; E: the tunnel, which the enabler does not gate
+; D: the tunnel, which the enabler does not gate
         ld      hl, msg_t9e
         call    print
         xor     a
@@ -391,9 +352,9 @@ t9:
         call    delay
         call    offt
 
-; --- 10. OPL2EX: the gate, the tunnel and the two circuits, all read back
+; --- 10. OPL2EX: the gate and the tunnel, read back
 ;
-; This block answers reads, so unlike the OPLL and the DCSG it can say for
+; This block answers reads, so unlike the OPLL it can say for
 ; itself whether a write arrived. Each step leaves a value that the next one
 ; would not produce by accident.
 t10:
@@ -439,27 +400,6 @@ t10:
         cp      02ah
         jr      nz, t10_fail
 
-; d. the second circuit is a separate chip
-        ld      a, 002h                 ; circuit 2 open, circuit 1 shut
-        ld      (ENA2), a
-        ld      a, 040h
-        out     (OPL21A), a
-        ld      a, 015h
-        out     (OPL21D), a
-        ld      a, 040h
-        out     (OPL21A), a
-        in      a, (OPL21D)
-        cp      015h
-        jr      nz, t10_fail
-
-        ld      a, 001h                 ; circuit 1 must still hold its own
-        ld      (ENA2), a
-        ld      a, 040h
-        out     (OPL20A), a
-        in      a, (OPL20D)
-        cp      02ah
-        jr      nz, t10_fail
-
         ld      hl, msg_t10ok
         call    print
         jr      t11
@@ -468,7 +408,7 @@ t10_fail:
         ld      hl, msg_t10ng
         call    print
 
-; --- 11. OPL2EX: four tones, judged by ear
+; --- 11. OPL2EX: three tones, judged by ear
 ;
 ; A names the waveform the YM3812 has and the Y8950 does not, so hearing A and
 ; B alike means the waveform register did nothing.
@@ -476,7 +416,7 @@ t11:
         ld      hl, msg_t11
         call    print
 
-        ld      a, 003h                 ; both circuits open
+        ld      a, 001h                 ; the OPL2 open
         ld      (ENA2), a
 
         ld      hl, msg_t11a
@@ -495,17 +435,9 @@ t11:
         ld      hl, opl2_off
         call    send0
 
-        ld      hl, msg_t11c
-        call    print
-        ld      hl, opl2_sine
-        call    send1
-        call    delay
-        ld      hl, opl2_off
-        call    send1
-
         ld      hl, msg_t11d
         call    print
-        xor     a                       ; both circuits shut again
+        xor     a                       ; shut again
         ld      (ENA2), a
         ld      hl, opl2_sine
         call    sendt
@@ -991,8 +923,8 @@ sendg:
         inc     hl
         jr      sendg
 
-; HL -> a register list. The two ports of each circuit are adjacent, but the
-; tunnel is written as memory, so the three cannot share one routine.
+; HL -> a register list. The two ports are adjacent, but the tunnel is
+; written as memory, so the two cannot share one routine.
 send0:
         ld      a, (hl)
         cp      0ffh
@@ -1003,17 +935,6 @@ send0:
         out     (OPL20D), a
         inc     hl
         jr      send0
-
-send1:
-        ld      a, (hl)
-        cp      0ffh
-        ret     z
-        out     (OPL21A), a
-        inc     hl
-        ld      a, (hl)
-        out     (OPL21D), a
-        inc     hl
-        jr      send1
 
 sendt:
         ld      a, (hl)
@@ -1048,28 +969,6 @@ off0:
         out     (07ch), a
         ld      a, 009h
         out     (07dh), a
-        ret
-
-note1:
-        ld      a, 030h
-        out     (07ah), a
-        ld      a, 010h
-        out     (07bh), a
-        ld      a, 010h
-        out     (07ah), a
-        ld      a, 080h
-        out     (07bh), a
-        ld      a, 020h
-        out     (07ah), a
-        ld      a, 019h
-        out     (07bh), a
-        ret
-
-off1:
-        ld      a, 020h
-        out     (07ah), a
-        ld      a, 009h
-        out     (07bh), a
         ret
 
 notet:
@@ -1145,8 +1044,6 @@ msg_t7ok:
         db      "7 TIMER FLAG: OK", 13, 10, 0
 msg_t7ng:
         db      "7 TIMER FLAG: NG", 13, 10, 0
-msg_t8:
-        db      "8 DCSG SWEPT (SEE SNDTEST)", 13, 10, 0
 msg_t9:
         db      "9 OPLL (LISTEN):", 13, 10, 0
 msg_t9a:
@@ -1155,10 +1052,8 @@ msg_t9b:
         db      " B 7CH OPEN: EXPECT TONE", 13, 10, 0
 msg_t9c:
         db      " C BANK 1: OTHER TIMBRE", 13, 10, 0
-msg_t9d:
-        db      " D 7AH 2ND CIRCUIT: TONE", 13, 10, 0
 msg_t9e:
-        db      " E TUNNEL, SHUT: TONE", 13, 10, 0
+        db      " D TUNNEL, SHUT: TONE", 13, 10, 0
 msg_t10ok:
         db      "10 OPL2 READ BACK: OK", 13, 10, 0
 msg_t10ng:
@@ -1169,10 +1064,8 @@ msg_t11a:
         db      " A SINE", 13, 10, 0
 msg_t11b:
         db      " B HALF SINE: OTHER TONE", 13, 10, 0
-msg_t11c:
-        db      " C 2ND CIRCUIT: TONE", 13, 10, 0
 msg_t11d:
-        db      " D TUNNEL, SHUT: TONE", 13, 10, 0
+        db      " C TUNNEL, SHUT: TONE", 13, 10, 0
 msg_t12:
         db      "12 SSGS (LISTEN):", 13, 10, 0
 msg_t12a:

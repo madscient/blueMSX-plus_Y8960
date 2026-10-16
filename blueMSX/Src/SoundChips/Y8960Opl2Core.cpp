@@ -33,7 +33,7 @@
 ** map is the Y8950's, so this is the Y8950 port with three changes: the four
 ** waveforms a YM3812 has and a Y8950 does not, the MSX-AUDIO parts the
 ** cartridge does not carry (keyboard connector, 13 bit DAC, periphery), and a
-** sample RAM that lives outside the circuit so that two circuits can share it.
+** sample RAM that lives outside the circuit, where the block owns it.
 **
 ** It is a fork rather than an extension because the machine's own MSX-AUDIO
 ** keeps using the unmodified port; both end up in one binary. The namespace
@@ -400,10 +400,10 @@ static constexpr auto INPUT_RATE = unsigned(
 /* class Y8950 ------------------------------------------------------ */
 
 Y8950::Y8950(const std::string& name_, const DeviceConfig& config,
-             SampleRam& sampleRam, int circuit, UInt32 irqMask, EmuTime time)
+             SampleRam& sampleRam, UInt32 irqMask, EmuTime time)
     : ResampledSoundDevice(config.getMotherBoard(), name_, "Y8960 OPL2EX", 9 + 5 + 1, INPUT_RATE, false)
     , motherBoard(config.getMotherBoard())
-    , adpcm(std::make_unique<Y8950Adpcm>(*this, config, name_, sampleRam, circuit))
+    , adpcm(std::make_unique<Y8950Adpcm>(*this, config, name_, sampleRam))
     , timer1(EmuTimer::createOPL3_1(motherBoard.getScheduler(), *this))
     , timer2(EmuTimer::createOPL3_2(motherBoard.getScheduler(), *this))
     , irq(irqMask)

@@ -1,7 +1,7 @@
 /*****************************************************************************
 **
-** Y8960 cartridge - the OPL2EX block: two YM3812 + ADPCM-B circuits that
-** share one sample RAM.
+** Y8960 cartridge - the OPL2EX block: a YM3812 + ADPCM-B circuit with the
+** cartridge's sample RAM.
 **
 ** Copyright (C) 2026 madscient
 ** See https://github.com/madscient/blueMSX-plus_Y8960 for change history.
@@ -34,47 +34,42 @@ extern "C" {
 
 #include <cstdio>
 #include <cstring>
-#include <memory>
 #include <string>
 #include <vector>
 
 #define FREQUENCY  3579545
 #define SAMPLERATE (FREQUENCY / 72)
 
-#define Y8960_OPL2EX_CIRCUITS 2
-
-/* 256kB, the whole of the cartridge's sample RAM. Which part each circuit
-** sees is the sample RAM's business, not this file's. */
+/* 256kB, the whole of the cartridge's sample RAM. */
 #define Y8960_OPL2EX_SAMPLE_RAM (256 * 1024)
 
-/* Bits nothing else in the emulator claims; the MSX-TIMER block took 0x1000
-** the same way. One per circuit, so that clearing one does not drop the
-** other's pending interrupt. */
-static const UInt32 Y8960_OPL2EX_IRQ[Y8960_OPL2EX_CIRCUITS] = { 0x2000, 0x4000 };
+/* A bit nothing else in the emulator claims; the MSX-TIMER block took 0x1000
+** the same way. */
+#define Y8960_OPL2EX_IRQ 0x2000
 
-/* The same << 1 the machine's own Y8950 port applies, so a block lands where
+/* The same << 1 the machine's own Y8950 port applies, so the block lands where
 ** the chip it stands in for would. Whether it balances against the other
 ** Y8960 blocks is unverified; that is the mixer block's question. */
 #define Y8960_OPL2EX_GAIN_SHIFT 1
 
-namespace {
+struct Y8960Opl2ex {
+    Mixer*                          mixer;
+    y8960opl2::MSXMotherBoard       mb;
+    y8960opl2::DeviceConfig         cfg;
+    y8960opl2::SampleRam            ram;
+    y8960opl2::Y8950                chip;
+    std::vector<int32_t>            chipSamples;
+    Int32                           handle;
+    Int32                           debugHandle;
+    UInt32                          mixerRate;
+    Int32                           off, o1, o2;
+    UInt8                           latchedAddr;
+    UInt8                           regCache[256];
+    Int32                           buffer[AUDIO_MONO_BUFFER_SIZE];
 
-struct Circuit {
-    Mixer*                 mixer;
-    y8960opl2::Y8950       chip;
-    std::vector<int32_t>   chipSamples;
-    Int32                  handle;
-    Int32                  debugHandle;
-    UInt32                 mixerRate;
-    Int32                  off, o1, o2;
-    UInt8                  latchedAddr;
-    UInt8                  regCache[256];
-    Int32                  buffer[AUDIO_MONO_BUFFER_SIZE];
-
-    Circuit(Mixer* mixer_, const std::string& name, y8960opl2::DeviceConfig& cfg,
-            y8960opl2::SampleRam& ram, int index, y8960opl2::EmuTime time)
-        : mixer(mixer_)
-        , chip(name, cfg, ram, index, Y8960_OPL2EX_IRQ[index], time)
+    Y8960Opl2ex(Mixer* mixer_, const std::string& name, y8960opl2::EmuTime time)
+        : mixer(mixer_), cfg(mb), ram(Y8960_OPL2EX_SAMPLE_RAM)
+        , chip(name, cfg, ram, Y8960_OPL2EX_IRQ, time)
         , handle(0), debugHandle(0), mixerRate(SAMPLERATE)
         , off(0), o1(0), o2(0), latchedAddr(0)
     {
@@ -83,26 +78,12 @@ struct Circuit {
     }
 };
 
-} // namespace
-
-struct Y8960Opl2ex {
-    Mixer*                          mixer;
-    y8960opl2::MSXMotherBoard       mb;
-    y8960opl2::DeviceConfig         cfg;
-    y8960opl2::SampleRam            ram;
-    std::unique_ptr<Circuit>        circuit[Y8960_OPL2EX_CIRCUITS];
-
-    Y8960Opl2ex(Mixer* mixer_)
-        : mixer(mixer_), cfg(mb), ram(Y8960_OPL2EX_SAMPLE_RAM)
-    {}
-};
-
 /* The chip runs at clock/72 whatever the mixer wants, so the extra samples are
 ** resampled here. Asking the chip for more than the loop consumes turns voices
 ** into buzz, so the count is worked out before the chip is advanced. */
 static Int32* sync(void* ref, UInt32 count)
 {
-    Circuit& c = *(Circuit*)ref;
+    Y8960Opl2ex& c = *(Y8960Opl2ex*)ref;
     Int32 simOff = c.off;
     int chipNeed;
 
@@ -150,13 +131,13 @@ static Int32* sync(void* ref, UInt32 count)
 
 static void setRate(void* ref, UInt32 rate)
 {
-    Circuit& c = *(Circuit*)ref;
+    Y8960Opl2ex& c = *(Y8960Opl2ex*)ref;
     c.mixerRate = rate ? rate : SAMPLERATE;
 }
 
 static void getDebugInfo(void* ref, DbgDevice* dbgDevice)
 {
-    Circuit& c = *(Circuit*)ref;
+    Y8960Opl2ex& c = *(Y8960Opl2ex*)ref;
     DbgRegisterBank* regBank;
     int r;
 
@@ -171,135 +152,103 @@ static void getDebugInfo(void* ref, DbgDevice* dbgDevice)
 
 extern "C" {
 
-void y8960Opl2exReset(Y8960Opl2ex* dev)
+void y8960Opl2exReset(Y8960Opl2ex* c)
 {
-    y8960opl2::EmuTime time = (y8960opl2::EmuTime)boardSystemTime();
-
-    for (int i = 0; i < Y8960_OPL2EX_CIRCUITS; i++) {
-        Circuit& c = *dev->circuit[i];
-        c.chip.reset(time);
-        c.off = 0;
-        c.o1  = 0;
-        c.o2  = 0;
-        c.latchedAddr = 0;
-        memset(c.regCache, 0, sizeof(c.regCache));
-    }
+    c->chip.reset((y8960opl2::EmuTime)boardSystemTime());
+    c->off = 0;
+    c->o1  = 0;
+    c->o2  = 0;
+    c->latchedAddr = 0;
+    memset(c->regCache, 0, sizeof(c->regCache));
 }
 
-void y8960Opl2exWrite(Y8960Opl2ex* dev, int index, int port, UInt8 value)
+void y8960Opl2exWrite(Y8960Opl2ex* c, int port, UInt8 value)
 {
-    Circuit& c = *dev->circuit[index];
-
-    mixerSync(c.mixer);
+    mixerSync(c->mixer);
 
     if ((port & 1) == 0) {
-        c.latchedAddr = value;
+        c->latchedAddr = value;
     }
     else {
-        c.regCache[c.latchedAddr] = value;
-        c.chip.writeReg(c.latchedAddr, value, (y8960opl2::EmuTime)boardSystemTime());
+        c->regCache[c->latchedAddr] = value;
+        c->chip.writeReg(c->latchedAddr, value, (y8960opl2::EmuTime)boardSystemTime());
     }
 }
 
-UInt8 y8960Opl2exRead(Y8960Opl2ex* dev, int index, int port)
+UInt8 y8960Opl2exRead(Y8960Opl2ex* c, int port)
 {
-    Circuit& c = *dev->circuit[index];
-
     /* A read brings the ADPCM up to date, and that can end a sample. What
     ** the mixer has not been given by then would come out silent. */
-    mixerSync(c.mixer);
+    mixerSync(c->mixer);
 
     if ((port & 1) == 0) {
-        return c.chip.readStatus((y8960opl2::EmuTime)boardSystemTime());
+        return c->chip.readStatus((y8960opl2::EmuTime)boardSystemTime());
     }
-    return c.chip.readReg(c.latchedAddr, (y8960opl2::EmuTime)boardSystemTime());
+    return c->chip.readReg(c->latchedAddr, (y8960opl2::EmuTime)boardSystemTime());
 }
 
-UInt8 y8960Opl2exPeek(Y8960Opl2ex* dev, int index, int port)
+UInt8 y8960Opl2exPeek(Y8960Opl2ex* c, int port)
 {
-    Circuit& c = *dev->circuit[index];
-
     if ((port & 1) == 0) {
-        return c.chip.peekStatus((y8960opl2::EmuTime)boardSystemTime());
+        return c->chip.peekStatus((y8960opl2::EmuTime)boardSystemTime());
     }
-    return c.chip.peekReg(c.latchedAddr, (y8960opl2::EmuTime)boardSystemTime());
+    return c->chip.peekReg(c->latchedAddr, (y8960opl2::EmuTime)boardSystemTime());
 }
 
-/* One section per circuit, plus one for the sample RAM they share. The
-** framework numbers repeated section names, so the two circuits must be
-** written and read in the same order. */
-void y8960Opl2exSaveState(Y8960Opl2ex* dev)
+/* One section for the circuit and one for the sample RAM. */
+void y8960Opl2exSaveState(Y8960Opl2ex* c)
 {
-    for (int i = 0; i < Y8960_OPL2EX_CIRCUITS; i++) {
-        Circuit& c = *dev->circuit[i];
+    {
         SaveState* s = saveStateOpenForWrite("y8960opl2ex");
-        saveStateSet      (s, "latchedAddr", c.latchedAddr);
-        saveStateSetBuffer(s, "regCache",    c.regCache, sizeof(c.regCache));
-        c.chip.blueMsxSaveStateImpl(s);
+        saveStateSet      (s, "latchedAddr", c->latchedAddr);
+        saveStateSetBuffer(s, "regCache",    c->regCache, sizeof(c->regCache));
+        c->chip.blueMsxSaveStateImpl(s);
         saveStateClose(s);
     }
-
     {
         SaveState* s = saveStateOpenForWrite("y8960opl2ram");
-        saveStateSet      (s, "mode", (UInt32)dev->ram.getMode());
-        saveStateSetBuffer(s, "ram",  dev->ram.raw(), dev->ram.size());
+        saveStateSetBuffer(s, "ram", c->ram.raw(), c->ram.size());
         saveStateClose(s);
     }
 }
 
-void y8960Opl2exLoadState(Y8960Opl2ex* dev)
+void y8960Opl2exLoadState(Y8960Opl2ex* c)
 {
-    for (int i = 0; i < Y8960_OPL2EX_CIRCUITS; i++) {
-        Circuit& c = *dev->circuit[i];
+    {
         SaveState* s = saveStateOpenForRead("y8960opl2ex");
-        c.latchedAddr = (UInt8)saveStateGet(s, "latchedAddr", 0);
-        saveStateGetBuffer(s, "regCache", c.regCache, sizeof(c.regCache));
-        c.chip.blueMsxLoadStateImpl(s);
+        c->latchedAddr = (UInt8)saveStateGet(s, "latchedAddr", 0);
+        saveStateGetBuffer(s, "regCache", c->regCache, sizeof(c->regCache));
+        c->chip.blueMsxLoadStateImpl(s);
         saveStateClose(s);
     }
-
     {
         SaveState* s = saveStateOpenForRead("y8960opl2ram");
-        UInt32 mode = saveStateGet(s, "mode", (UInt32)y8960opl2::SampleRam::SHARED);
-        dev->ram.setMode((y8960opl2::SampleRam::Mode)mode);
-        saveStateGetBuffer(s, "ram", dev->ram.raw(), dev->ram.size());
+        saveStateGetBuffer(s, "ram", c->ram.raw(), c->ram.size());
         saveStateClose(s);
     }
 }
 
 Y8960Opl2ex* y8960Opl2exCreate(Mixer* mixer)
 {
-    static const char* const names[Y8960_OPL2EX_CIRCUITS] = {
-        "Y8960 OPL2EX 0", "Y8960 OPL2EX 1"
-    };
+    static const char* const name = "Y8960 OPL2EX";
     DebugCallbacks dbgCallbacks = { getDebugInfo, NULL, NULL, NULL };
-    Y8960Opl2ex* dev = new Y8960Opl2ex(mixer);
-    y8960opl2::EmuTime time = (y8960opl2::EmuTime)boardSystemTime();
+    Y8960Opl2ex* c = new Y8960Opl2ex(mixer, name, (y8960opl2::EmuTime)boardSystemTime());
 
-    for (int i = 0; i < Y8960_OPL2EX_CIRCUITS; i++) {
-        dev->circuit[i].reset(new Circuit(mixer, names[i], dev->cfg, dev->ram, i, time));
+    c->mixerRate   = mixerGetSampleRate(mixer);
+    c->handle      = mixerRegisterChannel(mixer, MIXER_CHANNEL_Y8960, 0, sync, setRate, c);
+    c->debugHandle = debugDeviceRegister(DBGTYPE_AUDIO, name, &dbgCallbacks, c);
 
-        Circuit& c = *dev->circuit[i];
-        c.mixerRate   = mixerGetSampleRate(mixer);
-        c.handle      = mixerRegisterChannel(mixer, MIXER_CHANNEL_Y8960, 0,
-                                             sync, setRate, &c);
-        c.debugHandle = debugDeviceRegister(DBGTYPE_AUDIO, names[i], &dbgCallbacks, &c);
-    }
+    y8960Opl2exReset(c);
 
-    y8960Opl2exReset(dev);
-
-    return dev;
+    return c;
 }
 
-void y8960Opl2exDestroy(Y8960Opl2ex* dev)
+void y8960Opl2exDestroy(Y8960Opl2ex* c)
 {
-    for (int i = 0; i < Y8960_OPL2EX_CIRCUITS; i++) {
-        Circuit& c = *dev->circuit[i];
-        debugDeviceUnregister(c.debugHandle);
-        mixerUnregisterChannel(dev->mixer, c.handle);
-    }
+    debugDeviceUnregister(c->debugHandle);
+    mixerUnregisterChannel(c->mixer, c->handle);
 
-    delete dev;
+    delete c;
 }
 
 } // extern "C"

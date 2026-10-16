@@ -33,7 +33,7 @@
 ** map is the Y8950's, so this is the Y8950 port with three changes: the four
 ** waveforms a YM3812 has and a Y8950 does not, the MSX-AUDIO parts the
 ** cartridge does not carry (keyboard connector, 13 bit DAC, periphery), and a
-** sample RAM that lives outside the circuit so that two circuits can share it.
+** sample RAM that lives outside the circuit, where the block owns it.
 **
 ** It is a fork rather than an extension because the machine's own MSX-AUDIO
 ** keeps using the unmodified port; both end up in one binary. The namespace
@@ -59,7 +59,7 @@ class Y8950Adpcm final : public Schedulable
 {
 public:
     Y8950Adpcm(Y8950& y8950, const DeviceConfig& config,
-               const std::string& name, SampleRam& sampleRam, int circuit);
+               const std::string& name, SampleRam& sampleRam);
 	
     void clearRam();
     void reset(EmuTime time);
@@ -71,7 +71,7 @@ public:
     void sync(EmuTime time);
     void resetStatus();
     
-    /* The sample RAM is not saved here; it belongs to the pair of circuits. */
+    /* The sample RAM is not saved here; it belongs to the block. */
     void blueMsxSaveStateImpl(::SaveState* state);
     void blueMsxLoadStateImpl(::SaveState* state);
 
@@ -104,7 +104,6 @@ private:
 private:
     Y8950& y8950;
     SampleRam& ram;
-    const int circuit;
 
     static constexpr int CLOCK_FREQ     = 3579545;
     static constexpr int CLOCK_FREQ_DIV = 72;

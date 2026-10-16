@@ -33,7 +33,7 @@
 ** map is the Y8950's, so this is the Y8950 port with three changes: the four
 ** waveforms a YM3812 has and a Y8950 does not, the MSX-AUDIO parts the
 ** cartridge does not carry (keyboard connector, 13 bit DAC, periphery), and a
-** sample RAM that lives outside the circuit so that two circuits can share it.
+** sample RAM that lives outside the circuit, where the block owns it.
 **
 ** It is a fork rather than an extension because the machine's own MSX-AUDIO
 ** keeps using the unmodified port; both end up in one binary. The namespace
@@ -199,54 +199,23 @@ private:
     BoardTimer* timer = nullptr;
 };
 
-/* The cartridge carries one sample RAM for both OPL2EX circuits, and how it is
-** divided between them is a setting the hardware does not implement yet. Only
-** SHARED is reachable; the other three are here because the register that
-** selects them is the only thing missing, whereas a circuit that owned its own
-** RAM would have to be taken apart to add them later.
-**
-** A circuit addresses its window from zero and cannot see past it. */
+/* The cartridge's sample RAM, behind the ADPCM. It lives outside the circuit
+** so that the block owns it and saves it as one piece; the circuit addresses
+** it from zero and cannot see past its end. */
 class SampleRam {
 public:
-    enum Mode { SHARED = 0, CIRCUIT0_ONLY, CIRCUIT1_ONLY, SPLIT };
+    explicit SampleRam(unsigned size_) : data(size_, 0xFF) {}
 
-    explicit SampleRam(unsigned size_)
-        : data(size_, 0xFF), total(size_), mode(SHARED) {}
+    uint8_t read(unsigned addr) const  { return data[addr]; }
+    void    write(unsigned addr, uint8_t v) { data[addr] = v; }
+    void    clear(uint8_t v) { std::fill(data.begin(), data.end(), v); }
 
-    void setMode(Mode m) { mode = m; }
-    Mode getMode() const { return mode; }
-
-    unsigned base(int circuit) const {
-        return (mode == SPLIT && circuit) ? total / 2 : 0;
-    }
-    unsigned span(int circuit) const {
-        switch (mode) {
-        case CIRCUIT0_ONLY: return circuit ? 0 : total;
-        case CIRCUIT1_ONLY: return circuit ? total : 0;
-        case SPLIT:         return total / 2;
-        case SHARED:
-        default:            return total;
-        }
-    }
-
-    uint8_t read(int circuit, unsigned addr) const  { return data[base(circuit) + addr]; }
-    void    write(int circuit, unsigned addr, uint8_t v) { data[base(circuit) + addr] = v; }
-
-    /* Clears only what the circuit can see, so that one circuit's reset does
-    ** not wipe the other's samples once the modes become selectable. */
-    void clearWindow(int circuit, uint8_t v) {
-        unsigned b = base(circuit), n = span(circuit);
-        std::fill(data.begin() + b, data.begin() + b + n, v);
-    }
-
-    unsigned       size() const { return total; }
+    unsigned       size() const { return (unsigned)data.size(); }
     const uint8_t* raw()  const { return data.data(); }
     uint8_t*       raw()        { return data.data(); }
 
 private:
     std::vector<uint8_t> data;
-    unsigned total;
-    Mode mode;
 };
 
 /* Board time is a 32 bit count of master clock cycles that wraps every 200 s,
@@ -377,10 +346,9 @@ public:
     static constexpr int STATUS_T2      = R04_MASK_T2;
     static constexpr int STATUS_T1      = R04_MASK_T1;
 
-    /* circuit says which window of the shared sample RAM this one owns;
-    ** irqMask which bit of the board's pending mask it raises. */
+    /* irqMask is the bit of the board's pending mask this circuit raises. */
     Y8950(const std::string& name, const DeviceConfig& config,
-          SampleRam& sampleRam, int circuit, UInt32 irqMask, EmuTime time);
+          SampleRam& sampleRam, UInt32 irqMask, EmuTime time);
     ~Y8950();
 
     void setEnabled(bool enabled, EmuTime time);

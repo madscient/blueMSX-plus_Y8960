@@ -2,7 +2,7 @@
 **
 ** It links the core with a stub board, so it needs neither a machine nor a
 ** ROM and runs headless. The checks cover the three things the fork changed:
-** the four waveforms a YM3812 has, the sample RAM the two circuits share, and
+** the four waveforms a YM3812 has, the sample RAM outside the circuit, and
 ** the MSX-AUDIO registers the cartridge does not carry. They also cover the
 ** end of an ADPCM sample, which the core has to bring about by itself: on
 ** time, with its interrupt, whatever the software is doing meanwhile. And
@@ -10,8 +10,7 @@
 **
 ** Every check is written so that it fails if the change were not there. The
 ** waveform checks compare the four against each other before trusting any of
-** them, and the sharing check writes through one circuit and reads through
-** the other, which cannot succeed if each still owned its own RAM.
+** them.
 **
 ** Build and run, from a Visual Studio command prompt:
 **
@@ -69,7 +68,7 @@ struct Player {
     static void hook() { if (current) current->render(); }
 
     explicit Player(DeviceConfig& cfg)
-        : ram(256 * 1024), chip("probe", cfg, ram, 0, 0x2000, *boardSysTime)
+        : ram(256 * 1024), chip("probe", cfg, ram, 0x2000, *boardSysTime)
         , rendered(*boardSysTime)
     {
         current = this;
@@ -100,9 +99,9 @@ struct Player {
         unsigned seed = 12345;
         for (unsigned i = 0; i < len; i++) {
             seed = seed * 1103515245u + 12345u;
-            ram.write(0, i, uint8_t(seed >> 16));
+            ram.write(i, uint8_t(seed >> 16));
         }
-        for (unsigned i = len; i < len + 2048; i++) ram.write(0, i, behind);
+        for (unsigned i = len; i < len + 2048; i++) ram.write(i, behind);
     }
 
     /* Plays from address 0. EOS is the only flag left to raise the interrupt. */
@@ -238,7 +237,7 @@ int main()
         SampleRam ram(256 * 1024);
         double r[4];
         for (int w = 0; w < 4; w++) {
-            Y8950 chip("probe", cfg, ram, 0, 0x2000, T);
+            Y8950 chip("probe", cfg, ram, 0x2000, T);
             chip.reset(T);
             note(chip, w, true);
             r[w] = rms(chip, 4000);
@@ -261,32 +260,13 @@ int main()
     /* ---- the gate in 01h b5 ------------------------------------------- */
     {
         SampleRam ram(256 * 1024);
-        Y8950 a("probe", cfg, ram, 0, 0x2000, T);
-        Y8950 b("probe", cfg, ram, 0, 0x2000, T);
+        Y8950 a("probe", cfg, ram, 0x2000, T);
+        Y8950 b("probe", cfg, ram, 0x2000, T);
         a.reset(T); note(a, 0, true);
         b.reset(T); note(b, 3, false);
         double ra = rms(a, 4000), rb = rms(b, 4000);
         printf("  sine = %.1f, wave 3 with the gate shut = %.1f\n", ra, rb);
         check("a shut gate makes every slot play the sine", std::fabs(ra - rb) < 1e-9);
-    }
-
-    /* ---- the sample RAM the circuits share ----------------------------- */
-    {
-        SampleRam ram(256 * 1024);
-        Y8950 c0("probe0", cfg, ram, 0, 0x2000, T);
-        Y8950 c1("probe1", cfg, ram, 1, 0x4000, T);
-        const uint8_t pattern[4] = { 0x12, 0x34, 0x56, 0x78 };
-        uint8_t got[4] = { 0, 0, 0, 0 };
-
-        c0.reset(T);
-        c1.reset(T);
-        ramWrite(c0, 0, pattern, 4);
-        ramRead(c1, 0, got, 4);
-        printf("  wrote %02x %02x %02x %02x, circuit 1 read %02x %02x %02x %02x\n",
-               pattern[0], pattern[1], pattern[2], pattern[3],
-               got[0], got[1], got[2], got[3]);
-        check("shared: what one circuit writes, the other reads",
-              memcmp(pattern, got, 4) == 0);
     }
 
     /* ---- bit 0 of 08h selects nothing ----------------------------------- */
@@ -296,7 +276,7 @@ int main()
         ** behind the ADPCM, so software that sets the bit must still find the
         ** RAM there. */
         SampleRam ram(256 * 1024);
-        Y8950 chip("probe", cfg, ram, 0, 0x2000, T);
+        Y8950 chip("probe", cfg, ram, 0x2000, T);
         const uint8_t pattern[4] = { 0x3C, 0x5A, 0x69, 0x96 };
         uint8_t got[4] = { 0, 0, 0, 0 };
 
@@ -323,79 +303,10 @@ int main()
               memcmp(pattern, got, 4) == 0);
     }
 
-    /* ---- the modes divide the RAM as declared -------------------------- */
-    {
-        SampleRam ram(256 * 1024);
-        const unsigned total = 256 * 1024;
-
-        ram.setMode(SampleRam::SHARED);
-        check("shared: both circuits see the whole RAM from zero",
-              ram.base(0) == 0 && ram.base(1) == 0 &&
-              ram.span(0) == total && ram.span(1) == total);
-
-        ram.setMode(SampleRam::CIRCUIT0_ONLY);
-        check("given to circuit 0: the other circuit sees nothing",
-              ram.span(0) == total && ram.span(1) == 0);
-
-        ram.setMode(SampleRam::CIRCUIT1_ONLY);
-        check("given to circuit 1: the other circuit sees nothing",
-              ram.span(0) == 0 && ram.span(1) == total);
-
-        ram.setMode(SampleRam::SPLIT);
-        check("split: half each, and the second half starts where the first ends",
-              ram.span(0) == total / 2 && ram.span(1) == total / 2 &&
-              ram.base(0) == 0 && ram.base(1) == total / 2);
-    }
-
-    /* ---- split really separates them ----------------------------------- */
-    {
-        SampleRam ram(256 * 1024);
-        ram.setMode(SampleRam::SPLIT);
-        Y8950 c0("probe0", cfg, ram, 0, 0x2000, T);
-        Y8950 c1("probe1", cfg, ram, 1, 0x4000, T);
-        const uint8_t pattern[4] = { 0xA1, 0xB2, 0xC3, 0xD4 };
-        uint8_t got[4] = { 0, 0, 0, 0 };
-
-        c0.reset(T);
-        c1.reset(T);
-        ramWrite(c0, 0, pattern, 4);
-        ramRead(c1, 0, got, 4);
-        check("split: one circuit cannot read what the other wrote",
-              memcmp(pattern, got, 4) != 0);
-    }
-
-    /* ---- a circuit cannot reach past its window ------------------------ */
-    {
-        SampleRam ram(256 * 1024);
-        ram.setMode(SampleRam::CIRCUIT1_ONLY);
-        Y8950 c0("probe0", cfg, ram, 0, 0x2000, T);
-        const uint8_t pattern[4] = { 0x11, 0x22, 0x33, 0x44 };
-
-        c0.reset(T);
-        ramWrite(c0, 0, pattern, 4);
-        check("a circuit given no window writes nowhere",
-              ram.read(1, 0) == 0xFF && ram.read(1, 1) == 0xFF);
-
-        /* Every mode must keep base + span inside the array, or a write that
-        ** looks in range walks off the end of it. */
-        bool inRange = true;
-        const SampleRam::Mode modes[4] = {
-            SampleRam::SHARED, SampleRam::CIRCUIT0_ONLY,
-            SampleRam::CIRCUIT1_ONLY, SampleRam::SPLIT
-        };
-        for (int m = 0; m < 4; m++) {
-            ram.setMode(modes[m]);
-            for (int c = 0; c < 2; c++) {
-                if (ram.base(c) + ram.span(c) > ram.size()) inRange = false;
-            }
-        }
-        check("every mode keeps both windows inside the RAM", inRange);
-    }
-
     /* ---- the registers the cartridge does not carry --------------------- */
     {
         SampleRam ram(256 * 1024);
-        Y8950 chip("probe", cfg, ram, 0, 0x2000, T);
+        Y8950 chip("probe", cfg, ram, 0x2000, T);
         chip.reset(T);
 
         /* 06h drove the keyboard connector and 18h-19h the I/O port. Without

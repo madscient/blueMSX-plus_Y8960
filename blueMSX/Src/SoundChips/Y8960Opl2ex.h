@@ -1,7 +1,7 @@
 /*****************************************************************************
 **
-** Y8960 cartridge - the OPL2EX block: two YM3812 + ADPCM-B circuits that
-** share one sample RAM.
+** Y8960 cartridge - the OPL2EX block: a YM3812 + ADPCM-B circuit with the
+** cartridge's sample RAM.
 **
 ** Copyright (C) 2026 madscient
 ** See https://github.com/madscient/blueMSX-plus_Y8960 for change history.
@@ -32,7 +32,6 @@ extern "C" {
 #include "MsxTypes.h"
 #include "AudioMixer.h"
 
-/* Both circuits live in one object because they share the sample RAM. */
 typedef struct Y8960Opl2ex Y8960Opl2ex;
 
 Y8960Opl2ex* y8960Opl2exCreate(Mixer* mixer);
@@ -41,9 +40,9 @@ void y8960Opl2exDestroy(Y8960Opl2ex* chip);
 void y8960Opl2exReset(Y8960Opl2ex* chip);
 
 /* port 0 latches the register number, port 1 transfers data. */
-void  y8960Opl2exWrite(Y8960Opl2ex* chip, int circuit, int port, UInt8 value);
-UInt8 y8960Opl2exRead (Y8960Opl2ex* chip, int circuit, int port);
-UInt8 y8960Opl2exPeek (Y8960Opl2ex* chip, int circuit, int port);
+void  y8960Opl2exWrite(Y8960Opl2ex* chip, int port, UInt8 value);
+UInt8 y8960Opl2exRead (Y8960Opl2ex* chip, int port);
+UInt8 y8960Opl2exPeek (Y8960Opl2ex* chip, int port);
 
 void y8960Opl2exSaveState(Y8960Opl2ex* chip);
 void y8960Opl2exLoadState(Y8960Opl2ex* chip);

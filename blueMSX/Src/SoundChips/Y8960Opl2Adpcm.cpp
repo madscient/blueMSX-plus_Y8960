@@ -80,11 +80,10 @@ static constexpr int STEP_MASK = (1 << STEP_BITS) - 1;
 
 
 Y8950Adpcm::Y8950Adpcm(Y8950& y8950_, const DeviceConfig& config,
-                       const std::string& name, SampleRam& sampleRam, int circuit_)
+                       const std::string& name, SampleRam& sampleRam)
     : Schedulable(config.getScheduler())
     , y8950(y8950_)
     , ram(sampleRam)
-    , circuit(circuit_)
     , clock(config.getMotherBoard().getCurrentTime())
     , emu{}
     , aud{}
@@ -97,7 +96,7 @@ Y8950Adpcm::Y8950Adpcm(Y8950& y8950_, const DeviceConfig& config,
 
 void Y8950Adpcm::clearRam()
 {
-    ram.clearWindow(circuit, 0xFF);
+    ram.clear(0xFF);
 }
 
 void Y8950Adpcm::reset(EmuTime time)
@@ -360,18 +359,18 @@ uint8_t Y8950Adpcm::peekData() const
 void Y8950Adpcm::writeMemory(unsigned memPtr, uint8_t value)
 {
     unsigned addr = (memPtr / 2) & addrMask;
-    if (addr < ram.span(circuit)) {
-        ram.write(circuit, addr, value);
+    if (addr < ram.size()) {
+        ram.write(addr, value);
     }
 }
 
 uint8_t Y8950Adpcm::readMemory(unsigned memPtr) const
 {
     unsigned addr = (memPtr / 2) & addrMask;
-    if (addr >= ram.span(circuit)) {
+    if (addr >= ram.size()) {
         return 0;
     } else {
-        return ram.read(circuit, addr);
+        return ram.read(addr);
     }
 }
 

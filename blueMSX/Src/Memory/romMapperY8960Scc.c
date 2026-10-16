@@ -43,6 +43,20 @@
 #define Y8960_REGIONS    4
 #define Y8960_START_PAGE 2
 
+/* The memory mapped window, 7FE0h-7FFFh: the offsets of what it holds, and
+** the bits of the two enablers. The specification of 2026-10-16 struck the
+** second OPLL and OPL2 circuits and the DCSG out of it, and may yet move what
+** remains, so these sit together rather than in the decoder. */
+#define Y8960_WIN_SSGS      0x0A    /* 7FEAh register, 7FEBh value */
+#define Y8960_WIN_OPL2      0x0E    /* 7FEEh address,  7FEFh data  */
+#define Y8960_WIN_OPLL      0x14    /* 7FF4h address,  7FF5h data  */
+#define Y8960_WIN_ENABLE1   0x16    /* 7FF6h */
+#define Y8960_WIN_ENABLE2   0x1F    /* 7FFFh */
+#define Y8960_ENABLE1_OPLL  0x01
+#define Y8960_ENABLE2_OPL2  0x01
+#define Y8960_ENABLE2_SSGS  0x10
+#define Y8960_ENABLE2_TIMER 0x80
+
 typedef struct {
     int    deviceHandle;
     Y8960SccChip* scc;
@@ -116,14 +130,10 @@ int y8960IoEnabled(Y8960IoBlock block)
     }
 
     switch (block) {
-    case Y8960_IO_OPLL0: return (rm->ioEnable1 & 0x01) != 0;
-    case Y8960_IO_OPLL1: return (rm->ioEnable1 & 0x02) != 0;
-    case Y8960_IO_OPL20: return (rm->ioEnable2 & 0x01) != 0;
-    case Y8960_IO_OPL21: return (rm->ioEnable2 & 0x02) != 0;
-    case Y8960_IO_DCSG0: return (rm->ioEnable2 & 0x04) != 0;
-    case Y8960_IO_DCSG1: return (rm->ioEnable2 & 0x08) != 0;
-    case Y8960_IO_SSGS:  return (rm->ioEnable2 & 0x10) != 0;
-    case Y8960_IO_TIMER: return (rm->ioEnable2 & 0x80) != 0;
+    case Y8960_IO_OPLL:  return (rm->ioEnable1 & Y8960_ENABLE1_OPLL)  != 0;
+    case Y8960_IO_OPL2:  return (rm->ioEnable2 & Y8960_ENABLE2_OPL2)  != 0;
+    case Y8960_IO_SSGS:  return (rm->ioEnable2 & Y8960_ENABLE2_SSGS)  != 0;
+    case Y8960_IO_TIMER: return (rm->ioEnable2 & Y8960_ENABLE2_TIMER) != 0;
     }
 
     return 0;
@@ -332,26 +342,20 @@ static void write(RomMapperY8960Scc* rm, UInt16 address, UInt8 value)
     /* 7FE0-7FFF: the enablers, and the tunnels to the other blocks. */
     if (region == 1 && (address & 0x1FE0) == 0x1FE0 && mmioVisible(rm)) {
         switch (address & 0x1F) {
-        case 0x16:
+        case Y8960_WIN_ENABLE1:
             rm->ioEnable1 = value;
             break;
-        case 0x1F:
+        case Y8960_WIN_ENABLE2:
             rm->ioEnable2 = value;
             break;
-        case 0x0A: tunnelWrite(Y8960_TUN_SSGS,  0, value); break;
-        case 0x0B: tunnelWrite(Y8960_TUN_SSGS,  1, value); break;
-        case 0x0C: tunnelWrite(Y8960_TUN_OPL21, 0, value); break;
-        case 0x0D: tunnelWrite(Y8960_TUN_OPL21, 1, value); break;
-        case 0x0E: tunnelWrite(Y8960_TUN_OPL20, 0, value); break;
-        case 0x0F: tunnelWrite(Y8960_TUN_OPL20, 1, value); break;
-        case 0x10: tunnelWrite(Y8960_TUN_DCSG1, 0, value); break;
-        case 0x11: tunnelWrite(Y8960_TUN_DCSG0, 0, value); break;
-        case 0x12: tunnelWrite(Y8960_TUN_OPLL1, 0, value); break;
-        case 0x13: tunnelWrite(Y8960_TUN_OPLL1, 1, value); break;
-        case 0x14: tunnelWrite(Y8960_TUN_OPLL0, 0, value); break;
-        case 0x15: tunnelWrite(Y8960_TUN_OPLL0, 1, value); break;
+        case Y8960_WIN_SSGS:     tunnelWrite(Y8960_TUN_SSGS, 0, value); break;
+        case Y8960_WIN_SSGS + 1: tunnelWrite(Y8960_TUN_SSGS, 1, value); break;
+        case Y8960_WIN_OPL2:     tunnelWrite(Y8960_TUN_OPL2, 0, value); break;
+        case Y8960_WIN_OPL2 + 1: tunnelWrite(Y8960_TUN_OPL2, 1, value); break;
+        case Y8960_WIN_OPLL:     tunnelWrite(Y8960_TUN_OPLL, 0, value); break;
+        case Y8960_WIN_OPLL + 1: tunnelWrite(Y8960_TUN_OPLL, 1, value); break;
         default:
-            /* 7FE0-7FE9 and 7FF7-7FFE carry nothing. */
+            /* The rest carries nothing, the struck-out tunnels included. */
             break;
         }
         return;
@@ -442,7 +446,6 @@ int romMapperY8960SccCreate(const char* filename, UInt8* romData,
 ** would free each of them twice. */
 static void ejectCart(RomMapperY8960Scc* rm)
 {
-    romMapperY8960DcsgDestroy();
     romMapperY8960MixerDestroy();
     romMapperY8960TimerDestroy();
     romMapperY8960SsgsDestroy();
@@ -463,7 +466,6 @@ int romMapperY8960CartCreate(const char* filename, UInt8* romData,
     success &= romMapperY8960SsgsCreate();
     success &= romMapperY8960TimerCreate();
     success &= romMapperY8960MixerCreate();
-    success &= romMapperY8960DcsgCreate();
 
     return success;
 }

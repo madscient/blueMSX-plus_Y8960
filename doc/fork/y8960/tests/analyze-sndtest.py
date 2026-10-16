@@ -2,8 +2,7 @@
 
 Splits the recording into bursts of sound separated by silence, estimates the
 pitch of each burst, and compares the list with the steps of sndtest.asm that
-must sound. Steps that must stay silent have pitches of their own, so a gate
-that leaks shows up as an extra burst.
+must sound. Anything else that sounds shows up as an extra burst.
 
 Usage:  py analyze-sndtest.py <recording.wav>
 Exit status 0 when the pitches match, 1 otherwise.
@@ -12,9 +11,8 @@ import array
 import sys
 import wave
 
-EXPECTED = [440, 660, 880, 990]     # B, D, E, F
-STEP_NAMES = {330: "A (3EH SHUT)", 440: "B", 554: "C (3FH SHUT)",
-              660: "D", 880: "E", 990: "F"}
+EXPECTED = [990]                    # A
+STEP_NAMES = {990: "A"}
 TOLERANCE = 0.03
 
 FRAME_MS = 20

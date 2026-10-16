@@ -31,13 +31,10 @@
 #include "AudioMixer.h"
 #include <stdlib.h>
 
-/* The first circuit answers at MSX-AUDIO's own addresses, the second below it.
-** Unlike the OPLL and DCSG blocks this block reads back, so both circuits
-** register a read as well. */
-#define Y8960_OPL20_ADDRESS 0xC0
-#define Y8960_OPL20_DATA    0xC1
-#define Y8960_OPL21_ADDRESS 0xC2
-#define Y8960_OPL21_DATA    0xC3
+/* MSX-AUDIO's own addresses. Unlike the OPLL block this one reads back, so
+** it registers a read as well. */
+#define Y8960_OPL2_ADDRESS 0xC0
+#define Y8960_OPL2_DATA    0xC1
 
 typedef struct {
     int          deviceHandle;
@@ -46,57 +43,36 @@ typedef struct {
 
 static RomMapperY8960Opl2ex* theOpl2ex = NULL;
 
-static int circuitOf(UInt16 port)
-{
-    return (port == Y8960_OPL21_ADDRESS || port == Y8960_OPL21_DATA) ? 1 : 0;
-}
-
 static int portOf(UInt16 port)
 {
-    return (port == Y8960_OPL20_DATA || port == Y8960_OPL21_DATA) ? 1 : 0;
-}
-
-static Y8960IoBlock blockOf(int circuit)
-{
-    return circuit ? Y8960_IO_OPL21 : Y8960_IO_OPL20;
+    return port == Y8960_OPL2_DATA ? 1 : 0;
 }
 
 static void writeIo(RomMapperY8960Opl2ex* rm, UInt16 port, UInt8 value)
 {
-    int circuit = circuitOf(port);
-
-    if (!y8960IoEnabled(blockOf(circuit))) {
+    if (!y8960IoEnabled(Y8960_IO_OPL2)) {
         return;
     }
 
-    y8960Opl2exWrite(rm->chip, circuit, portOf(port), value);
+    y8960Opl2exWrite(rm->chip, portOf(port), value);
 }
 
 static UInt8 readIo(RomMapperY8960Opl2ex* rm, UInt16 port)
 {
-    int circuit = circuitOf(port);
-
-    if (!y8960IoEnabled(blockOf(circuit))) {
+    if (!y8960IoEnabled(Y8960_IO_OPL2)) {
         return 0xFF;
     }
 
-    return y8960Opl2exRead(rm->chip, circuit, portOf(port));
+    return y8960Opl2exRead(rm->chip, portOf(port));
 }
 
 /* The tunnel is not gated: the enablers live in the same window and could not
 ** be reached otherwise. */
-static void tunnel0(void* ref, int port, UInt8 value)
+static void tunnel(void* ref, int port, UInt8 value)
 {
     RomMapperY8960Opl2ex* rm = (RomMapperY8960Opl2ex*)ref;
 
-    y8960Opl2exWrite(rm->chip, 0, port, value);
-}
-
-static void tunnel1(void* ref, int port, UInt8 value)
-{
-    RomMapperY8960Opl2ex* rm = (RomMapperY8960Opl2ex*)ref;
-
-    y8960Opl2exWrite(rm->chip, 1, port, value);
+    y8960Opl2exWrite(rm->chip, port, value);
 }
 
 static void reset(RomMapperY8960Opl2ex* rm)
@@ -116,13 +92,10 @@ static void loadState(RomMapperY8960Opl2ex* rm)
 
 static void destroy(RomMapperY8960Opl2ex* rm)
 {
-    y8960UnregisterTunnel(Y8960_TUN_OPL20, rm);
-    y8960UnregisterTunnel(Y8960_TUN_OPL21, rm);
+    y8960UnregisterTunnel(Y8960_TUN_OPL2, rm);
 
-    ioPortUnregister(Y8960_OPL20_ADDRESS, rm);
-    ioPortUnregister(Y8960_OPL20_DATA, rm);
-    ioPortUnregister(Y8960_OPL21_ADDRESS, rm);
-    ioPortUnregister(Y8960_OPL21_DATA, rm);
+    ioPortUnregister(Y8960_OPL2_ADDRESS, rm);
+    ioPortUnregister(Y8960_OPL2_DATA, rm);
 
     y8960Opl2exDestroy(rm->chip);
 
@@ -149,16 +122,12 @@ int romMapperY8960Opl2exCreate(void)
 
     theOpl2ex = rm;
 
-    /* One object holds both circuits because they share the sample RAM. */
     rm->chip = y8960Opl2exCreate(boardGetMixer());
 
-    ioPortRegister(Y8960_OPL20_ADDRESS, readIo, writeIo, rm);
-    ioPortRegister(Y8960_OPL20_DATA, readIo, writeIo, rm);
-    ioPortRegister(Y8960_OPL21_ADDRESS, readIo, writeIo, rm);
-    ioPortRegister(Y8960_OPL21_DATA, readIo, writeIo, rm);
+    ioPortRegister(Y8960_OPL2_ADDRESS, readIo, writeIo, rm);
+    ioPortRegister(Y8960_OPL2_DATA, readIo, writeIo, rm);
 
-    y8960RegisterTunnel(Y8960_TUN_OPL20, tunnel0, rm);
-    y8960RegisterTunnel(Y8960_TUN_OPL21, tunnel1, rm);
+    y8960RegisterTunnel(Y8960_TUN_OPL2, tunnel, rm);
 
     reset(rm);
 
