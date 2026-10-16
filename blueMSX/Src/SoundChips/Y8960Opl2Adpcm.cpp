@@ -57,7 +57,8 @@ extern "C" {
 namespace y8960opl2 {
 
 static constexpr int R07_RESET       = 0x01;
-static constexpr int R07_SP_OFF      = 0x08;
+/* Bit 3, SP-OFF on the Y8950, was dropped from the Y8960 (specification of
+** 2026-10-16): it is stored with the rest of the register and does nothing. */
 static constexpr int R07_REPEAT      = 0x10;
 static constexpr int R07_MEMORY_DATA = 0x20;
 static constexpr int R07_REC         = 0x40;
@@ -127,7 +128,7 @@ bool Y8950Adpcm::isPlaying() const
 
 bool Y8950Adpcm::isMuted() const
 {
-    return !isPlaying() || (reg7 & R07_SP_OFF);
+    return !isPlaying();
 }
 
 void Y8950Adpcm::restart(PlayData& pd) const
@@ -384,8 +385,7 @@ int Y8950Adpcm::calcSample()
         (aud.memPtr > stopAddr) && ((aud.nowStep + delta) & ~STEP_MASK)) {
         return 0;
     }
-    int output = calcSample(false);
-    return (reg7 & R07_SP_OFF) ? 0 : output;
+    return calcSample(false);
 }
 	
 int Y8950Adpcm::calcSample(bool doEmu)

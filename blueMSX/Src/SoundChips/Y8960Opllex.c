@@ -53,17 +53,21 @@ struct Y8960OpllexChip {
 
     Y8960OPLL*    opll;
     UInt8         address;
-    Int32         buffer[AUDIO_MONO_BUFFER_SIZE];
+    Int32         buffer[AUDIO_STEREO_BUFFER_SIZE];
 };
 
+/* Stereo, because the pan registers place each channel; the mixer's own pan
+** could only move the block as a whole. */
 static Int32* y8960OpllexSync(void* ref, UInt32 count)
 {
     Y8960OpllexChip* chip = (Y8960OpllexChip*)ref;
     UInt32 i;
 
     for (i = 0; i < count; i++) {
-        chip->buffer[i] = (Int32)Y8960OPLL_calc(chip->opll)
-                        * Y8960_OPLLEX_VOLUME / Y8960_OPLLEX_VOLUME_DIV;
+        int32_t out[2];
+        Y8960OPLL_calcStereo(chip->opll, out);
+        chip->buffer[2 * i + 0] = out[0] * Y8960_OPLLEX_VOLUME / Y8960_OPLLEX_VOLUME_DIV;
+        chip->buffer[2 * i + 1] = out[1] * Y8960_OPLLEX_VOLUME / Y8960_OPLLEX_VOLUME_DIV;
     }
 
     return chip->buffer;
@@ -114,6 +118,9 @@ void y8960OpllexLoadState(Y8960OpllexChip* chip)
     int i;
 
     memset(regs, 0, sizeof(regs));
+    /* A state from before the pan registers existed is shorter than this
+    ** buffer and leaves them untouched; the centre is what it was playing at. */
+    memset(regs + Y8960OPLL_PAN_REG_BASE, Y8960OPLL_PAN_CENTER, 9);
 
     chip->address = (UInt8)saveStateGet(state, "address", 0);
     saveStateGetBuffer(state, "regs", regs, sizeof(regs));
@@ -133,9 +140,10 @@ void y8960OpllexLoadState(Y8960OpllexChip* chip)
 static void getDebugInfo(Y8960OpllexChip* chip, DbgDevice* dbgDevice)
 {
     /* 00h-07h user voice, 0Eh rhythm, 10h-18h / 20h-28h / 30h-38h per channel,
-    ** 40h-48h bank. The gaps are not registers. */
+    ** 40h-48h bank, 50h-58h pan. The gaps are not registers. */
     static const UInt8 regsAvail[] = {
         1,1,1,1,1,1,1,1,0,0,0,0,0,0,1,0,
+        1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,
         1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,
         1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,
         1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,
@@ -169,7 +177,7 @@ Y8960OpllexChip* y8960OpllexCreate(Mixer* mixer, const char* name)
     chip->mixer = mixer;
     chip->opll  = Y8960OPLL_new(Y8960_OPLLEX_CLOCK, mixerGetSampleRate(mixer));
 
-    chip->handle      = mixerRegisterChannel(mixer, MIXER_CHANNEL_Y8960, 0,
+    chip->handle      = mixerRegisterChannel(mixer, MIXER_CHANNEL_Y8960, 1,
                                              y8960OpllexSync, y8960OpllexSetSampleRate, chip);
     chip->debugHandle = debugDeviceRegister(DBGTYPE_AUDIO, name, &dbgCallbacks, chip);
 

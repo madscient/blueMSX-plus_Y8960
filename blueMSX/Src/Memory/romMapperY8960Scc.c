@@ -130,20 +130,29 @@ int y8960IoEnabled(Y8960IoBlock block)
 }
 
 /* A region shows the SCC registers instead of a bank when its own bank
-** register holds 3Fh. In RAM mode region 0 is excluded, because that is
-** where the mode and bank registers have to stay reachable. */
+** register holds 3Fh, but only two regions can: BANK2 (8000-9FFF), where the
+** Konami SCC has them, in both modes, and BANK1 (6000-7FFF) in RAM mode
+** alone, which is what RAM mode adds (the specification's note on 4XFBh).
+** The other two never show them (decided 2026-10-16). */
 static int sccVisible(RomMapperY8960Scc* rm, int region)
 {
     if (rm->bankReg[region] != 0x3F) {
         return 0;
     }
 
-    return !(rm->ramMode && region == 0);
+    switch (region) {
+    case 1:  return rm->ramMode;
+    case 2:  return 1;
+    default: return 0;
+    }
 }
 
 /* The window at 7FE0-7FFF lies inside the SCC window at 7800-7FFF, so the two
 ** never overlap partially: either BANK1 shows a ROM bank and the window is
-** there, or it does not and the window is gone along with the enablers. */
+** there, or it does not and the window is gone along with the enablers. In
+** compatibility mode BANK1 shows neither SCC nor writable RAM, so the window
+** is always there; this is the specification's "RAM Mode=0, or BANK1 holds a
+** ROM bank". */
 static int mmioVisible(RomMapperY8960Scc* rm)
 {
     /* Built into an MSX2++ the cartridge's window does not exist: the blocks

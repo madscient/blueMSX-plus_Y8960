@@ -108,8 +108,8 @@ t2_fail:
 
 ; --- 3. a tone through the ordinary PSG registers
 ;
-; Nothing here writes a pan pot, which is how every tune written for a PSG
-; behaves. The pots reset to centre so that such a tune reaches both sides.
+; Nothing here writes a pan, which is how every tune written for a PSG
+; behaves. The pans reset to centre so that such a tune reaches both sides.
 t3:
         ld      hl, msg_t3
         call    print
@@ -133,14 +133,14 @@ t3:
 
         call    delay
 
-; --- 4. the same tone sent hard over, to show the pot reaches the output
+; --- 4. the same tone sent hard over, to show the pan reaches the output
 t4:
         ld      hl, msg_t4
         call    print
 
-        ld      a, 010h         ; channel A pan, first core
+        ld      a, 028h         ; channel A pan, first core
         out     (PSGADDR), a
-        xor     a               ; 0: hard left
+        ld      a, 1            ; 1: hard left
         out     (PSGDATA), a
 
         call    delay
@@ -200,15 +200,21 @@ t7_fail:
         ld      hl, msg_t7ng
         call    print
 
-; --- 8. a pan pot reads back as its four bits
+; --- 8. the pan and the volume read back their reset values
 ;
-; Channel B's pot is untouched, so it holds the centre reset left there. A
-; chip that filled the unused bits would read F8h.
+; Channel B's pan and volume are untouched, so they hold what reset left
+; there: 128 (centre) and 127 (unity). These are the registers the machine's
+; PSG does not have, so reading them is also proof of which chip answers.
 t8:
-        ld      a, 011h                 ; first core, channel B pan
+        ld      a, 029h                 ; first core, channel B pan
         out     (PSGADDR), a
         in      a, (PSGREAD)
-        cp      008h
+        cp      080h
+        jr      nz, t8_fail
+        ld      a, 021h                 ; first core, channel B volume
+        out     (PSGADDR), a
+        in      a, (PSGREAD)
+        cp      07fh
         jr      nz, t8_fail
 
         ld      hl, msg_t8ok
@@ -256,7 +262,7 @@ msg_t2ng:
 msg_t3:
         db      "3 TONE, NO PAN: EXPECT BOTH", 13, 10, 0
 msg_t4:
-        db      "4 PAN 0: EXPECT LEFT ONLY", 13, 10, 0
+        db      "4 PAN 1: EXPECT LEFT ONLY", 13, 10, 0
 msg_t5:
         db      "5 KANA LED: EXPECT LIT", 13, 10, 0
 msg_t6ok:
@@ -268,6 +274,6 @@ msg_t7ok:
 msg_t7ng:
         db      "7 NO WINDOW: NG", 13, 10, 0
 msg_t8ok:
-        db      "8 PAN READS 4 BITS: OK", 13, 10, 0
+        db      "8 PAN/VOL RESET VALUES: OK", 13, 10, 0
 msg_t8ng:
-        db      "8 PAN READS 4 BITS: NG", 13, 10, 0
+        db      "8 PAN/VOL RESET VALUES: NG", 13, 10, 0

@@ -10,9 +10,9 @@
 ** Copyright (C) 2003-2006 Daniel Vik
 **
 ** Forked for the Y8960 cartridge, 2026 by madscient.
-** The cartridge carries an SSGS (YMZ705/732 equivalent), which is two YM2149
-** equivalents with a per-channel pan pot, not a pair of AY-3-8910s. It is
-** emulated as its own chip rather than sharing the machine's PSG.
+** The cartridge carries an SSGS: two YM2149 equivalents, each channel with
+** its own volume and pan, not a pair of AY-3-8910s. It is emulated as its own
+** chip rather than sharing the machine's PSG.
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -37,42 +37,56 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
 /* = (1 << 28) * 3579545 / 32 / 44100. The SSGS gets 3.579545MHz / 2, which is
 ** what the machine's own PSG runs at, so the base step carries over
 ** unchanged. */
 #define BASE_PHASE_STEP 0x28959becUL
 
-#define Y8960_SSGS_CORES    2
-#define Y8960_SSGS_CHANNELS 3
+#define Y8960_SSGS_CORES        2
+#define Y8960_SSGS_CHANNELS     3
+#define Y8960_SSGS_MIX_CHANNELS (Y8960_SSGS_CORES * Y8960_SSGS_CHANNELS)
 
-/* Address bit 5 picks the core and the low five bits the register within it,
-** so the two cores sit at 00h-1Fh and 20h-3Fh. */
-#define Y8960_SSGS_CORE_OF(addr) (((addr) >> 5) & 1)
-#define Y8960_SSGS_SUB_OF(addr)  ((addr) & 0x1F)
+/* Register map, from the `ssg` sheet of the specification (2026-10-16):
+**
+**   00h-0Fh  core 0, the YM2149's registers
+**   10h-1Fh  core 1, the same
+**   20h-22h  volume of core 0 channel A, B, C   (7 bits, 127 is unity)
+**   24h-26h  volume of core 1 channel A, B, C
+**   28h-2Ah  pan of core 0 channel A, B, C      (1 left, 128 centre, 255 right)
+**   2Ch-2Eh  pan of core 1 channel A, B, C
+**
+** 23h, 27h, 2Bh and 2Fh are not connected, and nothing sits at 30h and up.
+** 0Eh/0Fh and 1Eh/1Fh are the cores' GPIO registers: plain storage, except
+** on core 0 of a Y8960 built into a machine, where the PSG's wiring hangs
+** off them. The sheet puts LEDs on the low four bits of core 1's port B;
+** they are kept as the value written, nothing drives them. */
+#define Y8960_SSGS_CORE_REGS    0x10
+#define Y8960_SSGS_VOLUME_BASE  0x20
+#define Y8960_SSGS_PAN_BASE     0x28
+#define Y8960_SSGS_REG_END      0x30
+#define Y8960_SSGS_GPIO_A       0x0E
+#define Y8960_SSGS_GPIO_B       0x0F
 
-/* Registers within a core. 00h-0Dh are the YM2149's; 0Eh-0Fh held its I/O
-** ports, which the YMZ parts do not have; 10h-12h are the pan pots this chip
-** adds. The second core's 0Fh carries the LED bits instead of an I/O port. */
-#define Y8960_SSGS_PAN_FIRST 0x10
-#define Y8960_SSGS_PAN_LAST  0x12
-#define Y8960_SSGS_LED_REG   0x0F
-
-#define Y8960_SSGS_PAN_MAX    15
-#define Y8960_SSGS_PAN_CENTER 8
-#define Y8960_SSGS_GAIN_ONE   256
+/* The sheet says "0-128, 128 is the maximum"; the hardware side settled the
+** register as 7 bits wide with 127 as unity (2026-10-16). Bit 7 is ignored. */
+#define Y8960_SSGS_VOLUME_UNITY 0x7F
+#define Y8960_SSGS_PAN_CENTER   128
+#define Y8960_SSGS_GAIN_ONE     4096
 
 static Int16 voltTable[16];
 static Int16 voltEnvTable[32];
 
 /* Pan value to left/right gain, in Y8960_SSGS_GAIN_ONE units.
 **
-** The data sheet does not give this mapping. EPSGemuEngine and openMSX_Y8960
-** both take the one the same-generation YMZ280B uses, and so does this: the
-** centre opens both sides fully, moving away from it closes the far side
-** linearly, and the last two steps at each end are hard over. It is the
-** implementers' reading, not a specification. */
-static Int32 panGain[16][2];
+** The specification gives only the anchors: 1 is hard left, 128 the centre,
+** 255 hard right, and 0 counts as the centre (decided 2026-10-16). Between
+** them this is power panning, L = cos(t) and R = sin(t) with t running from
+** 0 to pi/2, so the centre sits at 1/sqrt(2) on both sides. The table is
+** built from one half and mirrored, so that v and 256-v are exact images
+** of each other rather than cos and sin a rounding apart. */
+static Int32 panGain[256][2];
 
 static const UInt8 regMask[14] = {
     0xff, 0x0f, 0xff, 0x0f, 0xff, 0x0f, 0x1f, 0x3f,
@@ -80,7 +94,7 @@ static const UInt8 regMask[14] = {
 };
 
 typedef struct {
-    UInt8  regs[0x20];
+    UInt8  regs[Y8960_SSGS_CORE_REGS];
 
     UInt32 tonePhase[Y8960_SSGS_CHANNELS];
     UInt32 toneStep[Y8960_SSGS_CHANNELS];
@@ -96,7 +110,6 @@ typedef struct {
 
     UInt8  enable;
     UInt8  ampVolume[Y8960_SSGS_CHANNELS];
-    UInt8  pan[Y8960_SSGS_CHANNELS];
 } Y8960SsgCore;
 
 struct Y8960SsgsChip {
@@ -104,16 +117,20 @@ struct Y8960SsgsChip {
     Int32  handle;
     Int32  debugHandle;
 
-    /* Null on a cartridge, where the first core's 0Eh and 0Fh carry nothing. */
+    /* Null on a cartridge, where core 0's GPIO registers are storage only. */
     Y8960SsgsReadCb  ioPortReadCb;
     Y8960SsgsReadCb  ioPortPollCb;
     Y8960SsgsWriteCb ioPortWriteCb;
     void*            ioPortRef;
 
     UInt8  address;
-    UInt8  led;
 
     Y8960SsgCore core[Y8960_SSGS_CORES];
+
+    /* Per mixing channel: core 0's A, B, C, then core 1's. */
+    UInt8  volume[Y8960_SSGS_MIX_CHANNELS];
+    UInt8  pan[Y8960_SSGS_MIX_CHANNELS];
+    Int32  gain[Y8960_SSGS_MIX_CHANNELS][2];   /* derived from volume and pan */
 
     /* One filter pair for the mixed output, not one per core: the two cores
     ** share the cartridge's analog stage. */
@@ -128,29 +145,23 @@ static Int32* y8960SsgsSync(void* ref, UInt32 count);
 
 static void buildPanTable(void)
 {
+    const double halfPi = 3.14159265358979323846 / 2.0;
     int pan;
 
-    for (pan = 0; pan <= Y8960_SSGS_PAN_MAX; pan++) {
-        Int32 l, r;
-
-        if (pan == Y8960_SSGS_PAN_CENTER) {
-            l = Y8960_SSGS_GAIN_ONE;
-            r = Y8960_SSGS_GAIN_ONE;
-        }
-        else if (pan < Y8960_SSGS_PAN_CENTER) {
-            l = Y8960_SSGS_GAIN_ONE;
-            r = (pan == 0) ? 0
-                           : (pan - 1) * Y8960_SSGS_GAIN_ONE / (Y8960_SSGS_PAN_CENTER - 1);
-        }
-        else {
-            l = (Y8960_SSGS_PAN_MAX - pan) * Y8960_SSGS_GAIN_ONE
-                / (Y8960_SSGS_PAN_MAX - Y8960_SSGS_PAN_CENTER);
-            r = Y8960_SSGS_GAIN_ONE;
-        }
-
-        panGain[pan][0] = l;
-        panGain[pan][1] = r;
+    for (pan = 1; pan <= Y8960_SSGS_PAN_CENTER; pan++) {
+        double t = (double)(pan - 1) / 254.0 * halfPi;
+        panGain[pan][0] = (Int32)floor(cos(t) * Y8960_SSGS_GAIN_ONE + 0.5);
+        panGain[pan][1] = (Int32)floor(sin(t) * Y8960_SSGS_GAIN_ONE + 0.5);
     }
+    /* The centre is one figure for both sides. */
+    panGain[Y8960_SSGS_PAN_CENTER][1] = panGain[Y8960_SSGS_PAN_CENTER][0] =
+        (Int32)floor(sqrt(0.5) * Y8960_SSGS_GAIN_ONE + 0.5);
+    for (pan = Y8960_SSGS_PAN_CENTER + 1; pan <= 255; pan++) {
+        panGain[pan][0] = panGain[256 - pan][1];
+        panGain[pan][1] = panGain[256 - pan][0];
+    }
+    panGain[0][0] = panGain[Y8960_SSGS_PAN_CENTER][0];
+    panGain[0][1] = panGain[Y8960_SSGS_PAN_CENTER][1];
 }
 
 static void buildVoltTables(void)
@@ -184,49 +195,67 @@ static void buildVoltTables(void)
     }
 }
 
+/* The mixing channel a volume or pan register addresses: the core in bit 2,
+** the channel in bits 1-0, with channel 3 the unconnected slot. */
+static int mixChannel(UInt8 address)
+{
+    int slot = address & 7;
+
+    if ((slot & 3) == 3) {
+        return -1;
+    }
+    return (slot >> 2) * Y8960_SSGS_CHANNELS + (slot & 3);
+}
+
+static void updateGain(Y8960SsgsChip* chip, int ch)
+{
+    Int32 v = chip->volume[ch] & Y8960_SSGS_VOLUME_UNITY;
+    UInt8 pan = chip->pan[ch];
+
+    chip->gain[ch][0] = panGain[pan][0] * v / Y8960_SSGS_VOLUME_UNITY;
+    chip->gain[ch][1] = panGain[pan][1] * v / Y8960_SSGS_VOLUME_UNITY;
+}
+
 static void updateRegister(Y8960SsgsChip* chip, UInt8 address, UInt8 data)
 {
-    int core = Y8960_SSGS_CORE_OF(address);
-    int sub  = Y8960_SSGS_SUB_OF(address);
-    Y8960SsgCore* c = &chip->core[core];
+    Y8960SsgCore* c;
+    int core;
+    int sub;
     UInt32 period;
 
-    /* 40h and up is the ADPCM and sequencer area of the YMZ parts, which this
-    ** block does not carry. */
-    if (address >= 0x40) {
+    if (address >= Y8960_SSGS_REG_END) {
         return;
     }
 
-    if (sub <= Y8960_SSGS_PAN_LAST) {
+    if (address >= Y8960_SSGS_VOLUME_BASE) {
+        int ch = mixChannel(address);
+        if (ch < 0) {
+            return;
+        }
         mixerSync(chip->mixer);
-    }
-
-    if (sub >= Y8960_SSGS_PAN_FIRST && sub <= Y8960_SSGS_PAN_LAST) {
-        c->regs[sub] = data & Y8960_SSGS_PAN_MAX;
-        c->pan[sub - Y8960_SSGS_PAN_FIRST] = c->regs[sub];
+        if (address >= Y8960_SSGS_PAN_BASE) {
+            chip->pan[ch] = data;
+        }
+        else {
+            chip->volume[ch] = data;
+        }
+        updateGain(chip, ch);
         return;
     }
 
-    if (sub == Y8960_SSGS_LED_REG && core == 1) {
-        c->regs[sub] = data & 0x0F;
-        chip->led = c->regs[sub];
-        return;
-    }
+    core = address / Y8960_SSGS_CORE_REGS;
+    sub  = address % Y8960_SSGS_CORE_REGS;
+    c    = &chip->core[core];
 
-    /* 0Eh and 0Fh are the YM2149's I/O ports. They exist only while something
-    ** is wired to them, which is the case when the Y8960 is built into a
-    ** machine and stands in for its PSG. 13h-1Fh are undefined either way. */
-    if (sub == 0x0E || sub == 0x0F) {
+    if (sub == Y8960_SSGS_GPIO_A || sub == Y8960_SSGS_GPIO_B) {
+        c->regs[sub] = data;
         if (core == 0 && chip->ioPortWriteCb != NULL) {
-            c->regs[sub] = data;
-            chip->ioPortWriteCb(chip->ioPortRef, (UInt16)(sub - 0x0E), data);
+            chip->ioPortWriteCb(chip->ioPortRef, (UInt16)(sub - Y8960_SSGS_GPIO_A), data);
         }
         return;
     }
 
-    if (sub >= 14) {
-        return;
-    }
+    mixerSync(chip->mixer);
 
     data &= regMask[sub];
     c->regs[sub] = data;
@@ -282,41 +311,46 @@ void y8960SsgsWriteData(Y8960SsgsChip* chip, UInt8 data)
     updateRegister(chip, chip->address, data);
 }
 
+/* What a register holds, without side effects: the debugger's view. */
+static UInt8 peekRegister(Y8960SsgsChip* chip, UInt8 address)
+{
+    if (address >= Y8960_SSGS_REG_END) {
+        return 0xFF;
+    }
+    if (address >= Y8960_SSGS_VOLUME_BASE) {
+        int ch = mixChannel(address);
+        if (ch < 0) {
+            return 0xFF;
+        }
+        return (address >= Y8960_SSGS_PAN_BASE) ? chip->pan[ch] : chip->volume[ch];
+    }
+    return chip->core[address / Y8960_SSGS_CORE_REGS].regs[address % Y8960_SSGS_CORE_REGS];
+}
+
 /* Registers the chip does not have read as all ones rather than as zero: the
 ** bus ANDs what every device drives, so ones are how a device says it is not
 ** answering. The registers it does have read back what was written, as the
-** PSG this is built from does; the four-bit ones come back as four bits, as
-** openMSX_Y8960 returns them. */
+** PSG this is built from does. Only a Y8960 built into a machine reaches
+** this; the cartridge does not drive the read port. */
 UInt8 y8960SsgsReadData(Y8960SsgsChip* chip)
 {
-    int core = Y8960_SSGS_CORE_OF(chip->address);
-    int sub  = Y8960_SSGS_SUB_OF(chip->address);
+    UInt8 address = chip->address;
+    int core;
+    int sub;
 
-    if (chip->address >= 0x40) {
-        return 0xFF;
+    if (address >= Y8960_SSGS_VOLUME_BASE) {
+        return peekRegister(chip, address);
     }
 
-    if (sub == Y8960_SSGS_LED_REG && core == 1) {
-        return chip->led;
+    core = address / Y8960_SSGS_CORE_REGS;
+    sub  = address % Y8960_SSGS_CORE_REGS;
+
+    if ((sub == Y8960_SSGS_GPIO_A || sub == Y8960_SSGS_GPIO_B) &&
+        core == 0 && chip->ioPortReadCb != NULL) {
+        chip->core[0].regs[sub] = chip->ioPortReadCb(chip->ioPortRef, (UInt16)(sub - Y8960_SSGS_GPIO_A));
     }
 
-    if (sub == 0x0E || sub == 0x0F) {
-        if (core == 0 && chip->ioPortReadCb != NULL) {
-            chip->core[0].regs[sub] = chip->ioPortReadCb(chip->ioPortRef, (UInt16)(sub - 0x0E));
-            return chip->core[0].regs[sub];
-        }
-        return 0xFF;
-    }
-
-    if (sub < 14) {
-        return chip->core[core].regs[sub];
-    }
-
-    if (sub >= Y8960_SSGS_PAN_FIRST && sub <= Y8960_SSGS_PAN_LAST) {
-        return chip->core[core].regs[sub];
-    }
-
-    return 0xFF;
+    return chip->core[core].regs[sub];
 }
 
 void y8960SsgsSetIoPort(Y8960SsgsChip* chip, Y8960SsgsReadCb readCb,
@@ -330,7 +364,7 @@ void y8960SsgsSetIoPort(Y8960SsgsChip* chip, Y8960SsgsReadCb readCb,
 
 UInt8 y8960SsgsGetLed(Y8960SsgsChip* chip)
 {
-    return chip->led;
+    return chip->core[1].regs[Y8960_SSGS_GPIO_B] & 0x0F;
 }
 
 void y8960SsgsReset(Y8960SsgsChip* chip)
@@ -343,7 +377,6 @@ void y8960SsgsReset(Y8960SsgsChip* chip)
     }
 
     chip->address = 0;
-    chip->led     = 0;
 
     /* The filters hold the output's recent history. Leaving it in place lets
     ** what the chip was playing before the reset bleed out of it afterwards,
@@ -361,50 +394,33 @@ void y8960SsgsReset(Y8960SsgsChip* chip)
         c->noiseRand   = 1;
         c->noiseVolume = 1;
 
-        for (i = 0; i < 14; i++) {
-            updateRegister(chip, (UInt8)((core << 5) | i), 0);
+        for (i = 0; i < Y8960_SSGS_CORE_REGS; i++) {
+            /* The GPIO is cleared the way the PSG this stands in for clears
+            ** it, so that whatever hangs off it starts in the same state. */
+            updateRegister(chip, (UInt8)(core * Y8960_SSGS_CORE_REGS + i), 0);
         }
-        /* Centre, not the zero the other registers clear to. Nothing
-        ** documents the reset value, and zero is hard left under this law; on
-        ** an MSX2++ the SSGS is the machine's own PSG, so that would send
-        ** every tune written for a PSG to the left speaker alone.
-        ** Provisional until the hardware settles (2026-09-12 user decision). */
-        for (i = Y8960_SSGS_PAN_FIRST; i <= Y8960_SSGS_PAN_LAST; i++) {
-            updateRegister(chip, (UInt8)((core << 5) | i), Y8960_SSGS_PAN_CENTER);
-        }
+    }
 
-        /* The GPIO is cleared the way the PSG this stands in for clears it, so
-        ** that whatever hangs off it starts in the same state. It does nothing
-        ** when no GPIO is attached. */
-        updateRegister(chip, (UInt8)((core << 5) | 0x0E), 0);
-        updateRegister(chip, (UInt8)((core << 5) | 0x0F), 0);
+    /* The specification's reset values: unity and centre. */
+    for (i = 0; i < Y8960_SSGS_MIX_CHANNELS; i++) {
+        chip->volume[i] = Y8960_SSGS_VOLUME_UNITY;
+        chip->pan[i]    = Y8960_SSGS_PAN_CENTER;
+        updateGain(chip, i);
     }
 }
 
 static void getDebugInfo(Y8960SsgsChip* chip, DbgDevice* dbgDevice)
 {
     DbgRegisterBank* regBank;
-    int core;
-    int sub;
-    int index = 0;
+    int address;
 
-    /* 00h-0Dh and 10h-12h per core, plus the second core's LED at 2Fh. */
-    regBank = dbgDeviceAddRegisterBank(dbgDevice, langDbgRegs(), 2 * (14 + 3) + 1);
+    regBank = dbgDeviceAddRegisterBank(dbgDevice, langDbgRegs(), Y8960_SSGS_REG_END);
 
-    for (core = 0; core < Y8960_SSGS_CORES; core++) {
-        for (sub = 0; sub < 14; sub++) {
-            char name[8];
-            sprintf(name, "R%.2x", (core << 5) | sub);
-            dbgRegisterBankAddRegister(regBank, index++, name, 8, chip->core[core].regs[sub]);
-        }
-        for (sub = Y8960_SSGS_PAN_FIRST; sub <= Y8960_SSGS_PAN_LAST; sub++) {
-            char name[8];
-            sprintf(name, "R%.2x", (core << 5) | sub);
-            dbgRegisterBankAddRegister(regBank, index++, name, 8, chip->core[core].regs[sub]);
-        }
+    for (address = 0; address < Y8960_SSGS_REG_END; address++) {
+        char name[8];
+        sprintf(name, "R%.2x", address);
+        dbgRegisterBankAddRegister(regBank, address, name, 8, peekRegister(chip, (UInt8)address));
     }
-
-    dbgRegisterBankAddRegister(regBank, index, "R2f", 8, chip->led);
 }
 
 void y8960SsgsSaveState(Y8960SsgsChip* chip)
@@ -415,7 +431,6 @@ void y8960SsgsSaveState(Y8960SsgsChip* chip)
     int i;
 
     saveStateSet(state, "address", chip->address);
-    saveStateSet(state, "led",     chip->led);
 
     for (i = 0; i < 2; i++) {
         sprintf(tag, "ctrlVolume%d", i);
@@ -425,6 +440,9 @@ void y8960SsgsSaveState(Y8960SsgsChip* chip)
         sprintf(tag, "daVolume%d", i);
         saveStateSet(state, tag, chip->daVolume[i]);
     }
+
+    saveStateSetBuffer(state, "volume", chip->volume, sizeof(chip->volume));
+    saveStateSetBuffer(state, "pan",    chip->pan,    sizeof(chip->pan));
 
     for (core = 0; core < Y8960_SSGS_CORES; core++) {
         Y8960SsgCore* c = &chip->core[core];
@@ -459,7 +477,6 @@ void y8960SsgsLoadState(Y8960SsgsChip* chip)
     int i;
 
     chip->address = (UInt8)saveStateGet(state, "address", 0);
-    chip->led     = (UInt8)saveStateGet(state, "led", 0);
 
     for (i = 0; i < 2; i++) {
         sprintf(tag, "ctrlVolume%d", i);
@@ -469,6 +486,13 @@ void y8960SsgsLoadState(Y8960SsgsChip* chip)
         sprintf(tag, "daVolume%d", i);
         chip->daVolume[i] = saveStateGet(state, tag, 0);
     }
+
+    /* A state without these came from before the registers existed; the
+    ** reset values are what such a chip was playing at. */
+    memset(chip->volume, Y8960_SSGS_VOLUME_UNITY, sizeof(chip->volume));
+    memset(chip->pan,    Y8960_SSGS_PAN_CENTER,   sizeof(chip->pan));
+    saveStateGetBuffer(state, "volume", chip->volume, sizeof(chip->volume));
+    saveStateGetBuffer(state, "pan",    chip->pan,    sizeof(chip->pan));
 
     for (core = 0; core < Y8960_SSGS_CORES; core++) {
         Y8960SsgCore* c = &chip->core[core];
@@ -495,8 +519,11 @@ void y8960SsgsLoadState(Y8960SsgsChip* chip)
         c->enable = c->regs[7];
         for (i = 0; i < Y8960_SSGS_CHANNELS; i++) {
             c->ampVolume[i] = c->regs[8 + i];
-            c->pan[i]       = c->regs[Y8960_SSGS_PAN_FIRST + i];
         }
+    }
+
+    for (i = 0; i < Y8960_SSGS_MIX_CHANNELS; i++) {
+        updateGain(chip, i);
     }
 
     saveStateClose(state);
@@ -575,7 +602,7 @@ static Int32* y8960SsgsSync(void* ref, UInt32 count)
                 UInt32 tone = 0;
                 Int32  oversample = 16;
                 Int32  sampleVolume;
-                UInt8  pan;
+                const Int32* gain = chip->gain[core * Y8960_SSGS_CHANNELS + channel];
 
                 /* Perform 16x oversampling */
                 while (oversample--) {
@@ -592,9 +619,8 @@ static Int32* y8960SsgsSync(void* ref, UInt32 count)
                     sampleVolume = (Int16)tone * voltTable[c->ampVolume[channel]] / 16;
                 }
 
-                pan = c->pan[channel];
-                sampleVolumeL += sampleVolume * panGain[pan][0] / Y8960_SSGS_GAIN_ONE;
-                sampleVolumeR += sampleVolume * panGain[pan][1] / Y8960_SSGS_GAIN_ONE;
+                sampleVolumeL += sampleVolume * gain[0] / Y8960_SSGS_GAIN_ONE;
+                sampleVolumeR += sampleVolume * gain[1] / Y8960_SSGS_GAIN_ONE;
             }
         }
 

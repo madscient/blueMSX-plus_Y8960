@@ -7,7 +7,8 @@
 
    The cartridge's OPLLEX block is a YM2413 that carries four preset ROMs and
    picks one per channel, so the core holds four patch tables instead of one
-   and takes nine bank registers the YM2413 does not have. Every exported
+   and takes nine bank registers the YM2413 does not have, plus nine pan
+   registers that place each channel in the stereo image. Every exported
    symbol is renamed with a Y8960 prefix because the unmodified emu2413 is
    linked into the same binary for the machine's own MSX-MUSIC.
 
@@ -35,9 +36,14 @@ enum Y8960OPLL_TONE_ENUM {
 
 #define Y8960OPLL_BANK_COUNT 4
 
-/* Bank registers 40h-48h, one per channel, sit above the YM2413's 00h-3Fh. */
-#define Y8960OPLL_REG_COUNT 0x49
+/* Bank registers 40h-48h and pan registers 50h-58h, one per channel each,
+** sit above the YM2413's 00h-3Fh. */
+#define Y8960OPLL_REG_COUNT 0x59
 #define Y8960OPLL_BANK_REG_BASE 0x40
+#define Y8960OPLL_PAN_REG_BASE 0x50
+/* The pan register's anchors: 1 hard left, 128 centre, 255 hard right. Zero
+** counts as the centre. */
+#define Y8960OPLL_PAN_CENTER 128
 
 /* voice data */
 typedef struct __Y8960OPLL_PATCH {

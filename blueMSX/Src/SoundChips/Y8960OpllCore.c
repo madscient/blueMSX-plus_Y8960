@@ -1235,13 +1235,19 @@ void Y8960OPLL_reset(Y8960OPLL *opll) {
     set_patch(opll, i, 0);
   }
 
-  for (i = 0; i < Y8960OPLL_REG_COUNT; i++)
-    Y8960OPLL_writeReg(opll, i, 0);
-
   for (i = 0; i < 15; i++) {
     opll->pan[i] = 3;
     opll->pan_fine[i][1] = opll->pan_fine[i][0] = 1.0f;
   }
+
+  for (i = 0; i < Y8960OPLL_REG_COUNT; i++)
+    Y8960OPLL_writeReg(opll, i, 0);
+
+  /* The pan registers reset to the centre, which is what the specification
+  ** names as their default; the zero just written would sound the same, but
+  ** the register itself is to read 128. */
+  for (i = 0; i < 9; i++)
+    Y8960OPLL_writeReg(opll, Y8960OPLL_PAN_REG_BASE + i, Y8960OPLL_PAN_CENTER);
 
   for (i = 0; i < 14; i++) {
     opll->ch_out[i] = 0;
@@ -1272,10 +1278,48 @@ void Y8960OPLL_setQuality(Y8960OPLL *opll, uint8_t q) {}
 
 void Y8960OPLL_setChipType(Y8960OPLL *opll, uint8_t type) { opll->chip_type = type; }
 
+/* The pan register of a melody channel, 50h-58h. The specification gives only
+** the anchors (1 left, 128 centre, 255 right, 0 as centre); between them this
+** is power panning, L = cos(t), R = sin(t), t from 0 to pi/2, so the centre
+** sits at 1/sqrt(2) on both sides (decided 2026-10-16).
+**
+** In rhythm mode the five rhythm sounds keep the pan of the channel they are
+** generated on, as the YM2413 assigns them: BD on channel 7, HH and SD on
+** channel 8, TOM and CYM on channel 9, counting from 1 as the registers do. */
+static void set_pan_reg(Y8960OPLL *opll, int ch, uint8_t data) {
+  float pan[2];
+  if (data == 0 || data == Y8960OPLL_PAN_CENTER) {
+    pan[0] = pan[1] = 0.70710678f;
+  } else {
+    double t = (double)(data - 1) / 254.0 * (_PI_ / 2.0);
+    pan[0] = (float)cos(t);
+    pan[1] = (float)sin(t);
+  }
+  Y8960OPLL_setPanFine(opll, ch, pan);
+  switch (ch) {
+  case 6:
+    Y8960OPLL_setPanFine(opll, 9, pan);   /* BD */
+    break;
+  case 7:
+    Y8960OPLL_setPanFine(opll, 10, pan);  /* HH */
+    Y8960OPLL_setPanFine(opll, 11, pan);  /* SD */
+    break;
+  case 8:
+    Y8960OPLL_setPanFine(opll, 12, pan);  /* TOM */
+    Y8960OPLL_setPanFine(opll, 13, pan);  /* CYM */
+    break;
+  }
+}
+
 void Y8960OPLL_writeReg(Y8960OPLL *opll, uint32_t reg, uint8_t data) {
   int ch, i;
 
   if (reg >= Y8960OPLL_REG_COUNT)
+    return;
+
+  /* 49h-4Fh lie between the bank and pan blocks and are nothing; keeping them
+  ** out of the mirror keeps a save state from carrying them. */
+  if (Y8960OPLL_BANK_REG_BASE + 9 <= reg && reg < Y8960OPLL_PAN_REG_BASE)
     return;
 
   /* mirror registers */
@@ -1453,6 +1497,18 @@ void Y8960OPLL_writeReg(Y8960OPLL *opll, uint32_t reg, uint8_t data) {
     set_patch_bank(opll, reg - Y8960OPLL_BANK_REG_BASE, data & 3);
     break;
 
+  case 0x50:
+  case 0x51:
+  case 0x52:
+  case 0x53:
+  case 0x54:
+  case 0x55:
+  case 0x56:
+  case 0x57:
+  case 0x58:
+    set_pan_reg(opll, reg - Y8960OPLL_PAN_REG_BASE, data);
+    break;
+
   default:
     break;
   }
@@ -1558,7 +1614,12 @@ void Y8960OPLL_calcStereo(Y8960OPLL *opll, int32_t out[2]) {
   }
   opll->out_time -= opll->out_step;
   if (opll->conv) {
+    /* The converter keeps one phase for both sides and advances it on every
+    ** read, so the right side would be taken a step after the left
+    ** (digital-sound-antiques/emu2413#20). Put the phase back between them. */
+    double timer = opll->conv->timer;
     out[0] = Y8960OPLL_RateConv_getData(opll->conv, 0);
+    opll->conv->timer = timer;
     out[1] = Y8960OPLL_RateConv_getData(opll->conv, 1);
   } else {
     out[0] = opll->mix_out[0];

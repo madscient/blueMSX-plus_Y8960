@@ -10,9 +10,9 @@
 ** Copyright (C) 2003-2006 Daniel Vik
 **
 ** Forked for the Y8960 cartridge, 2026 by madscient.
-** The cartridge carries an SSGS (YMZ705/732 equivalent), which is two YM2149
-** equivalents with a per-channel pan pot, not a pair of AY-3-8910s. It is
-** emulated as its own chip rather than sharing the machine's PSG.
+** The cartridge carries an SSGS: two YM2149 equivalents, each channel with
+** its own volume and pan, not a pair of AY-3-8910s. It is emulated as its own
+** chip rather than sharing the machine's PSG.
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -48,8 +48,8 @@ void y8960SsgsDestroy(Y8960SsgsChip* chip);
 
 void y8960SsgsReset(Y8960SsgsChip* chip);
 
-/* The address covers both cores, 00h-1Fh for the first and 20h-3Fh for the
-** second. */
+/* The address covers both cores, 00h-0Fh for the first and 10h-1Fh for the
+** second, and the volume and pan registers at 20h-2Fh. */
 void y8960SsgsWriteAddress(Y8960SsgsChip* chip, UInt8 address);
 void y8960SsgsWriteData(Y8960SsgsChip* chip, UInt8 data);
 
@@ -59,12 +59,12 @@ void y8960SsgsWriteData(Y8960SsgsChip* chip, UInt8 data);
 UInt8 y8960SsgsReadData(Y8960SsgsChip* chip);
 
 /* Attaches a GPIO to the first core's 0Eh and 0Fh. A cartridge has none, and
-** those two registers then do nothing; a Y8960 built into a machine stands in
-** for the PSG and carries what the PSG's pins carry. */
+** those two registers are then plain storage; a Y8960 built into a machine
+** stands in for the PSG and carries what the PSG's pins carry. */
 void y8960SsgsSetIoPort(Y8960SsgsChip* chip, Y8960SsgsReadCb readCb,
                         Y8960SsgsReadCb pollCb, Y8960SsgsWriteCb writeCb, void* ref);
 
-/* The four LED bits the second core's 2Fh carries. Nothing drives them yet;
+/* The four LED bits on the second core's port B (1Fh). Nothing drives them;
 ** they are kept so the debugger can show what software asked for. */
 UInt8 y8960SsgsGetLed(Y8960SsgsChip* chip);
 

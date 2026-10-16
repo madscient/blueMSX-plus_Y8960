@@ -131,10 +131,16 @@ t3_fail:
         ld      hl, msg_t3ng
         call    print
 
-; --- 4. the SCC window replaces the bank at 1800-1FFF
+; --- 4. the SCC window replaces the bank at 1800-1FFF, in RAM mode only
+;
+; BANK1 shows the SCC when its register holds 3Fh and RAM mode is on. In
+; compatibility mode the same value is bank 31, which cannot be written: the
+; byte is refused and reads back as whatever the memory holds.
 t4:
+        ld      a, 1
+        ld      (REG_MOD), a            ; RAM mode
         ld      a, 03fh
-        ld      (REG_B1C), a
+        ld      (REG_B1R), a
         ld      a, 05ah
         ld      (SCC_B1), a             ; SCC waveform, not memory
         ld      a, (SCC_B1)
@@ -142,7 +148,21 @@ t4:
         jr      nz, t4_fail
 
         ld      a, 1                    ; close it again
-        ld      (REG_B1C), a
+        ld      (REG_B1R), a
+        xor     a
+        ld      (REG_MOD), a            ; compatibility mode
+        ld      a, 03fh
+        ld      (REG_B1C), a            ; the same value: no SCC here
+        ld      a, 0c3h
+        ld      (SCC_B1), a             ; refused, bank 31 is read-only
+        ld      a, (SCC_B1)
+        ld      c, a
+        ld      a, 1                    ; a ROM bank back first: the later
+        ld      (REG_B1C), a            ; checks need the window, SCC or not
+        ld      a, c
+        cp      0c3h
+        jr      z, t4_fail              ; the SCC, or the RAM, took it
+
         ld      a, (BANK1W)
         cp      1
         jr      nz, t4_fail
@@ -493,15 +513,14 @@ t11:
         ld      hl, opl2_off
         call    sendt
 
-; --- 12. SSGS: the pan pot is the part the machine's PSG cannot copy
+; --- 12. SSGS: the pan is the part the machine's PSG cannot copy
 ;
-; A0h and A1h belong to the machine's own PSG as well, and it masks the
-; register number to four bits, so anything written there lands on both chips.
-; The tunnel at 7FEAh reaches only the Y8960, so the tone is set up through it
-; and the machine's PSG stays silent throughout.
+; A0h and A1h belong to the machine's own PSG as well, so anything written
+; there lands on both chips. The tunnel at 7FEAh reaches only the Y8960, so
+; the tone is set up through it and the machine's PSG stays silent throughout.
 ;
 ; That makes panning the proof of which chip is sounding: the machine's PSG
-; has no pan pot, so a tone that moves is the Y8960's.
+; has no pan, so a tone that moves is the Y8960's.
 t12:
         ld      hl, msg_t12
         call    print
@@ -524,15 +543,15 @@ t12:
 
 ; C: the gate shut, the same kind of write on the direct port
 ;
-; The pan register number is 30h, which the machine's PSG reads as its own
-; register 0; that chip is silent, so nothing is heard from it either way.
+; The pan register number is 2Ch. The machine's PSG takes no register whose
+; upper four bits are set, so it ignores the select and stays silent.
         ld      hl, msg_t12c
         call    print
         xor     a
         ld      (ENA2), a
-        ld      a, 030h
+        ld      a, 02ch
         out     (SSGSA), a
-        ld      a, 00fh                 ; hard right, if it arrives
+        ld      a, 0ffh                 ; hard right, if it arrives
         out     (SSGSD), a
         call    delay
 
@@ -541,9 +560,9 @@ t12:
         call    print
         ld      a, 010h
         ld      (ENA2), a
-        ld      a, 030h
+        ld      a, 02ch
         out     (SSGSA), a
-        ld      a, 00fh
+        ld      a, 0ffh
         out     (SSGSD), a
         call    delay
 
@@ -711,12 +730,13 @@ t16_fail:
         ld      hl, msg_t16ng
         call    print
 
-; --- 17, 18. the SCC window in BANK2 and BANK3
+; --- 17, 18. the SCC window in BANK2, and none in BANK3
 ;
 ; The init entry leaves page 2 on RAM, where a write aimed at BANK2 or BANK3
 ; lands and reads back for the wrong reason. sccpage2 gives page 2 to the
 ; cartridge first, and also reads the region's marker, which RAM would not
-; hold.
+; hold. BANK2 is where the Konami SCC has its registers; BANK3 never shows
+; them, so there the byte is refused and sccpage2 comes back non-zero.
 t17:
         ld      hl, 09000h
         ld      de, 09800h
@@ -734,7 +754,7 @@ t18:
         ld      c, 3
         call    sccpage2
         ld      hl, msg_t18ok
-        jr      z, t18_print
+        jr      nz, t18_print
         ld      hl, msg_t18ng
 t18_print:
         call    print
@@ -931,18 +951,19 @@ opl2_off:
 
 ; --- register lists for the SSGS, sent through its tunnel
 ;
-; The second core sits at 20h and up, the first at 00h. Channel A only, full
-; volume, tone on and everything else off.
+; The second core sits at 10h-1Fh, the first at 00h-0Fh; the pans at 28h-2Ah
+; (first core) and 2Ch-2Eh (second core). Channel A only, full volume, tone
+; on and everything else off.
 ssgs_tone2:
-        db      020h, 040h              ; second core, channel A period
-        db      021h, 000h
-        db      027h, 03eh              ; channel A tone on
-        db      028h, 00fh              ; full volume
-        db      030h, 008h              ; pan centre
+        db      010h, 040h              ; second core, channel A period
+        db      011h, 000h
+        db      017h, 03eh              ; channel A tone on
+        db      018h, 00fh              ; full volume
+        db      02ch, 080h              ; pan centre
         db      0ffh
 
 ssgs_left2:
-        db      030h, 000h              ; second core, channel A hard left
+        db      02ch, 001h              ; second core, channel A hard left
         db      0ffh
 
 ssgs_tone1:
@@ -950,13 +971,13 @@ ssgs_tone1:
         db      001h, 000h
         db      007h, 03eh
         db      008h, 00fh
-        db      010h, 000h              ; first core hard left
-        db      030h, 00fh              ; second core hard right
+        db      028h, 001h              ; first core hard left
+        db      02ch, 0ffh              ; second core hard right
         db      0ffh
 
 ssgs_off:
         db      008h, 000h
-        db      028h, 000h
+        db      018h, 000h
         db      0ffh
 
 sendg:
@@ -1157,11 +1178,11 @@ msg_t12:
 msg_t12a:
         db      " A TUNNEL TONE: CENTRE", 13, 10, 0
 msg_t12b:
-        db      " B PAN 0: MOVES LEFT", 13, 10, 0
+        db      " B PAN 1: MOVES LEFT", 13, 10, 0
 msg_t12c:
-        db      " C SHUT, PAN F: NO MOVE", 13, 10, 0
+        db      " C SHUT, PAN FF: NO MOVE", 13, 10, 0
 msg_t12d:
-        db      " D OPEN, PAN F: MOVES RIGHT", 13, 10, 0
+        db      " D OPEN, PAN FF: MOVES RIGHT", 13, 10, 0
 msg_t12e:
         db      " E BOTH CORES: LEFT+RIGHT", 13, 10, 0
 msg_t13ok:
@@ -1185,9 +1206,9 @@ msg_t17ok:
 msg_t17ng:
         db      "17 SCC WINDOW BANK2: NG", 13, 10, 0
 msg_t18ok:
-        db      "18 SCC WINDOW BANK3: OK", 13, 10, 0
+        db      "18 NO SCC IN BANK3: OK", 13, 10, 0
 msg_t18ng:
-        db      "18 SCC WINDOW BANK3: NG", 13, 10, 0
+        db      "18 NO SCC IN BANK3: NG", 13, 10, 0
 msg_t19ok:
         db      "19 TIMER INTERRUPT: OK", 13, 10, 0
 msg_t19ng:

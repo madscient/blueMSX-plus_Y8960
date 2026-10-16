@@ -5,7 +5,8 @@
 ** the four waveforms a YM3812 has, the sample RAM the two circuits share, and
 ** the MSX-AUDIO registers the cartridge does not carry. They also cover the
 ** end of an ADPCM sample, which the core has to bring about by itself: on
-** time, with its interrupt, whatever the software is doing meanwhile.
+** time, with its interrupt, whatever the software is doing meanwhile. And
+** they cover the one bit of 07h the Y8960 dropped, SP-OFF.
 **
 ** Every check is written so that it fails if the change were not there. The
 ** waveform checks compare the four against each other before trusting any of
@@ -431,6 +432,31 @@ int main()
               at >= 1023 && at <= 1026);
         check("and the interrupt comes with it, not before",
               quietBefore && y8960ProbePendingIrq != 0);
+    }
+
+    /* ---- SP-OFF was dropped from the Y8960 ------------------------------ */
+    {
+        /* On a Y8950 bit 3 of 07h silences the ADPCM output while it plays.
+        ** The Y8960 has no such bit (specification of 2026-10-16). */
+        std::vector<int32_t> with, without;
+        {
+            *boardSysTime = 1000;
+            Player p(cfg);
+            p.playShort(0xA8);              /* START | MEMORY_DATA | bit 3 */
+            p.runMixed(600 * TICK);
+            with = p.out;
+        }
+        {
+            *boardSysTime = 1000;
+            Player p(cfg);
+            p.playShort(0xA0);
+            p.runMixed(600 * TICK);
+            without = p.out;
+        }
+        bool heard = false;
+        for (auto v : with) if (v != 0) { heard = true; break; }
+        check("07h bit 3, the Y8950's SP-OFF, no longer silences the ADPCM", heard);
+        check("and the sample sounds just as it does without the bit", with == without);
     }
 
     /* ---- what the mixer is given ---------------------------------------- */

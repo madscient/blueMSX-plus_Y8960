@@ -33,9 +33,9 @@ Y8960 対応は upstream には存在しない、このフォーク固有の機�
 | `tests/sndtest.asm` + `make-sndtest.py` + `analyze-sndtest.py` | DCSG のゲートとトンネル、SCC の音。録音した WAV を判定する。16KB |
 | `tests/ssgstest.asm` + `make-ssgstest.py` | 基盤タイプ `MSX2++` で SSGS が本体の PSG として働くか、窓とイネーブラが無いか。16KB の素の ROM |
 | `tests/adpcmtest.asm` + `make-adpcmtest.py` | OPL2EX の ADPCM がサンプルを時刻どおりに終えるか。`C0h`/`C1h` を叩くので、本体の MSX-AUDIO にも使える。16KB |
-| `tests/opllex-bank-probe.c` | OPLLEX のコア単体試験（ヘッドレス） |
+| `tests/opllex-bank-probe.c` | OPLLEX のコア単体試験（ヘッドレス）。バンクとパン |
 | `tests/opl2ex-probe.cpp` + `opl2ex-host-stub.c` | OPL2EX のコア単体試験（ヘッドレス） |
-| `tests/ssgs-probe.c` + `ssgs-host-stub.c` | SSGS のコア単体試験（ヘッドレス） |
+| `tests/ssgs-probe.c` + `ssgs-host-stub.c` | SSGS のコア単体試験（ヘッドレス）。配置・音量・パン・GPIO |
 | `tests/MSX2+ - C-BIOS + Y8960/` | 7 ブロックを置いた構成。**`y8960bas.rom` が要る** |
 | `tests/MSX2+ - C-BIOS + Y8960 (banktest)/` | 同じ構成で、Y8960 SCC に `banktest.rom` を載せたもの。本体 MSX-MUSIC は外してある |
 | `tests/MSX2+ - C-BIOS + Y8960 (cartridge)/` | Y8960 SCC を**外した**構成。`/rom1 <rom> /romtype1 Y8960SCC` でカートリッジとして挿す |
@@ -76,7 +76,7 @@ py "doc/fork/y8960/tests/make-banktest.py" <pasmo.exe> "$DEST/MSX2+ - C-BIOS + Y
 ```
 1 ROM BANKS: OK        6 TIMER COUNTS: OK     11 OPL2 (LISTEN)        16 MIRROR C000H,E000H: OK
 2 RAM WRITE: OK        7 TIMER FLAG: OK       12 SSGS (LISTEN)        17 SCC WINDOW BANK2: OK
-3 ROM PROTECT: OK      8 DCSG (SEE SNDTEST)   13 WINDOW, BANK 20: OK  18 SCC WINDOW BANK3: OK
+3 ROM PROTECT: OK      8 DCSG (SEE SNDTEST)   13 WINDOW, BANK 20: OK  18 NO SCC IN BANK3: OK
 4 SCC WINDOW: OK       9 OPLL (LISTEN)        14 PAGE 0 NO WRITE: OK  19 TIMER INTERRUPT: OK
 5 TIMER ENABLER: OK   10 OPL2 READ BACK: OK   15 MIRROR AT 0000H: OK
 ```
