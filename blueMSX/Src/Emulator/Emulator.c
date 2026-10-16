@@ -32,6 +32,7 @@
 #include "MsxTypes.h"
 #include "Debugger.h"
 #include "Board.h"
+#include "Disk.h"
 #include "FileHistory.h"
 #include "Switches.h"
 #include "Led.h"
@@ -385,6 +386,7 @@ static void setDeviceInfo(BoardDeviceInfo* deviceInfo)
     for (i = 0; i < PROP_MAX_DISKS; i++) {
         deviceInfo->disks[i].inserted =  (int)strlen(properties->media.disks[i].fileName);
         strcpy(deviceInfo->disks[i].name, properties->media.disks[i].fileName);
+        diskSetDirFormat(i, properties->media.disks[i].dirFormat);
         strcpy(deviceInfo->disks[i].inZipName, properties->media.disks[i].fileNameInZip);
     }
 
@@ -457,6 +459,13 @@ void emulatorStart(const char* stateName) {
     ** extractToken on machine config and clobbers that buffer, so copy
     ** the path into emuStateName up-front before any such call. */
     strcpy(emuStateName, stateName ? stateName : "");
+
+    /* A state brings back what the MSX remembered of a disk, and that must
+    ** not be written to a host medium. */
+    if (emuStateName[0] != 0) {
+        diskWithdrawHostMedia();
+    }
+    diskDirStart(emuStateName[0] != 0, emuState == EMU_STOPPED);
         dbgEnable();
 
     archEmulationStartNotification();
@@ -661,8 +670,14 @@ int emuWaitForResume(void) {
     return emuExitFlag;
 }
 
+static int emuHoldSuspended;
+
+void emulatorHoldSuspended(int hold) {
+    emuHoldSuspended = hold;
+}
+
 void emulatorResume() {
-    if (emuState == EMU_SUSPENDED) {
+    if (emuState == EMU_SUSPENDED && !emuHoldSuspended) {
         emuSysTime = 0;
 
         archSoundResume();

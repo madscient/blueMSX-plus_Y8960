@@ -131,6 +131,7 @@ RomType mediaDbStringToType(const char* romName)
     if (iequals(name, "NEO-16"))           return ROM_NEO16;
     if (iequals(name, "NEO16"))            return ROM_NEO16;
     if (iequals(name, "Yamanooto"))        return ROM_YAMANOOTO;
+    if (iequals(name, "RookieDriveNX"))    return ROM_ROOKIEDRIVE;
     if (iequals(name, "Y8960OPLLEX"))      return ROM_Y8960OPLLEX;
     if (iequals(name, "Y8960OPL2EX"))      return ROM_Y8960OPL2EX;
     if (iequals(name, "Y8960SSGS"))        return ROM_Y8960SSGS;
@@ -690,6 +691,7 @@ extern "C" const char* romTypeToString(RomType romType)
     case ROM_NEO8:        return "NEO-8";
     case ROM_NEO16:       return "NEO-16";
     case ROM_YAMANOOTO:   return "Yamanooto";
+    case ROM_ROOKIEDRIVE: return "Rookie Drive NX";
     case ROM_Y8960OPLLEX: return "Y8960 OPLLEX";
     case ROM_Y8960OPL2EX: return "Y8960 OPL2EX";
     case ROM_Y8960SSGS:   return "Y8960 SSGS";
@@ -883,6 +885,7 @@ extern "C" const char* romTypeToShortString(RomType romType)
     case ROM_NEO8:        return "NEO-8";
     case ROM_NEO16:       return "NEO-16";
     case ROM_YAMANOOTO:   return "YAMANOOTO";
+    case ROM_ROOKIEDRIVE: return "ROOKIEDRIVE";
     case ROM_Y8960OPLLEX: return "Y8960OPLLEX";
     case ROM_Y8960OPL2EX: return "Y8960OPL2EX";
     case ROM_Y8960SSGS:   return "Y8960SSGS";
@@ -1122,6 +1125,7 @@ int romTypeIsMegaRom(RomType romType) {
     case ROM_NEO8:        return 1;
     case ROM_NEO16:       return 1;
     case ROM_YAMANOOTO:   return 1;
+    case ROM_ROOKIEDRIVE: return 1;
     case ROM_Y8960SCC:    return 1;
     case ROM_Y8960:       return 1;
     case ROM_FLASHROMSCC: return 1;

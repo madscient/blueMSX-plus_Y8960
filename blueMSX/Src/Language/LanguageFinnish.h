@@ -86,7 +86,20 @@ void langInitFinnish(LanguageStrings* ls)
     ls->errorCreateDiskImage    = "Levykuvatiedoston luonti epäonnistui.";
     ls->errorCreateTapeImage    = "Kasettitiedoston luonti epäonnistui.";
     ls->errorNoCasInZip         = "Zip paketista ei löytynyt .CAS tiedostoa.";
-    ls->errorDirAsDskOverflow   = "%d tiedosto(a) (yhteensä %d KB) ei mahtunut 720 KB:n levykuvaan ja jäi väliin.";
+    ls->errorDirDiskTooLarge    = "%d tiedosto(a) ei mahtunut levylle, ja ne jätettiin pois.";
+    ls->errorDirDiskOnline      = "%d vain verkossa olevaa tiedostoa jätettiin pois. Ota ne käyttöön tässä laitteessa, jos haluat ne mukaan.";
+    ls->errorDirDiskSubdirs     = "%d hakemistoa jätettiin pois, koska valittu muoto ei tue niitä.";
+    ls->errorDirDiskUnreadable  = "Hakemiston asettaminen asemaan epäonnistui, koska sitä ei voitu lukea:\n%s";
+    ls->dlgDirWriteSummary      = "MSX muutti tämän hakemiston sisältöä:\n%s\n\nUusia tiedostoja: %d\nMuutettuja tiedostoja: %d\nPoistettuja tiedostoja (siirretty hakemistoon .blueMSX-trash): %d\nOhitettuja: %d\n\nKirjoitetaanko muutokset hakemistoon?";
+    ls->dlgDirWriteMass         = "Suurin osa tiedostoista poistettiin. MSX on ehkä alustanut taltion.";
+    ls->dlgDirWriteApply        = "Kirjoita";
+    ls->dlgDirWriteDiscard      = "Hylkää";
+    ls->dlgDirWriteDiscardSure  = "Haluatko varmasti hylätä MSX:n tekemät muutokset? Niitä ei voi palauttaa.";
+    ls->errorDirWriteInvalid    = "MSX:n tähän hakemistoon tekemiä muutoksia ei voi kirjoittaa, koska levyn tiedostojärjestelmä (FAT ja hakemistot) on puoliksi kirjoitettu tai vahingoittunut:\n%s\n\nJos MSX saattoi olla vielä kirjoittamassa levylle, valitse Ei, odota, kunnes se on valmis (MSX-DOS-kehote tai BASICin Ok), ja yritä uudelleen. Jos MSX alusti levyn tai osioi sen uudelleen, muutoksia ei voi kirjoittaa.\n\nHylätäänkö muutokset?";
+    ls->errorDirWriteFailed     = "%d kohdetta ei voitu kirjoittaa takaisin. Tämän hakemiston log.txt luettelee ne:\n%s";
+    ls->errorDirWriteHost       = "MSX:n tekemiä muutoksia ei voitu kirjoittaa tähän hakemistoon:\n%s\n\nHakemisto voi olla vain luku -tilassa tai levy täynnä.\n\nHylätäänkö muutokset?";
+    ls->infoDirWriteState       = "MSX toimii tallennetusta tilasta. Tämän hakemiston muutoksia ei kirjoiteta takaisin ennen kuin MSX on sammutettu ja käynnistetty uudelleen.";
+    ls->infoDirMemory           = "Hakemiston muutosten säilyttämiseen tarvittava muisti ylittää nyt %d Mt.";
     ls->errorNoHelp             = "blueMSX+:n ohjetiedostoa ei löytynyt.";
     ls->errorStartEmu           = "MSX emulaattorin käynnistys epäonnistui.";
     ls->errorStartEmuNoMachine           = "Emulaatiolle ei ole asetettu MSX-konetta. Valitse yksi kohdasta Asetukset -> Emulaatio -> MSX malli.";
@@ -186,6 +199,7 @@ void langInitFinnish(LanguageStrings* ls)
     ls->menuCartFlashCart       = "Flash-kasetit";
 
     ls->menuDiskInsertNew       = "Uusi levytiedosto";
+    ls->menuDiskInsertPhysical  = "Aseta fyysinen asema";
     ls->menuDiskInsertCdrom     = "Aseta CD-ROM";       // New in 2.7
     ls->menuDiskDirInsert       = "Aseta hakemisto";
     ls->menuDiskAutoStart       = "Käynnistä uudelleen asettamisen jälkeen";
@@ -336,6 +350,18 @@ void langInitFinnish(LanguageStrings* ls)
     ls->dlgTabType              = "Tyyppi";
     ls->dlgTabFilename          = "Tiedostonimi";
     ls->dlgZipReset             = "Käynnistä uudelleen";
+
+    ls->dlgPhysDriveTitle       = "blueMSX+ - Fyysinen asema";
+    ls->dlgPhysDriveChoose      = "Valitse asetettava siirrettävä asema:";
+    ls->dlgPhysDriveNone        = "Siirrettävää asemaa ei löytynyt.";
+    ls->dlgPhysDriveWarning     = "Fyysisen aseman suora käyttö vaatii järjestelmänvalvojan oikeudet.\n\n"
+                                  "Windows ei voi käyttää asemaa sinä aikana, kun se on asetettuna blueMSX+:aan. MSX:n toiminnot sekä emulaattorin virhe tai kaatuminen kirjoituksen aikana voivat vioittaa tai tyhjentää aseman tiedostojärjestelmän ja tiedot. Varmuuskopioi tärkeät tiedot etukäteen.\n\n"
+                                  "Älä irrota asemaa tietokoneesta ennen kuin olet poistanut sen emulaattorista.";
+    ls->dlgPhysDriveNoWarning   = "Älä näytä tätä varoitusta uudelleen";
+    ls->dlgPhysDriveContinue    = "Jatka";
+    ls->dlgPhysDriveInUse       = "Asema on Windowsin tai toisen ohjelman käytössä. Sulje sitä käyttävät tiedostot ja ikkunat ja yritä uudelleen.";
+    ls->dlgPhysDriveFailed      = "Asemaa ei voitu avata.";
+    ls->infoRewindNoMedium      = "Taaksepäin suoritus ei ole käytettävissä, kun asetettuna on fyysinen asema tai kun MSX:n hakemistoon tekemiä muutoksia ei ole vielä kirjoitettu siihen.";
 
     ls->dlgAboutTitle           = "Tietoja blueMSX+:stä";
 

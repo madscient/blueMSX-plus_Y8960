@@ -84,7 +84,20 @@ void langInitGerman(LanguageStrings* ls)
     ls->errorCreateDiskImage     = "Die Disk-Image-Datei konnte nicht erstellt werden.";
     ls->errorCreateTapeImage     = "Die Cassetten-Image-Datei konnte nicht erstellt werden.";
     ls->errorNoCasInZip          = "Konnte kein .cas-File im Zip-Archiv finden.";
-    ls->errorDirAsDskOverflow    = "%d Datei(en) (%d KB insgesamt) passten nicht in das 720-KB-Disk-Image und wurden übersprungen.";
+    ls->errorDirDiskTooLarge    = "%d Datei(en) passten nicht auf die Disk und wurden ausgelassen.";
+    ls->errorDirDiskOnline      = "%d nur online verfügbare Datei(en) wurden ausgelassen. Machen Sie sie auf diesem Gerät verfügbar, um sie einzubeziehen.";
+    ls->errorDirDiskSubdirs     = "%d Directorys wurden ausgelassen, weil das gewählte Format sie nicht aufnehmen kann.";
+    ls->errorDirDiskUnreadable  = "Das Einfügen des Directorys ist fehlgeschlagen, da es nicht gelesen werden konnte:\n%s";
+    ls->dlgDirWriteSummary      = "Der MSX hat den Inhalt dieses Directorys geändert:\n%s\n\nNeue Dateien: %d\nGeänderte Dateien: %d\nGelöschte Dateien (nach .blueMSX-trash verschoben): %d\nÜbersprungen: %d\n\nÄnderungen in das Directory schreiben?";
+    ls->dlgDirWriteMass         = "Die meisten Dateien wurden gelöscht. Möglicherweise hat der MSX das Volume formatiert.";
+    ls->dlgDirWriteApply        = "Schreiben";
+    ls->dlgDirWriteDiscard      = "Verwerfen";
+    ls->dlgDirWriteDiscardSure  = "Die Änderungen des MSX wirklich verwerfen? Sie können nicht wiederhergestellt werden.";
+    ls->errorDirWriteInvalid    = "Die Änderungen des MSX an diesem Directory können nicht geschrieben werden, weil das Dateisystem auf dem Datenträger (FAT und Directorys) unvollständig geschrieben oder beschädigt ist:\n%s\n\nFalls der MSX möglicherweise noch auf den Datenträger schrieb, wählen Sie Nein, warten Sie, bis er fertig ist (MSX-DOS-Eingabeaufforderung bzw. Ok in BASIC), und versuchen Sie es erneut. Wenn der MSX den Datenträger formatiert oder neu partitioniert hat, können die Änderungen nicht geschrieben werden.\n\nÄnderungen verwerfen?";
+    ls->errorDirWriteFailed     = "%d Element(e) konnten nicht zurückgeschrieben werden. log.txt in diesem Directory führt sie auf:\n%s";
+    ls->errorDirWriteHost       = "Die Änderungen des MSX konnten nicht in dieses Directory geschrieben werden:\n%s\n\nDas Directory ist möglicherweise schreibgeschützt oder der Datenträger ist voll.\n\nÄnderungen verwerfen?";
+    ls->infoDirWriteState       = "Der MSX läuft mit einem geladenen Speicherstand. Änderungen an diesem Directory werden erst zurückgeschrieben, nachdem der MSX aus- und wieder eingeschaltet wurde.";
+    ls->infoDirMemory           = "Der Speicher für die Änderungen am Directory übersteigt jetzt %d MB.";
     ls->errorNoHelp              = "Konnte kein blueMSX+-Hilfe-File finden.";
     ls->errorStartEmu            = "Der MSX-Emulator konnte nicht gestartet werden.";
     ls->errorStartEmuNoMachine           = "Es ist keine MSX-Maschine für die Emulation eingestellt. Wählen Sie eine unter Options -> Emulation -> MSX-Maschine.";
@@ -200,6 +213,7 @@ void langInitGerman(LanguageStrings* ls)
     ls->menuVideoRender          = "Videofile wiedergeben";      // New in 2.6 -- "Render Video File";
 
     ls->menuDiskInsertNew        = "Neues Disk-Image einfügen";              
+    ls->menuDiskInsertPhysical  = "Physisches Laufwerk einfügen";
     ls->menuDiskInsertCdrom      = "CDROM einfügen";             // New in 2.7 -- "Insert CD-Rom";
     ls->menuDiskDirInsert        = "Directory einfügen";
     ls->menuDiskAutoStart        = "Reset nach Einfügen";
@@ -335,6 +349,18 @@ void langInitGerman(LanguageStrings* ls)
     ls->dlgTabType               = "Typ";
     ls->dlgTabFilename           = "Filename";
     ls->dlgZipReset              = "Reset nach Einfügen";
+
+    ls->dlgPhysDriveTitle       = "blueMSX+ - Physisches Laufwerk";
+    ls->dlgPhysDriveChoose      = "Wählen Sie das Wechsellaufwerk, das eingefügt werden soll:";
+    ls->dlgPhysDriveNone        = "Es wurde kein Wechsellaufwerk gefunden.";
+    ls->dlgPhysDriveWarning     = "Für den direkten Zugriff auf ein physisches Laufwerk sind Administratorrechte erforderlich.\n\n"
+                                  "Solange das Laufwerk in blueMSX+ eingefügt ist, kann Windows nicht darauf zugreifen. Vorgänge auf der MSX-Seite, aber auch ein Fehler im Emulator oder ein Absturz während des Schreibens können das Dateisystem und die Daten auf dem Laufwerk beschädigen oder löschen. Sichern Sie wichtige Daten vorher.\n\n"
+                                  "Ziehen Sie das Laufwerk nicht ab, bevor Sie es ausgeworfen haben.";
+    ls->dlgPhysDriveNoWarning   = "Diese Warnung nicht mehr anzeigen";
+    ls->dlgPhysDriveContinue    = "Fortfahren";
+    ls->dlgPhysDriveInUse       = "Das Laufwerk wird von Windows oder einem anderen Programm verwendet. Schließen Sie die Dateien und Fenster, die es verwenden, und versuchen Sie es erneut.";
+    ls->dlgPhysDriveFailed      = "Das Laufwerk konnte nicht geöffnet werden.";
+    ls->infoRewindNoMedium      = "Zurückspulen ist nicht verfügbar, solange ein physisches Laufwerk eingefügt ist oder Änderungen des MSX an einem Directory noch nicht in das Directory geschrieben sind.";
 
     ls->dlgAboutTitle            = "Über blueMSX+";
 

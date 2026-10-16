@@ -123,6 +123,10 @@ struct SdCard {
     int initialized;
     int expectAcmd;     /* CMD55 just received -- next cmd is an A-form */
 
+    /* A card put in the slot answers nothing until CMD0 selects SPI mode. */
+    int spiMode;
+    int mediumChanges;  /* media taken in so far; tells a rewind across a change */
+
     /* Last-known card status, bit-encoded as R2 second byte. */
     UInt8 status;
 
@@ -148,35 +152,7 @@ struct SdCard {
 
 static UInt32 readSectorCount(int diskId)
 {
-    /* No public helper exposes the image size, so probe via binary
-    ** search of diskReadSector return codes.  blueMSX's Disk layer
-    ** uses 1-based sector numbers internally; we keep the rest of
-    ** this file in SDHC's 0-based convention and translate only here
-    ** and in CMD17/24.
-    **
-    ** The number is advisory -- only populates CSD.C_SIZE.  Nextor
-    ** reads the partition table for the real volume extent, so an
-    ** approximate value is sufficient. */
-    UInt8 buf[BLOCK_LEN];
-    UInt32 lo = 0;        /* highest *1-based* sector confirmed readable */
-    UInt32 hi = 1;        /* first 1-based sector confirmed unreadable */
-
-    /* Exponential hunt for an unreadable bound. */
-    while (hi <= 0x10000000u &&
-           diskReadSector(diskId, buf, (int)hi, 0, 0, 0, NULL) == DSKE_OK) {
-        lo = hi;
-        hi *= 2;
-    }
-    /* Binary search between lo (good) and hi (bad). */
-    while (lo + 1 < hi) {
-        UInt32 mid = lo + (hi - lo) / 2;
-        if (diskReadSector(diskId, buf, (int)mid, 0, 0, 0, NULL) == DSKE_OK) {
-            lo = mid;
-        } else {
-            hi = mid;
-        }
-    }
-    return lo;            /* lo is now the 1-based sector count */
+    return (UInt32)_diskGetTotalSectors(diskId);
 }
 
 static void buildCid(SdCard* sd)
@@ -285,6 +261,28 @@ static void enqueueReadBlock(SdCard* sd, UInt8 r1, const UInt8* block, int block
 
 /* --------------------------- Command parser ----------------------- */
 
+static void cardInserted(SdCard* sd)
+{
+    sd->spiMode = 0;
+    sd->initialized = 0;
+    sd->expectAcmd = 0;
+    sd->status = 0;
+    sd->state = PS_IDLE;
+    sd->cmdIdx = 0;
+    sd->respLen = 0;
+    sd->respPos = 0;
+    sd->dataPos = 0;
+}
+
+/* Another medium in the slot is another card, which starts out uninitialised. */
+static void syncMedium(SdCard* sd)
+{
+    if (diskChanged(sd->diskId)) {
+        sd->mediumChanges++;
+        cardInserted(sd);
+    }
+}
+
 static void execCommand(SdCard* sd)
 {
     UInt8 cmd  = sd->cmdBuf[0] & 0x3F;
@@ -292,14 +290,24 @@ static void execCommand(SdCard* sd)
                  ((UInt32)sd->cmdBuf[2] << 16) |
                  ((UInt32)sd->cmdBuf[3] << 8)  |
                   (UInt32)sd->cmdBuf[4];
-    /* R1 selection: each command returns a fixed R1
-    ** byte regardless of card state.  Commands that only acknowledge
+    /* R1 selection: a card that is in use returns a fixed R1
+    ** byte for each command.  Commands that only acknowledge
     ** (CMD0, 12, 16, 55) return R1_IDLE (bit 0 set).  Commands that
     ** carry a result (CSD/CID block, OCR, sector data, ACMD41 done)
     ** return 0x00 -- the convention the MFR SCC+ SD driver
     ** firmware relies on. */
     int wasAcmd = sd->expectAcmd;
     sd->expectAcmd = 0;
+
+    /* Only a well formed CMD0 wakes the card, so that stray data bytes do not. */
+    if (!sd->spiMode && (wasAcmd || cmd != 0 || sd->cmdBuf[5] != 0x95)) {
+        sd->state = PS_IDLE;
+        return;
+    }
+    if (!sd->initialized && !wasAcmd && (cmd == 17 || cmd == 18 || cmd == 24 || cmd == 25)) {
+        enqueueR1(sd, R1_IDLE | R1_ILLEGAL_CMD);
+        return;
+    }
 
     if (wasAcmd) {
         switch (cmd) {
@@ -318,6 +326,7 @@ static void execCommand(SdCard* sd)
 
     switch (cmd) {
     case 0:  /* CMD0 GO_IDLE_STATE */
+        sd->spiMode = 1;
         enqueueR1(sd, R1_IDLE);
         return;
     case 8:  /* CMD8 SEND_IF_COND -- v2 cards.  Echo the check pattern. */
@@ -431,6 +440,12 @@ static void stepRespondEnd(SdCard* sd)
     UInt8 cmd = sd->cmdBuf[0] & 0x3F;
     int wasAcmd = (sd->cmdBuf[0] & 0x80) != 0;  /* hijacked bit marker */
 
+    /* A command the card refused has no data phase. */
+    if (sd->respBuf[0] & R1_ILLEGAL_CMD) {
+        sd->state = PS_IDLE;
+        return;
+    }
+
     /* Read-block-producing commands: continue with token + data + CRC. */
     if (!wasAcmd) {
         switch (cmd) {
@@ -457,6 +472,8 @@ static void stepRespondEnd(SdCard* sd)
 
 UInt8 sdCardTransfer(SdCard* sd, UInt8 mosi)
 {
+    syncMedium(sd);
+
     /* CS deselected: tristate, host should see 0xFF. */
     if (!sd->csActive) {
         return 0xFF;
@@ -611,6 +628,8 @@ UInt8 sdCardTransfer(SdCard* sd, UInt8 mosi)
             UInt8 rv;
             boardSetHddSdActive();
             rv = diskWrite(sd->diskId, sd->dataBuf, (int)sd->dataSector);
+            /* Writing the first sector makes the disk layer read the image anew; the card is the same. */
+            diskChanged(sd->diskId);
             if (origCmd == 25) {
                 /* Streaming write: advance sector and wait for next 0xFC / 0xFD. */
                 sd->dataSector++;
@@ -703,6 +722,9 @@ void sdCardSaveState(SdCard* sd, const char* tagPrefix)
     char tag[64];
     SaveState* state;
 
+    /* A medium the card has not been clocked on since must not be saved as initialised. */
+    syncMedium(sd);
+
     snprintf(tag, sizeof(tag), "%s_sdcard", tagPrefix);
     state = saveStateOpenForWrite(tag);
 
@@ -718,6 +740,8 @@ void sdCardSaveState(SdCard* sd, const char* tagPrefix)
     saveStateSet(state, "expectAcmd",  sd->expectAcmd);
     saveStateSet(state, "status",      sd->status);
     saveStateSet(state, "respDelay",   sd->responseDelay);
+    saveStateSet(state, "spiMode",     sd->spiMode);
+    saveStateSet(state, "mediumChanges", sd->mediumChanges);
     saveStateSetBuffer(state, "cmdBuf",  sd->cmdBuf,  sizeof(sd->cmdBuf));
     saveStateSetBuffer(state, "respBuf", sd->respBuf, sizeof(sd->respBuf));
     saveStateSetBuffer(state, "dataBuf", sd->dataBuf, sizeof(sd->dataBuf));
@@ -729,6 +753,10 @@ void sdCardLoadState(SdCard* sd, const char* tagPrefix)
 {
     char tag[64];
     SaveState* state;
+    UInt32 spiMode;
+    int mediumChanges;
+
+    syncMedium(sd);
 
     snprintf(tag, sizeof(tag), "%s_sdcard", tagPrefix);
     state = saveStateOpenForRead(tag);
@@ -752,8 +780,23 @@ void sdCardLoadState(SdCard* sd, const char* tagPrefix)
     saveStateGetBuffer(state, "cmdBuf",  sd->cmdBuf,  sizeof(sd->cmdBuf));
     saveStateGetBuffer(state, "respBuf", sd->respBuf, sizeof(sd->respBuf));
     saveStateGetBuffer(state, "dataBuf", sd->dataBuf, sizeof(sd->dataBuf));
+    spiMode       = saveStateGet(state, "spiMode", 0xFFFFFFFFu);
+    mediumChanges = (int)saveStateGet(state, "mediumChanges", (UInt32)sd->mediumChanges);
 
     saveStateClose(state);
+
+    /* A state without these holds a card that its driver takes to be ready. */
+    if (spiMode == 0xFFFFFFFFu) {
+        sd->spiMode = 1;
+        sd->initialized = 1;
+    }
+    else {
+        sd->spiMode = (int)spiMode;
+    }
+    /* Going back to before the medium was changed leaves the new one in the slot. */
+    if (mediumChanges < sd->mediumChanges) {
+        cardInserted(sd);
+    }
 
     /* Re-derive capacity-dependent registers in case the image was
     ** resized between save and load. */

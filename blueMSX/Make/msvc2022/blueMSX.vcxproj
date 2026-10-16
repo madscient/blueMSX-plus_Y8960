@@ -674,6 +674,7 @@
     <ClCompile Include="..\..\Src\Win32\Win32Eth.c" />
     <ClCompile Include="..\..\Src\Win32\Win32Event.c" />
     <ClCompile Include="..\..\Src\Win32\Win32file.c" />
+    <ClCompile Include="..\..\Src\Win32\Win32PhysicalDisk.c" />
     <ClCompile Include="..\..\Src\Win32\Win32FileDialog.cpp" />
     <ClCompile Include="..\..\Src\Win32\Win32FileTypes.c" />
     <ClCompile Include="..\..\Src\Win32\Win32Glob.c" />
@@ -798,6 +799,7 @@
     <ClCompile Include="..\..\Src\Memory\romMapperPhilipsFdc.c" />
     <ClCompile Include="..\..\Src\Memory\romMapperPlain.c" />
     <ClCompile Include="..\..\Src\Memory\romMapperPlayBall.c" />
+    <ClCompile Include="..\..\Src\Memory\romMapperRookieDrive.c" />
     <ClCompile Include="..\..\Src\Memory\romMapperRType.c" />
     <ClCompile Include="..\..\Src\Memory\romMapperS1990.c" />
     <ClCompile Include="..\..\Src\Memory\romMapperSCCplus.c" />
@@ -848,13 +850,15 @@
     <ClCompile Include="..\..\Src\Z80\R800Debug.c" />
     <ClCompile Include="..\..\Src\Z80\R800SaveState.c" />
     <ClCompile Include="..\..\Src\IoDevice\Casette.c" />
+    <ClCompile Include="..\..\Src\IoDevice\CH376.c" />
     <ClCompile Include="..\..\Src\IoDevice\CasToWave.c" />
     <ClCompile Include="..\..\Src\IoDevice\TapeSignal.c" />
     <ClCompile Include="..\..\Src\IoDevice\TsxParser.c" />
     <ClCompile Include="..\..\Src\IoDevice\WavParser.c" />
-    <ClCompile Include="..\..\Src\IoDevice\DirAsDisk.c" />
     <ClCompile Include="..\..\Src\IoDevice\Disk.c" />
     <ClCompile Include="..\..\Src\IoDevice\DiskFormat.c" />
+    <ClCompile Include="..\..\Src\IoDevice\DirDisk.c" />
+    <ClCompile Include="..\..\Src\IoDevice\DirWriteBack.c" />
     <ClCompile Include="..\..\Src\IoDevice\FdcAudio.c" />
     <ClCompile Include="..\..\Src\IoDevice\ft245.c" />
     <ClCompile Include="..\..\Src\IoDevice\GameReader.cpp" />
@@ -1045,6 +1049,7 @@
     <ClInclude Include="..\..\Src\Win32\Win32directXSound.h" />
     <ClInclude Include="..\..\Src\Win32\Win32Eth.h" />
     <ClInclude Include="..\..\Src\Win32\Win32file.h" />
+    <ClInclude Include="..\..\Src\Win32\Win32PhysicalDisk.h" />
     <ClInclude Include="..\..\Src\Win32\Win32FileDialog.h" />
     <ClInclude Include="..\..\Src\Win32\Win32FileTypes.h" />
     <ClInclude Include="..\..\Src\Win32\Win32Help.h" />
@@ -1165,6 +1170,7 @@
     <ClInclude Include="..\..\Src\Memory\romMapperPhilipsFdc.h" />
     <ClInclude Include="..\..\Src\Memory\romMapperPlain.h" />
     <ClInclude Include="..\..\Src\Memory\romMapperPlayBall.h" />
+    <ClInclude Include="..\..\Src\Memory\romMapperRookieDrive.h" />
     <ClInclude Include="..\..\Src\Memory\romMapperRType.h" />
     <ClInclude Include="..\..\Src\Memory\romMapperS1990.h" />
     <ClInclude Include="..\..\Src\Memory\romMapperSCCplus.h" />
@@ -1212,13 +1218,16 @@
     <ClInclude Include="..\..\Src\Z80\R800Dasm.h" />
     <ClInclude Include="..\..\Src\Z80\R800Debug.h" />
     <ClInclude Include="..\..\Src\IoDevice\Casette.h" />
+    <ClInclude Include="..\..\Src\IoDevice\CH376.h" />
     <ClInclude Include="..\..\Src\IoDevice\CasToWave.h" />
     <ClInclude Include="..\..\Src\IoDevice\TapeSignal.h" />
     <ClInclude Include="..\..\Src\IoDevice\TsxParser.h" />
     <ClInclude Include="..\..\Src\IoDevice\WavParser.h" />
-    <ClInclude Include="..\..\Src\IoDevice\DirAsDisk.h" />
     <ClInclude Include="..\..\Src\IoDevice\Disk.h" />
     <ClInclude Include="..\..\Src\IoDevice\DiskFormat.h" />
+    <ClInclude Include="..\..\Src\IoDevice\DirDisk.h" />
+    <ClInclude Include="..\..\Src\IoDevice\DirDiskPrivate.h" />
+    <ClInclude Include="..\..\Src\IoDevice\DirWriteBack.h" />
     <ClInclude Include="..\..\Src\IoDevice\FdcAudio.h" />
     <ClInclude Include="..\..\Src\IoDevice\ft245.h" />
     <ClInclude Include="..\..\Src\IoDevice\GameReader.h" />

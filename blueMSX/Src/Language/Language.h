@@ -110,7 +110,20 @@ char* langErrorNoDskInZip();
 char* langErrorCreateDiskImage();
 char* langErrorCreateTapeImage();
 char* langErrorNoCasInZip();
-char* langErrorDirAsDskOverflow();
+char* langErrorDirDiskTooLarge();
+char* langErrorDirDiskOnline();
+char* langErrorDirDiskSubdirs();
+char* langErrorDirDiskUnreadable();
+char* langDlgDirWriteSummary();
+char* langDlgDirWriteMass();
+char* langDlgDirWriteApply();
+char* langDlgDirWriteDiscard();
+char* langDlgDirWriteDiscardSure();
+char* langErrorDirWriteInvalid();
+char* langErrorDirWriteFailed();
+char* langErrorDirWriteHost();
+char* langInfoDirWriteState();
+char* langInfoDirMemory();
 char* langErrorNoHelp();
 char* langErrorStartEmu();
 char* langErrorStartEmuNoMachine();
@@ -211,6 +224,7 @@ char* langMenuCartFlashCart();
 char* langMenuDiskDirInsert();
 char* langMenuDiskDirInsertCdrom();
 char* langMenuDiskInsertNew();
+char* langMenuDiskInsertPhysical();
 char* langMenuDiskAutoStart();
 char* langMenuCartAutoReset();
 
@@ -359,6 +373,16 @@ char* langDlgTabType();
 char* langDlgTabFilename();
 char* langDlgTapeTotalTime();
 char* langDlgZipReset();
+
+char* langDlgPhysDriveTitle();
+char* langDlgPhysDriveChoose();
+char* langDlgPhysDriveNone();
+char* langDlgPhysDriveWarning();
+char* langDlgPhysDriveNoWarning();
+char* langDlgPhysDriveContinue();
+char* langDlgPhysDriveInUse();
+char* langDlgPhysDriveFailed();
+char* langInfoRewindNoMedium();
 
 char* langDlgAboutTitle();
 

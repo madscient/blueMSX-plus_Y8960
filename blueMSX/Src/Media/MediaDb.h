@@ -210,17 +210,20 @@ enum  {
     ROM_NEO16       = 177,           /* NEO-16 mapper */
     ROM_YAMANOOTO   = 178,           /* Yamanooto */
     ROM_FLASHROMSCC = 179,           /* Flash-ROM SCC (Developer Edition) */
+    ROM_ROOKIEDRIVE = 180,           /* Rookie Drive NX */
     /* Y8960 cartridge, one RomType per device block so that a machine
-    ** configuration can carry the blocks independently. */
-    ROM_Y8960OPLLEX = 180,           /* Y8960 OPLLEX  */
-    ROM_Y8960OPL2EX = 181,           /* Y8960 OPL2EX  */
-    ROM_Y8960SSGS   = 182,           /* Y8960 SSGS    */
-    ROM_Y8960TIMER  = 183,           /* Y8960 MSX-TIMER */
-    ROM_Y8960MIXER  = 184,           /* Y8960 MSX-MIXER */
-    ROM_Y8960SCC    = 185,           /* Y8960 SCC + mapper */
-    ROM_Y8960DCSG   = 186,           /* Y8960 DCSG    */
-    ROM_Y8960       = 187,           /* the whole cartridge: every block at once */
-    ROM_MAXROMID    = 187
+    ** configuration can carry the blocks independently. The block sits
+    ** at 200 so that upstream can keep adding types below it without
+    ** colliding with numbers already written into config.ini files. */
+    ROM_Y8960OPLLEX = 200,           /* Y8960 OPLLEX  */
+    ROM_Y8960OPL2EX = 201,           /* Y8960 OPL2EX  */
+    ROM_Y8960SSGS   = 202,           /* Y8960 SSGS    */
+    ROM_Y8960TIMER  = 203,           /* Y8960 MSX-TIMER */
+    ROM_Y8960MIXER  = 204,           /* Y8960 MSX-MIXER */
+    ROM_Y8960SCC    = 205,           /* Y8960 SCC + mapper */
+    ROM_Y8960DCSG   = 206,           /* Y8960 DCSG    */
+    ROM_Y8960       = 207,           /* the whole cartridge: every block at once */
+    ROM_MAXROMID    = 207
 };
 
 typedef struct MediaType MediaType;

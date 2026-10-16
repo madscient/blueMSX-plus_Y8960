@@ -105,6 +105,9 @@ MAME は YM2608 の内蔵 ROM を `ym2608_adpcm_rom.bin`（8 KB、CRC32 `23c9e0d
 
 - **180 を取り Y8960 を 181–188 にずらす案** — 見送り。公開済みリリースの
   利用者の `config.ini` と、`y8960/tests/` の検証用構成 6 本が壊れる
+  → **2026-10-16 に前提が崩れた。** 予約を頼む前に上流が Rookie Drive NX へ 180 を取り、
+  `feature/y8960` は Y8960 を 200–207 へ移した（`y8960/implementation-plan.md` §6.1、§11 の (38)）。
+  188 は上流の 180 とも Y8960 の新しい帯とも重ならないので、この枝の 188 はそのままでよい
 - **チャンネル種別の新設** — 見送り。`AudioMixer.h`、`Actions`、`Emulator.c`、
   `Properties.c`、`ThemeTriggers`、`Win32.c`、言語ファイル、テーマ定義の
   10 ファイル前後に波及し、上流との衝突面が広がる

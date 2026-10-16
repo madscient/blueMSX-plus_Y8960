@@ -83,6 +83,7 @@
 #define CARTNAME_MEGAFLSHSCC "MegaFlashRomScc"
 #define CARTNAME_MEGAFLSHSCCPLUS "MegaFlashRomSccPlus"
 #define CARTNAME_MEGAFLSHSCCPLUS_SD "MegaFlashRomSccPlusSD"
+#define CARTNAME_ROOKIEDRIVE "RookieDriveNX"
 #define CARTNAME_ASCII16X "ASCII16X"
 #define CARTNAME_YAMANOOTO "Yamanooto"
 #define CARTNAME_FLASHROMSCC "FlashRomScc"
@@ -462,6 +463,7 @@ typedef struct {
     char directory[PROP_MAXPATH];
     int  extensionFilter;
     int  type;
+    int  dirFormat;
 } FileProperties;
 
 typedef struct {
@@ -495,6 +497,7 @@ typedef struct {
     int  quickStartDrive;
     int  cdromMethod;
     int  cdromDrive;
+    int  physicalDriveWarning;
 } DiskdriveProperties;
 
 typedef struct {
@@ -511,6 +514,7 @@ typedef struct {
     char    cartridge[2][MAX_HISTORY][PROP_MAXPATH];
     RomType cartridgeType[2][MAX_HISTORY];
     char    diskdrive[2][MAX_HISTORY][PROP_MAXPATH];
+    int     diskdriveFormat[2][MAX_HISTORY];
     char    cassette[1][MAX_HISTORY][PROP_MAXPATH];
 #endif
     char    quicksave[PROP_MAXPATH];
