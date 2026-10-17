@@ -17,10 +17,18 @@ unofficial fork である。blueMSX+ 自身が blueMSX の非公式フォーク�
 | キー入力の注入・ウィンドウを出さない実行の計画 | `doc/fork/automation/plan.md` |
 | ディスクイメージ書き出しの計画・経緯 | `doc/fork/disk-export/plan.md` |
 | Makoto（OPNA）対応の計画・経緯 | `doc/fork/opna/plan.md` |
+| リリースの手順と記録 | `doc/fork/README.md` の「リリース」 |
 
 **セッションをまたいだら `implementation-plan.md` §0 を最初に読む。**
 現在地・確かめずに残してあること・次の一手がそこにある。
 着手の前に決めるべきことは同 §9。
+
+## gh を使う前に既定のリポジトリを確かめる
+
+**`gh repo set-default --view` で見る。** この作業ツリーには `origin`（フォーク）と
+`upstream`（上流）の 2 つの remote があり、既定が未設定だと `gh` は上流を選ぶ。
+設定はマシンごとの `.git/config` にあり、別のマシンでは違う。フォークに向けるなら
+`-R madscient/blueMSX-plus_Y8960` を付ける。
 
 ## 上流に出すものへ混ぜない
 

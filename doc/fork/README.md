@@ -159,7 +159,7 @@ MegaFlashROM SCC+ SD に触れているが、PR に本文も参照も無く、#7
 | タグ名 | `v<土台の blueMSX+ の版>-y8960.<通し番号>`。1 本目は `v3.1.1-y8960.1`。Makoto 対応（`feature/makoto-opna`）は同じ形で `-makoto.<通し番号>`（2026-09-22 ユーザー判断） |
 | pre-release | Y8960 のハードウェアが開発中である間は pre-release で出す |
 | ビルド | **pre-release を作ると**、上流由来の `.github/workflows/prerelease.yml` が Final × x64 / Win32 をビルドし、zip を添付する。zip の名前は `blueMSX+-v<版>-<枝>-<コミット 7 桁>-<x64/Win32>.zip`。**`release.yml` は `main` の上の `vX.Y.Z` タグしか公開しない**（上流の `08810742` から）。フォークのタグを push しても、`release.yml` は何も公開せずに終わる |
-| 作り方 | **下書きを経ずに作る。** `gh release create <タグ> --prerelease --target feature/y8960 --title "blueMSX+ <タグ>" --notes-file <ノート> -R madscient/blueMSX-plus_Y8960`。`prerelease.yml` は `release` の `prereleased` でだけ起動し、**`prereleased` は下書きから公開した pre-release では発火しない**（GitHub の文書「Events that trigger workflows」の release の節。2026-10-18 に読んだ）。ノートの下見はローカルのファイルで済ませる。**`gh` の既定のリポジトリは上流（`Hesoten/blueMSX-plus`）なので、`-R` を必ず付ける** |
+| 作り方 | **下書きを経ずに作る。** `gh release create <タグ> --prerelease --target feature/y8960 --title "blueMSX+ <タグ>" --notes-file <ノート> -R madscient/blueMSX-plus_Y8960`。`prerelease.yml` は `release` の `prereleased` でだけ起動し、**`prereleased` は下書きから公開した pre-release では発火しない**（GitHub の文書「Events that trigger workflows」の release の節。2026-10-18 に読んだ）。ノートの下見はローカルのファイルで済ませる。**`gh` の既定のリポジトリはマシンごとに違い、未設定だと上流（`Hesoten/blueMSX-plus`）を選ぶので、`-R` を必ず付ける** |
 | バイナリ zip | `scripts/ci-package.ps1` が組む。`ReleaseFiles/`・実行ファイル・プラグインだけで、**`doc/` は入らない**（**確認済み(読解)**） |
 | ソースアーカイブ | GitHub が自動で添付する。`.gitattributes` の `export-ignore` で **`CLAUDE.md` と `doc/fork/` を除き、`doc/fork/y8960/user-guide.md` だけを戻す** |
 | 使い方 | zip には同梱しない。リリースノートから、そのタグの `user-guide.md` へリンクする |
@@ -167,16 +167,9 @@ MegaFlashROM SCC+ SD に触れているが、PR に本文も参照も無く、#7
 **前提**: 上流の `prerelease.yml` と `ci-package.ps1` をそのまま使っていること。
 上流がこれらを変えたら、公開の流れ（`release: prereleased` で起動）と zip の中身を見直す。
 
-**`prerelease.yml` はフォークの `main` にも置いてある**（2026-10-18、`06e81676`。上流 `develop` のものと同一）。
-置く前は Actions の一覧に出なかった（`gh api .../actions/workflows` で確認）。上流でも `main` に無いが、2026-10-16 の pre-release では
-枝側の `prerelease.yml` が走って zip が付いた（**確認済み**: 上流の実行履歴とリリースの添付）。
-**フォークでは走らなかった**（**確認済み** 2026-10-18: y8960.3 を下書きから pre-release として公開し、3 分待っても
-`release` イベントの実行が 1 本も出なかった。出たのはタグの push で起動した `release.yml` だけで、
-`gate` が非安定版と判定して何も作らずに終わった）。下書きに戻した。公開されていた約 4 分の間、zip は 0 本。
-上流の Actions には `prerelease` が登録されていて（登録日 2026-09-24、`develop` に入った翌日）、
-フォークには無かった。**フォークの `main` に置くと一覧に出た**が、続けて下書きから公開しても走らなかった。
-原因は上の「下書きを経ずに作る」の件で、1 回目もこれで説明がつく。**`main` に置くことが要ったかどうかは
-分からない**（置かずに下書き無しで作ったことがない）。
+**`prerelease.yml` はフォークの `main` にも置いてある**（`06e81676`。上流 `develop` のものと同一）。
+フォークの Actions の一覧に `prerelease` が出るのは、`main` に置いてからである。**`main` に無くても
+pre-release で走るかは確かめていない。** 上流は `main` に無い状態で走っている。
 
 **`doc/fork/` の下に足したファイルは、既定でソースアーカイブから外れる。**
 利用者向けの文書を足したら `.gitattributes` に `-export-ignore` の行を足すこと。
@@ -207,7 +200,7 @@ y8960.2 までの流れ（`release.yml` が公開する）では自動生成の�
 | タグ | コミット | 確かめたこと |
 |---|---|---|
 | `v3.1.1-y8960.1`（**下書きに戻した**。ライセンス表示を欠くため） | `61f40fe7` | Actions の run 34860219682 で x64 / Win32 のビルドと公開が成功。**公開物を落として確かめた**（**確認済み**）: バイナリ zip 2 本に `doc/` と `CLAUDE.md` が無い。GitHub のソースアーカイブ（zip / tar.gz）は `export-ignore` に従い、`doc/` 以下は `user-guide.md` だけ。x64 / Win32 の実行ファイルとも `/listromtypes` と `/listmachines` が終了コード 0 で、前者に `Y8960SCC` が出た。**Final 構成で音や画面を確かめたことはない**（手元の確認はすべて Release 構成） |
-| `v3.1.1-y8960.3`（pre-release、2026-10-18） | `0f91ba65` | y8960.2 以降の Y8960 の仕様追随（2026-10-16 / 10-17 / 10-18 版）と上流 `96771382` までの取り込み。**RomType を 200-207 に移した破壊的変更を含む**（ノートに「20 を足す」移行手順）。下書きから 2 回公開して `prerelease.yml` が走らず（上の段落）、下書きを消して同じタグで直接作り直した。run 39055851855 で成功。**公開物を落として確かめた**（**確認済み**）: zip 2 本（`blueMSX+-v3.1.1-feature-y8960-0f91ba6-{x64,Win32}.zip`）の最上位に `LICENSE.txt`、`Licenses/` に 7 本。`doc/` と `CLAUDE.md` は無い。ソースアーカイブの `doc/` は `user-guide.md` だけで、`CLAUDE.md` は無い。x64 / Win32 とも `/listromtypes` と `/listspecials` が終了コード 0 で、`Y8960SCC` と `Y8960 Cartridge` が出た。**x64 / Win32 の exe（Final 構成）で `sndtest` が PASS**（1.00 / 0.50 / 1.00 / 0.50 / 0.25。`(cartridge)` の構成を足した）。ログインせずに見て、リリースのページ・zip 2 本・タグの `user-guide.md` が 200。ノートの注意の 3 行目を確かめた結果に書き換えた。y8960.2 は公開したまま。makoto.4 のノートの Y8960 へのリンク（日本語と英語の 2 か所）を y8960.3 に向け直した |
+| `v3.1.1-y8960.3`（pre-release、2026-10-18） | `0f91ba65` | y8960.2 以降の Y8960 の仕様追随（2026-10-16 / 10-17 / 10-18 版）と上流 `96771382` までの取り込み。**RomType を 200-207 に移した破壊的変更を含む**（ノートに「20 を足す」移行手順）。run 39055851855 で成功。**公開物を落として確かめた**（**確認済み**）: zip 2 本（`blueMSX+-v3.1.1-feature-y8960-0f91ba6-{x64,Win32}.zip`）の最上位に `LICENSE.txt`、`Licenses/` に 7 本。`doc/` と `CLAUDE.md` は無い。ソースアーカイブの `doc/` は `user-guide.md` だけで、`CLAUDE.md` は無い。x64 / Win32 とも `/listromtypes` と `/listspecials` が終了コード 0 で、`Y8960SCC` と `Y8960 Cartridge` が出た。**x64 / Win32 の exe（Final 構成）で `sndtest` が PASS**（1.00 / 0.50 / 1.00 / 0.50 / 0.25。`(cartridge)` の構成を足した）。ログインせずに見て、リリースのページ・zip 2 本・タグの `user-guide.md` が 200。ノートの注意の 3 行目を確かめた結果に書き換えた。y8960.2 は公開したまま。makoto.4 のノートの Y8960 へのリンク（日本語と英語の 2 か所）を y8960.3 に向け直した |
 | `v3.1.1-y8960.2`（pre-release） | `337c23a3` | y8960.1 以降の `feature/y8960` 全体（Y8960 一式のカートリッジ、開始ページの修正、上流 `develop` `5b97360e` の取り込み）にライセンス文書を足した版。run 35730812428 で成功。**公開物を落として確かめた**（**確認済み**）: zip 2 本に `LICENSE.txt` と `Licenses/` の 7 本、`LICENSE.txt` に OPLLEX の音色データ（CC BY-SA）の表示。`doc/` と `CLAUDE.md` は無い。ソースアーカイブの `doc/` は `user-guide.md` だけ（新しく足した `doc/fork/opna/` も外れている）。x64 / Win32 とも `/listspecials` に `Y8960 Cartridge`。ログインせずに見て、y8960.1 の zip の URL は 404。makoto.2 のノートの Y8960 へのリンクを y8960.2 に向け直した |
 | `v3.1.1-makoto.1`（**下書きに戻した**。ライセンス表示を欠くため） | `2ade339f`（`feature/makoto-opna`） | Makoto 対応。Y8960 は含まない。Actions の run 35725735949 で成功。**公開物を落として確かめた**（**確認済み**）: バイナリ zip 2 本とソースアーカイブに `doc/` と `CLAUDE.md` が無い（枝にもともと無い）。リズム ROM も入っていない。x64 / Win32 とも `/listspecials` に `MAKOTO` が出た。使い方とリズム ROM は利用者が用意する旨はリリースノートに書いた（枝に利用者向け文書を置かないため）。**ymfm の BSD-3-Clause の表示はバイナリ zip に入っていない**（`doc/fork/opna/plan.md` §5） |
 | `v3.1.1-makoto.2`（pre-release） | `b2d4d185`（`feature/makoto-opna`） | makoto.1 にライセンス文書（`LICENSE.txt` と `Licenses/` の 7 本）を足した版。Actions の run 35728110343 で成功。**公開物を落として確かめた**（**確認済み**）: zip 2 本の最上位に `LICENSE.txt`、`Licenses/` に 7 本。`doc/`・`CLAUDE.md`・リズム ROM は無い。x64 / Win32 とも `/listspecials` に `MAKOTO`。ログインせずに見て、リリース一覧は makoto.2 だけ、makoto.1 の zip の URL は 404（タグのページは注釈だけを出す） |
