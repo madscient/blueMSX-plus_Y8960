@@ -48,9 +48,6 @@ enum Y8960OPLL_TONE_ENUM {
 #define Y8960OPLL_REG_COUNT 0x59
 #define Y8960OPLL_BANK_REG_BASE 0x40
 #define Y8960OPLL_PAN_REG_BASE 0x50
-/* The pan register's anchors: 1 hard left, 128 centre, 255 hard right. Zero
-** counts as the centre. */
-#define Y8960OPLL_PAN_CENTER 128
 
 /* voice data */
 typedef struct __Y8960OPLL_PATCH {

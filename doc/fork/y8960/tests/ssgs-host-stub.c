@@ -69,3 +69,6 @@ void saveStateSetBuffer(SaveState* state, const char* tag, void* buffer, UInt32 
 {
     (void)state; (void)tag; (void)buffer; (void)length;
 }
+
+/* The mixer block's gain for the chip: unity, there being no mixer here. */
+Int32 y8960MixerGain(int channel) { (void)channel; return 4096; }

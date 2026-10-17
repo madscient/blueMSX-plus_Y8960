@@ -26,6 +26,7 @@
    The preset tables are NOT Okazaki's; see the comment above the tables.
 */
 #include "Y8960OpllCore.h"
+#include "Y8960Pan.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1251,7 +1252,7 @@ void Y8960OPLL_reset(Y8960OPLL *opll) {
   ** names as their default; the zero just written would sound the same, but
   ** the register itself is to read 128. */
   for (i = 0; i < 9; i++)
-    Y8960OPLL_writeReg(opll, Y8960OPLL_PAN_REG_BASE + i, Y8960OPLL_PAN_CENTER);
+    Y8960OPLL_writeReg(opll, Y8960OPLL_PAN_REG_BASE + i, Y8960_PAN_CENTER);
 
   for (i = 0; i < 14; i++) {
     opll->ch_out[i] = 0;
@@ -1282,23 +1283,17 @@ void Y8960OPLL_setQuality(Y8960OPLL *opll, uint8_t q) {}
 
 void Y8960OPLL_setChipType(Y8960OPLL *opll, uint8_t type) { opll->chip_type = type; }
 
-/* The pan register of a melody channel, 50h-58h. The specification gives only
-** the anchors (1 left, 128 centre, 255 right, 0 as centre); between them this
-** is power panning, L = cos(t), R = sin(t), t from 0 to pi/2, so the centre
-** sits at 1/sqrt(2) on both sides (decided 2026-10-16).
+/* The pan register of a melody channel, 50h-58h; the law is Y8960Pan.h.
 **
 ** In rhythm mode the five rhythm sounds keep the pan of the channel they are
 ** generated on, as the YM2413 assigns them: BD on channel 7, HH and SD on
 ** channel 8, TOM and CYM on channel 9, counting from 1 as the registers do. */
 static void set_pan_reg(Y8960OPLL *opll, int ch, uint8_t data) {
+  Int32 gain[2];
   float pan[2];
-  if (data == 0 || data == Y8960OPLL_PAN_CENTER) {
-    pan[0] = pan[1] = 0.70710678f;
-  } else {
-    double t = (double)(data - 1) / 254.0 * (_PI_ / 2.0);
-    pan[0] = (float)cos(t);
-    pan[1] = (float)sin(t);
-  }
+  y8960PanGain(data, gain);
+  pan[0] = (float)gain[0] / Y8960_GAIN_ONE;
+  pan[1] = (float)gain[1] / Y8960_GAIN_ONE;
   Y8960OPLL_setPanFine(opll, ch, pan);
   switch (ch) {
   case 6:

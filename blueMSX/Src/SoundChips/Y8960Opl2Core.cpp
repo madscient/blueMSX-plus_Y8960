@@ -30,10 +30,12 @@
 ** Forked for the Y8960 cartridge, 2026 by madscient.
 **
 ** The cartridge's OPL2EX is a YM3812 with ADPCM-B bolted on, and its register
-** map is the Y8950's, so this is the Y8950 port with three changes: the four
+** map is the Y8950's, so this is the Y8950 port with four changes: the four
 ** waveforms a YM3812 has and a Y8950 does not, the MSX-AUDIO parts the
-** cartridge does not carry (keyboard connector, 13 bit DAC, periphery), and a
-** sample RAM that lives outside the circuit, where the block owns it.
+** cartridge does not carry (keyboard connector, 13 bit DAC, periphery), a
+** sample RAM that lives outside the circuit, where the block owns it, and a
+** pan per channel (F6h-FEh) and for the ADPCM (FFh), with the mixer's ADPCM
+** volume applied to the ADPCM alone.
 **
 ** It is a fork rather than an extension because the machine's own MSX-AUDIO
 ** keeps using the unmodified port; both end up in one binary. The namespace
@@ -44,6 +46,7 @@
 /* openMSX Y8950 port; openMSX deps stubbed in OpenMsxY8950Latest.h. */
 
 #include "Y8960Opl2Core.h"
+#include "Y8960Pan.h"
 #include "Y8960Opl2Adpcm.h"
 
 extern "C" {
@@ -450,6 +453,10 @@ void Y8950::reset(EmuTime time)
     reg[0x04] = 0x18;
     reg[0x19] = 0x0F;
     updateWaveSelect();
+    /* The pans reset to the centre, the sheet's default. */
+    std::fill(&reg[0xF6], &reg[0xFF] + 1, uint8_t(Y8960_PAN_CENTER));
+    updatePanGains();
+    adpcmGain = Y8960_GAIN_ONE;
     status = 0x00;
     statusMask = 0;
     irq.reset();
@@ -712,21 +719,24 @@ void Y8950::generateChannels(std::span<float*> bufs, unsigned num)
             (void)ch[7].slot[MOD].calc_phase(lfo_pm);
             (void)ch[8].slot[CAR].calc_phase(lfo_pm);
 
+            /* The Y8950 port doubled the rhythm sounds here. The Y8960 mixes
+            ** them 1:1 with the melody (hardware side, 2026-10-17): rhythm
+            ** mode only changes what channels 7-9 do, not how loud. */
             bufs[ 9][sample] += (ch[6].slot[CAR].isActive())
-                ? float(2 * ch[6].slot[CAR].calc_slot_car(lfo_pm, lfo_am,
+                ? float(ch[6].slot[CAR].calc_slot_car(lfo_pm, lfo_am,
                         ch[6].slot[MOD].calc_slot_mod(lfo_pm, lfo_am)))
                 : 0.0f;
             bufs[10][sample] += (ch[7].slot[CAR].isActive())
-                ? float(2 * ch[7].slot[CAR].calc_slot_snare(lfo_pm, lfo_am, whiteNoise))
+                ? float(ch[7].slot[CAR].calc_slot_snare(lfo_pm, lfo_am, whiteNoise))
                 : 0.0f;
             bufs[11][sample] += (ch[8].slot[CAR].isActive())
-                ? float(2 * ch[8].slot[CAR].calc_slot_cym(lfo_am, noiseA, noiseB))
+                ? float(ch[8].slot[CAR].calc_slot_cym(lfo_am, noiseA, noiseB))
                 : 0.0f;
             bufs[12][sample] += (ch[7].slot[MOD].isActive())
-                ? float(2 * ch[7].slot[MOD].calc_slot_hat(lfo_am, noiseA, noiseB, whiteNoise))
+                ? float(ch[7].slot[MOD].calc_slot_hat(lfo_am, noiseA, noiseB, whiteNoise))
                 : 0.0f;
             bufs[13][sample] += (ch[8].slot[MOD].isActive())
-                ? float(2 * ch[8].slot[MOD].calc_slot_tom(lfo_pm, lfo_am))
+                ? float(ch[8].slot[MOD].calc_slot_tom(lfo_pm, lfo_am))
                 : 0.0f;
         }
         bufs[14][sample] += float(adpcm->calcSample());
@@ -756,11 +766,68 @@ void Y8950::generateMono(int32_t* out, unsigned num)
     }
 }
 
+/* Which pan each of the 9+5+1 channel buffers takes: the rhythm sounds keep
+** the pan of the channel they are generated on (BD channel 7, SD and HH
+** channel 8, CYM and TOM channel 9, counting from 1), the ADPCM has its own.
+** The buffer order is the one generateChannels() fills: BD, SD, CYM, HH, TOM. */
+static constexpr std::array<int, 15> PAN_OF_BUFFER = {
+    0, 1, 2, 3, 4, 5, 6, 7, 8,
+    6, 7, 8, 7, 8,
+    9
+};
+
+void Y8950::generateStereo(int32_t* out, unsigned num)
+{
+    constexpr unsigned NCH = 9 + 5 + 1;
+    std::vector<float> storage(NCH * num, 0.0f);
+    std::array<float*, NCH> bufs{};
+    for (unsigned i = 0; i < NCH; ++i) bufs[i] = &storage[i * num];
+
+    generateChannels(std::span<float*>(bufs.data(), NCH), num);
+
+    float amp = getAmplificationFactorImpl() * float(maxVolume);
+    for (unsigned s = 0; s < num; ++s) {
+        float l = 0.0f, r = 0.0f;
+        for (unsigned i = 0; i < NCH; ++i) {
+            if (!bufs[i]) continue;
+            float v = bufs[i][s];
+            if (i == NCH - 1) v = v * float(adpcmGain) / Y8960_GAIN_ONE;
+            const auto& g = panGain[PAN_OF_BUFFER[i]];
+            l += v * float(g[0]) / Y8960_GAIN_ONE;
+            r += v * float(g[1]) / Y8960_GAIN_ONE;
+        }
+        out[2 * s + 0] = int32_t(l * amp);
+        out[2 * s + 1] = int32_t(r * amp);
+    }
+}
+
+void Y8950::updatePanGains()
+{
+    for (unsigned i = 0; i < panGain.size(); ++i) {
+        Int32 g[2];
+        y8960PanGain(reg[0xF6 + i], g);
+        panGain[i][0] = g[0];
+        panGain[i][1] = g[1];
+    }
+}
+
+void Y8950::setAdpcmGain(int32_t gain)
+{
+    adpcmGain = gain;
+}
+
 /* I/O Ctrl --------------------------------------------------------- */
 
 void Y8950::writeReg(uint8_t rg, uint8_t data, EmuTime time)
 {
     updateStream(time);
+
+    /* F6h-FFh are the mixing stage behind the chip, not the OPL2's own. */
+    if (rg >= 0xF6) {
+        reg[rg] = data;
+        updatePanGains();
+        return;
+    }
 
     switch (rg & 0xe0) {
     case 0x00: {
@@ -1080,6 +1147,7 @@ bool Y8950::blueMsxLoadStateImpl(SaveState* s)
     if (!BMLOAD_INT(s, "hasChip", 0)) return false;
 
     BMLOAD_BUF(s, "reg", reg.data(), reg.size());
+    updatePanGains();
     pm_phase     =        BMLOAD_INT(s, "pm_phase",      pm_phase);
     am_phase     =        BMLOAD_INT(s, "am_phase",      am_phase);
     noise_seed   = (int)  BMLOAD_INT(s, "noise_seed",    noise_seed);

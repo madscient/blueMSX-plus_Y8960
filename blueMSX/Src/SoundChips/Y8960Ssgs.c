@@ -31,6 +31,8 @@
 ******************************************************************************
 */
 #include "Y8960Ssgs.h"
+#include "Y8960Pan.h"
+#include "romMapperY8960.h"
 #include "SaveState.h"
 #include "DebugDeviceManager.h"
 #include "Language.h"
@@ -52,7 +54,7 @@
 **
 **   00h-0Fh  core 0, the YM2149's registers
 **   10h-1Fh  core 1, the same
-**   20h-22h  volume of core 0 channel A, B, C   (7 bits, 127 is unity)
+**   20h-22h  volume of core 0 channel A, B, C   (0 mute, bit 7 unity; Y8960Pan.h)
 **   24h-26h  volume of core 1 channel A, B, C
 **   28h-2Ah  pan of core 0 channel A, B, C      (1 left, 128 centre, 255 right)
 **   2Ch-2Eh  pan of core 1 channel A, B, C
@@ -69,24 +71,12 @@
 #define Y8960_SSGS_GPIO_A       0x0E
 #define Y8960_SSGS_GPIO_B       0x0F
 
-/* The sheet says "0-128, 128 is the maximum"; the hardware side settled the
-** register as 7 bits wide with 127 as unity (2026-10-16). Bit 7 is ignored. */
-#define Y8960_SSGS_VOLUME_UNITY 0x7F
-#define Y8960_SSGS_PAN_CENTER   128
-#define Y8960_SSGS_GAIN_ONE     4096
+/* The volume follows the mixer's curve (Y8960Pan.h): 0 mute, 1-127 linear,
+** bit 7 unity. The sheet's default of 128 is unity. */
+#define Y8960_SSGS_VOLUME_RESET 0x80
 
 static Int16 voltTable[16];
 static Int16 voltEnvTable[32];
-
-/* Pan value to left/right gain, in Y8960_SSGS_GAIN_ONE units.
-**
-** The specification gives only the anchors: 1 is hard left, 128 the centre,
-** 255 hard right, and 0 counts as the centre (decided 2026-10-16). Between
-** them this is power panning, L = cos(t) and R = sin(t) with t running from
-** 0 to pi/2, so the centre sits at 1/sqrt(2) on both sides. The table is
-** built from one half and mirrored, so that v and 256-v are exact images
-** of each other rather than cos and sin a rounding apart. */
-static Int32 panGain[256][2];
 
 static const UInt8 regMask[14] = {
     0xff, 0x0f, 0xff, 0x0f, 0xff, 0x0f, 0x1f, 0x3f,
@@ -130,7 +120,7 @@ struct Y8960SsgsChip {
     /* Per mixing channel: core 0's A, B, C, then core 1's. */
     UInt8  volume[Y8960_SSGS_MIX_CHANNELS];
     UInt8  pan[Y8960_SSGS_MIX_CHANNELS];
-    Int32  gain[Y8960_SSGS_MIX_CHANNELS][2];   /* derived from volume and pan */
+    Int32  gain[Y8960_SSGS_MIX_CHANNELS][2];   /* derived from volume and pan, Y8960_GAIN_ONE units */
 
     /* One filter pair for the mixed output, not one per core: the two cores
     ** share the cartridge's analog stage. */
@@ -142,27 +132,6 @@ struct Y8960SsgsChip {
 };
 
 static Int32* y8960SsgsSync(void* ref, UInt32 count);
-
-static void buildPanTable(void)
-{
-    const double halfPi = 3.14159265358979323846 / 2.0;
-    int pan;
-
-    for (pan = 1; pan <= Y8960_SSGS_PAN_CENTER; pan++) {
-        double t = (double)(pan - 1) / 254.0 * halfPi;
-        panGain[pan][0] = (Int32)floor(cos(t) * Y8960_SSGS_GAIN_ONE + 0.5);
-        panGain[pan][1] = (Int32)floor(sin(t) * Y8960_SSGS_GAIN_ONE + 0.5);
-    }
-    /* The centre is one figure for both sides. */
-    panGain[Y8960_SSGS_PAN_CENTER][1] = panGain[Y8960_SSGS_PAN_CENTER][0] =
-        (Int32)floor(sqrt(0.5) * Y8960_SSGS_GAIN_ONE + 0.5);
-    for (pan = Y8960_SSGS_PAN_CENTER + 1; pan <= 255; pan++) {
-        panGain[pan][0] = panGain[256 - pan][1];
-        panGain[pan][1] = panGain[256 - pan][0];
-    }
-    panGain[0][0] = panGain[Y8960_SSGS_PAN_CENTER][0];
-    panGain[0][1] = panGain[Y8960_SSGS_PAN_CENTER][1];
-}
 
 static void buildVoltTables(void)
 {
@@ -209,11 +178,12 @@ static int mixChannel(UInt8 address)
 
 static void updateGain(Y8960SsgsChip* chip, int ch)
 {
-    Int32 v = chip->volume[ch] & Y8960_SSGS_VOLUME_UNITY;
-    UInt8 pan = chip->pan[ch];
+    Int32 v = y8960VolumeGain(chip->volume[ch]);
+    Int32 pan[2];
 
-    chip->gain[ch][0] = panGain[pan][0] * v / Y8960_SSGS_VOLUME_UNITY;
-    chip->gain[ch][1] = panGain[pan][1] * v / Y8960_SSGS_VOLUME_UNITY;
+    y8960PanGain(chip->pan[ch], pan);
+    chip->gain[ch][0] = pan[0] * v / Y8960_GAIN_ONE;
+    chip->gain[ch][1] = pan[1] * v / Y8960_GAIN_ONE;
 }
 
 static void updateRegister(Y8960SsgsChip* chip, UInt8 address, UInt8 data)
@@ -403,8 +373,8 @@ void y8960SsgsReset(Y8960SsgsChip* chip)
 
     /* The specification's reset values: unity and centre. */
     for (i = 0; i < Y8960_SSGS_MIX_CHANNELS; i++) {
-        chip->volume[i] = Y8960_SSGS_VOLUME_UNITY;
-        chip->pan[i]    = Y8960_SSGS_PAN_CENTER;
+        chip->volume[i] = Y8960_SSGS_VOLUME_RESET;
+        chip->pan[i]    = Y8960_PAN_CENTER;
         updateGain(chip, i);
     }
 }
@@ -489,8 +459,8 @@ void y8960SsgsLoadState(Y8960SsgsChip* chip)
 
     /* A state without these came from before the registers existed; the
     ** reset values are what such a chip was playing at. */
-    memset(chip->volume, Y8960_SSGS_VOLUME_UNITY, sizeof(chip->volume));
-    memset(chip->pan,    Y8960_SSGS_PAN_CENTER,   sizeof(chip->pan));
+    memset(chip->volume, Y8960_SSGS_VOLUME_RESET, sizeof(chip->volume));
+    memset(chip->pan,    Y8960_PAN_CENTER,        sizeof(chip->pan));
     saveStateGetBuffer(state, "volume", chip->volume, sizeof(chip->volume));
     saveStateGetBuffer(state, "pan",    chip->pan,    sizeof(chip->pan));
 
@@ -535,7 +505,6 @@ Y8960SsgsChip* y8960SsgsCreate(Mixer* mixer, const char* name)
     Y8960SsgsChip* chip = (Y8960SsgsChip*)calloc(1, sizeof(Y8960SsgsChip));
 
     buildVoltTables();
-    buildPanTable();
 
     chip->mixer = mixer;
 
@@ -561,6 +530,10 @@ static Int32* y8960SsgsSync(void* ref, UInt32 count)
 {
     Y8960SsgsChip* chip = (Y8960SsgsChip*)ref;
     UInt32 index;
+
+    /* The mixer block's volume for this block, applied before the filters,
+    ** which are linear, so that the sum stays within 32 bits. */
+    Int32 blockGain = y8960MixerGain(Y8960_VOL_SSGS);
 
     for (index = 0; index < count; index++) {
         Int32 sampleVolumeL = 0;
@@ -619,10 +592,13 @@ static Int32* y8960SsgsSync(void* ref, UInt32 count)
                     sampleVolume = (Int16)tone * voltTable[c->ampVolume[channel]] / 16;
                 }
 
-                sampleVolumeL += sampleVolume * gain[0] / Y8960_SSGS_GAIN_ONE;
-                sampleVolumeR += sampleVolume * gain[1] / Y8960_SSGS_GAIN_ONE;
+                sampleVolumeL += sampleVolume * gain[0] / Y8960_GAIN_ONE;
+                sampleVolumeR += sampleVolume * gain[1] / Y8960_GAIN_ONE;
             }
         }
+
+        sampleVolumeL = sampleVolumeL * blockGain / Y8960_GAIN_ONE;
+        sampleVolumeR = sampleVolumeR * blockGain / Y8960_GAIN_ONE;
 
         /* Perform DC offset filtering */
         chip->ctrlVolume[0] = sampleVolumeL - chip->oldSampleVolume[0] + 0x3fe7 * chip->ctrlVolume[0] / 0x4000;

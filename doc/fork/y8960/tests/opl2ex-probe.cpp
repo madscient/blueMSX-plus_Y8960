@@ -1,12 +1,13 @@
 /* Probe for the Y8960 OPL2EX core (Y8960Opl2Core.cpp, Y8960Opl2Adpcm.cpp).
 **
 ** It links the core with a stub board, so it needs neither a machine nor a
-** ROM and runs headless. The checks cover the three things the fork changed:
-** the four waveforms a YM3812 has, the sample RAM outside the circuit, and
-** the MSX-AUDIO registers the cartridge does not carry. They also cover the
-** end of an ADPCM sample, which the core has to bring about by itself: on
-** time, with its interrupt, whatever the software is doing meanwhile. And
-** they cover the one bit of 07h the Y8960 dropped, SP-OFF.
+** ROM and runs headless. The checks cover what the fork changed: the four
+** waveforms a YM3812 has, the sample RAM outside the circuit, the MSX-AUDIO
+** registers the cartridge does not carry, the pan per channel and for the
+** ADPCM with the mixer's ADPCM volume, and the rhythm sounds at 1:1. They
+** also cover the end of an ADPCM sample, which the core has to bring about
+** by itself: on time, with its interrupt, whatever the software is doing
+** meanwhile. And they cover the one bit of 07h the Y8960 dropped, SP-OFF.
 **
 ** Every check is written so that it fails if the change were not there. The
 ** waveform checks compare the four against each other before trusting any of
@@ -77,13 +78,20 @@ struct Player {
     }
     ~Player() { current = nullptr; }
 
+    bool stereo = false;        /* render interleaved L/R instead of mono */
+
     void render()
     {
         unsigned n = (*boardSysTime - rendered) / TICK;
         if (n == 0) return;
         size_t at = out.size();
-        out.resize(at + n);
-        chip.generateMono(&out[at], n);
+        if (stereo) {
+            out.resize(at + 2 * n);
+            chip.generateStereo(&out[at], n);
+        } else {
+            out.resize(at + n);
+            chip.generateMono(&out[at], n);
+        }
         rendered += n * TICK;
     }
 
@@ -172,6 +180,65 @@ static double rms(Y8950& chip, int n)
         acc += s * s;
     }
     return std::sqrt(acc / n);
+}
+
+/* The two sides of the stereo output, measured apart. */
+static void rmsStereo(Y8950& chip, int n, double* l, double* r)
+{
+    std::vector<int32_t> buf((size_t)(2 * n));
+    chip.generateStereo(buf.data(), (unsigned)n);
+    double al = 0.0, ar = 0.0;
+    for (int i = 0; i < n; i++) {
+        al += (double)buf[2 * i] * buf[2 * i];
+        ar += (double)buf[2 * i + 1] * buf[2 * i + 1];
+    }
+    *l = std::sqrt(al / n);
+    *r = std::sqrt(ar / n);
+}
+
+/* The slot registers of channel `c` (0-8), a plain FM voice that is loud
+** enough to measure. Nothing keyed. */
+static void voice(Y8950& chip, int c)
+{
+    static const uint8_t slotOf[9] = { 0x00, 0x01, 0x02, 0x08, 0x09, 0x0A, 0x10, 0x11, 0x12 };
+    uint8_t m = slotOf[c], car = uint8_t(slotOf[c] + 3);
+    chip.writeReg(uint8_t(0x20 + m),   0x01, T);
+    chip.writeReg(uint8_t(0x20 + car), 0x01, T);
+    chip.writeReg(uint8_t(0x40 + m),   0x1F, T);
+    chip.writeReg(uint8_t(0x40 + car), 0x08, T);   /* a little under full, so the sides do not clip */
+    chip.writeReg(uint8_t(0x60 + m),   0xF0, T);
+    chip.writeReg(uint8_t(0x60 + car), 0xF0, T);
+    chip.writeReg(uint8_t(0x80 + m),   0x00, T);
+    chip.writeReg(uint8_t(0x80 + car), 0x00, T);
+    chip.writeReg(uint8_t(0xC0 + c),   0x00, T);
+    chip.writeReg(uint8_t(0xA0 + c),   0x80, T);
+    chip.writeReg(uint8_t(0xB0 + c),   0x11, T);   /* block 4, not keyed */
+}
+
+/* Fresh chip, channel 0 keyed at the given pan, both sides measured. */
+static void measurePan(DeviceConfig& cfg, int pan, double* l, double* r)
+{
+    SampleRam ram(256 * 1024);
+    Y8950 chip("probe", cfg, ram, 0x2000, T);
+    chip.reset(T);
+    chip.writeReg(0xF6, uint8_t(pan), T);
+    voice(chip, 0);
+    chip.writeReg(0xB0, 0x31, T);                  /* key on */
+    rmsStereo(chip, 2000, l, r);
+}
+
+/* Fresh chip in rhythm mode, the voices of channels 7-9 set, the given pans
+** on F6h+6..+8, and the given rhythm keys struck. */
+static void rhythm(DeviceConfig& cfg, SampleRam& ram, Y8950& chip, int pan7, int pan8, int pan9, int keys)
+{
+    (void)ram;
+    chip.reset(T);
+    for (int c = 6; c < 9; c++) voice(chip, c);
+    chip.writeReg(0xFC, uint8_t(pan7), T);
+    chip.writeReg(0xFD, uint8_t(pan8), T);
+    chip.writeReg(0xFE, uint8_t(pan9), T);
+    chip.writeReg(0xBD, uint8_t(0x20 | keys), T);
+    (void)cfg;
 }
 
 /* One held note on channel 0, loud enough to measure, with the given
@@ -343,6 +410,134 @@ int main()
               at >= 1023 && at <= 1026);
         check("and the interrupt comes with it, not before",
               quietBefore && y8960ProbePendingIrq != 0);
+    }
+
+    /* ---- the pan registers F6h-FEh place a channel ----------------------- */
+    {
+        double lL, rL, lR, rR, lC, rC, l0, r0;
+        measurePan(cfg, 1,   &lL, &rL);
+        measurePan(cfg, 255, &lR, &rR);
+        measurePan(cfg, 128, &lC, &rC);
+        measurePan(cfg, 0,   &l0, &r0);
+        printf("  pan 1 L=%.1f R=%.1f, pan 255 L=%.1f R=%.1f, pan 128 L=%.1f R=%.1f\n",
+               lL, rL, lR, rR, lC, rC);
+        check("pan 1 sounds on the left only",    lL > 1 && rL == 0.0);
+        check("pan 255 sounds on the right only", rR > 1 && lR == 0.0);
+        check("pan 128 sounds equally on both sides", lC > 1 && std::fabs(lC - rC) < 1e-9);
+        check("the centre sits 3dB below a hard-over side", std::fabs(lC - lL * std::sqrt(0.5)) < lL * 0.01);
+        check("pan 0 sounds exactly as pan 128 does", l0 == lC && r0 == rC);
+    }
+
+    /* ---- after a reset the pans hold the centre ------------------------- */
+    {
+        SampleRam ram(256 * 1024);
+        Y8950 chip("probe", cfg, ram, 0x2000, T);
+        chip.reset(T);
+        bool ok = true;
+        for (int rg = 0xF6; rg <= 0xFF; rg++) if (chip.peekReg(uint8_t(rg), T) != 128) ok = false;
+        double lc, rc, lMid, rMid;
+        voice(chip, 0);
+        chip.writeReg(0xB0, 0x31, T);
+        rmsStereo(chip, 2000, &lc, &rc);
+        measurePan(cfg, 128, &lMid, &rMid);
+        check("a channel is centred until its pan is written, and F6h-FFh read 128",
+              ok && lc == lMid && rc == rMid);
+    }
+
+    /* ---- each channel has its own pan ----------------------------------- */
+    {
+        SampleRam ram(256 * 1024);
+        Y8950 chip("probe", cfg, ram, 0x2000, T);
+        chip.reset(T);
+        chip.writeReg(0xF6, 1, T);
+        chip.writeReg(0xF7, 255, T);
+        chip.writeReg(0xFF, 255, T);
+        voice(chip, 0);
+        chip.writeReg(0xB0, 0x31, T);
+        double l, r;
+        rmsStereo(chip, 2000, &l, &r);
+        check("writing other pans leaves channel 1's alone", l > 1 && r == 0.0);
+    }
+
+    /* ---- the rhythm sounds take the pan of the channel they come from --- */
+    {
+        SampleRam ram(256 * 1024);
+        Y8950 chip("probe", cfg, ram, 0x2000, T);
+        double l, r;
+        rhythm(cfg, ram, chip, 1, 255, 255, 0x10);          /* BD, channel 7 left */
+        rmsStereo(chip, 2000, &l, &r);
+        check("BD follows FCh: left only", l > 1 && r == 0.0);
+        rhythm(cfg, ram, chip, 255, 1, 255, 0x10);
+        rmsStereo(chip, 2000, &l, &r);
+        check("BD does not follow FDh or FEh", r > 1 && l == 0.0);
+        rhythm(cfg, ram, chip, 255, 1, 255, 0x08);          /* SD, channel 8 left */
+        rmsStereo(chip, 2000, &l, &r);
+        check("SD follows FDh: left only", l > 1 && r == 0.0);
+        rhythm(cfg, ram, chip, 255, 1, 255, 0x01);          /* HH, channel 8 left */
+        rmsStereo(chip, 2000, &l, &r);
+        check("HH follows FDh: left only", l > 1 && r == 0.0);
+        rhythm(cfg, ram, chip, 255, 255, 1, 0x04);          /* TOM, channel 9 left */
+        rmsStereo(chip, 2000, &l, &r);
+        check("TOM follows FEh: left only", l > 1 && r == 0.0);
+        rhythm(cfg, ram, chip, 255, 255, 1, 0x02);          /* CYM, channel 9 left */
+        rmsStereo(chip, 2000, &l, &r);
+        check("CYM follows FEh: left only", l > 1 && r == 0.0);
+    }
+
+    /* ---- the rhythm sounds are mixed 1:1 with the melody ---------------- */
+    {
+        /* The same voice on channel 7, once keyed as a melody note and once
+        ** as the bass drum, must come out at the same level: rhythm mode
+        ** changes what channels 7-9 do, not how loud they are. The Y8950
+        ** port doubled the rhythm sounds. */
+        SampleRam ram(256 * 1024);
+        Y8950 chip("probe", cfg, ram, 0x2000, T);
+        chip.reset(T);
+        voice(chip, 6);
+        chip.writeReg(0xB6, 0x31, T);                        /* melody key on */
+        double melody = rms(chip, 2000);
+        chip.reset(T);
+        voice(chip, 6);
+        chip.writeReg(0xBD, 0x30, T);                        /* rhythm mode, BD */
+        double drum = rms(chip, 2000);
+        printf("  channel 7 as melody rms = %.1f, as BD rms = %.1f\n", melody, drum);
+        check("BD is as loud as the same voice played as a melody note",
+              melody > 1 && std::fabs(drum - melody) < melody * 0.02);
+    }
+
+    /* ---- the ADPCM's pan (FFh) and the mixer's ADPCM volume ------------- */
+    {
+        double full, half;
+        {
+            *boardSysTime = 1000;
+            Player p(cfg);
+            p.stereo = true;
+            p.chip.writeReg(0xFF, 1, T);                     /* hard left */
+            p.playShort(0xA0);
+            p.runMixed(600 * TICK);
+            double al = 0.0, ar = 0.0;
+            for (size_t i = 0; i + 1 < p.out.size(); i += 2) {
+                al += (double)p.out[i] * p.out[i];
+                ar += (double)p.out[i + 1] * p.out[i + 1];
+            }
+            check("the ADPCM follows FFh: left only", al > 1 && ar == 0.0);
+            full = std::sqrt(al);
+        }
+        {
+            *boardSysTime = 1000;
+            Player p(cfg);
+            p.stereo = true;
+            p.chip.writeReg(0xFF, 1, T);
+            p.chip.setAdpcmGain(2048);                       /* the mixer's ADPCM volume at 64 */
+            p.playShort(0xA0);
+            p.runMixed(600 * TICK);
+            double al = 0.0;
+            for (size_t i = 0; i + 1 < p.out.size(); i += 2) al += (double)p.out[i] * p.out[i];
+            half = std::sqrt(al);
+        }
+        printf("  ADPCM at unity rms = %.1f, at half gain rms = %.1f\n", full, half);
+        check("the mixer's ADPCM volume scales the ADPCM alone",
+              std::fabs(half - full * 0.5) < full * 0.02);
     }
 
     /* ---- SP-OFF was dropped from the Y8960 ------------------------------ */

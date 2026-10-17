@@ -23,6 +23,8 @@
 */
 #include "Y8960Opllex.h"
 #include "Y8960OpllCore.h"
+#include "Y8960Pan.h"
+#include "romMapperY8960.h"
 #include "SaveState.h"
 #include "DebugDeviceManager.h"
 #include "Language.h"
@@ -61,13 +63,14 @@ struct Y8960OpllexChip {
 static Int32* y8960OpllexSync(void* ref, UInt32 count)
 {
     Y8960OpllexChip* chip = (Y8960OpllexChip*)ref;
+    Int64 gain = (Int64)y8960MixerGain(Y8960_VOL_OPLL) * Y8960_OPLLEX_VOLUME;
     UInt32 i;
 
     for (i = 0; i < count; i++) {
         int32_t out[2];
         Y8960OPLL_calcStereo(chip->opll, out);
-        chip->buffer[2 * i + 0] = out[0] * Y8960_OPLLEX_VOLUME / Y8960_OPLLEX_VOLUME_DIV;
-        chip->buffer[2 * i + 1] = out[1] * Y8960_OPLLEX_VOLUME / Y8960_OPLLEX_VOLUME_DIV;
+        chip->buffer[2 * i + 0] = (Int32)(out[0] * gain / (Y8960_OPLLEX_VOLUME_DIV * Y8960_GAIN_ONE));
+        chip->buffer[2 * i + 1] = (Int32)(out[1] * gain / (Y8960_OPLLEX_VOLUME_DIV * Y8960_GAIN_ONE));
     }
 
     return chip->buffer;
@@ -120,7 +123,7 @@ void y8960OpllexLoadState(Y8960OpllexChip* chip)
     memset(regs, 0, sizeof(regs));
     /* A state from before the pan registers existed is shorter than this
     ** buffer and leaves them untouched; the centre is what it was playing at. */
-    memset(regs + Y8960OPLL_PAN_REG_BASE, Y8960OPLL_PAN_CENTER, 9);
+    memset(regs + Y8960OPLL_PAN_REG_BASE, Y8960_PAN_CENTER, 9);
 
     chip->address = (UInt8)saveStateGet(state, "address", 0);
     saveStateGetBuffer(state, "regs", regs, sizeof(regs));

@@ -214,7 +214,7 @@ DCSG と、OPLLEX / OPL2EX の 2 回路目は 2026-10-16 の仕様書でハー�
 | OPL2EX | 実装済み・**音を確認** | `Src/SoundChips/OpenMsxY8950Latest.cpp` ほか（openMSX の Y8950 の移植版）のフォーク |
 | SSGS | 実装済み・**音を確認**（カートリッジ / 内蔵とも） | `Src/SoundChips/AY8910.c` のフォーク |
 | MSX-TIMER | 実装済み・**音は持たない** | 新規 |
-| MSX-MIXER | **入口のみ**（実機側が未実装） | 新規 |
+| MSX-MIXER | 実装済み・**SCC の音量を録音で確認**（窓の `7FF7h`-`7FFBh`） | 新規 |
 | Y8960 SCC + マッパー | 実装済み・**音を確認** | `Src/SoundChips/Y8960Scc.c`（`SCC.c` のフォーク）+ 新規マッパー |
 | I/O イネーブラ / MMIO 窓 | 実装済み | SCC のマッパーが持つ |
 

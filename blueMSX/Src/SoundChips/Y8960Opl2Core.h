@@ -30,10 +30,12 @@
 ** Forked for the Y8960 cartridge, 2026 by madscient.
 **
 ** The cartridge's OPL2EX is a YM3812 with ADPCM-B bolted on, and its register
-** map is the Y8950's, so this is the Y8950 port with three changes: the four
+** map is the Y8950's, so this is the Y8950 port with four changes: the four
 ** waveforms a YM3812 has and a Y8950 does not, the MSX-AUDIO parts the
-** cartridge does not carry (keyboard connector, 13 bit DAC, periphery), and a
-** sample RAM that lives outside the circuit, where the block owns it.
+** cartridge does not carry (keyboard connector, 13 bit DAC, periphery), a
+** sample RAM that lives outside the circuit, where the block owns it, and a
+** pan per channel (F6h-FEh) and for the ADPCM (FFh), with the mixer's ADPCM
+** volume applied to the ADPCM alone.
 **
 ** It is a fork rather than an extension because the machine's own MSX-AUDIO
 ** keeps using the unmodified port; both end up in one binary. The namespace
@@ -364,8 +366,18 @@ public:
     void resetStatus(uint8_t flags);
     uint8_t peekRawStatus() const;
 
-    /* Produce `num` chip-rate signed-32-bit mono samples into `out`. */
+    /* Produce `num` chip-rate signed-32-bit mono samples into `out`, the
+    ** pans ignored: the probe's view of the chip. */
     void generateMono(int32_t* out, unsigned num);
+
+    /* Produce `num` chip-rate stereo samples, interleaved, each channel placed
+    ** by its pan register (F6h-FEh, FFh for the ADPCM) and the ADPCM scaled
+    ** by the mixer's ADPCM volume. */
+    void generateStereo(int32_t* out, unsigned num);
+
+    /* The mixer's ADPCM volume (7FFAh), 4.12 fixed point. It belongs to the
+    ** mixer block, which is why it is pushed in rather than saved here. */
+    void setAdpcmGain(int32_t gain);
 
     using ResampledSoundDevice::setVolume;
     using ResampledSoundDevice::getName;
@@ -499,6 +511,11 @@ private:
     
     std::array<uint8_t, 0x100> reg;
     std::array<Channel, 9>     ch;
+
+    /* Derived from reg[F6h..FFh]; the last is the ADPCM's. 4.12 fixed point. */
+    std::array<std::array<int32_t, 2>, 10> panGain;
+    int32_t adpcmGain;
+    void updatePanGains();
     
     unsigned pm_phase;
     unsigned am_phase;

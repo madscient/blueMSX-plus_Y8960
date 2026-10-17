@@ -9,8 +9,9 @@
 **
 ** Build and run, from a Visual Studio command prompt:
 **
-**   set SRC=..\..\..\..\blueMSX\Src\SoundChips
-**   cl /nologo /W3 /O2 /TC /D_CRT_SECURE_NO_WARNINGS /I%SRC% opllex-bank-probe.c %SRC%\Y8960OpllCore.c
+**   set SRC=..\..\..\..\blueMSX\Src
+**   cl /nologo /W3 /O2 /TC /D_CRT_SECURE_NO_WARNINGS /I%SRC%\SoundChips /I%SRC%\Common ^
+**      opllex-bank-probe.c %SRC%\SoundChips\Y8960OpllCore.c
 **   opllex-bank-probe.exe
 **
 ** Exit status is non-zero if any check fails.

@@ -15,8 +15,8 @@
 **
 **   set SRC=..\..\..\..\blueMSX\Src
 **   cl /nologo /W3 /O2 /D_CRT_SECURE_NO_WARNINGS ^
-**      /I%SRC%\SoundChips /I%SRC%\Common /I%SRC%\Utils /I%SRC%\Debugger ^
-**      /I%SRC%\Language ^
+**      /I%SRC%\SoundChips /I%SRC%\Memory /I%SRC%\Common /I%SRC%\Utils ^
+**      /I%SRC%\Debugger /I%SRC%\Language ^
 **      ssgs-probe.c ssgs-host-stub.c %SRC%\SoundChips\Y8960Ssgs.c
 **   ssgs-probe.exe
 **
@@ -207,23 +207,23 @@ int main(void)
               lc > 1 && lc == rc && lc == lMid);
 
         y8960SsgsReset(chip);
-        check("the registers read back 128 and 127 after a reset",
-              rd(chip, PAN_OF(0, 1)) == 128 && rd(chip, VOLUME_OF(1, 2)) == 127);
+        check("the registers read back 128 and 128 after a reset",
+              rd(chip, PAN_OF(0, 1)) == 128 && rd(chip, VOLUME_OF(1, 2)) == 128);
     }
 
-    /* ---- the volume is linear, 7 bits, 127 is unity --------------------- */
+    /* ---- the volume: 0 mute, 1-127 linear over 128, bit 7 unity -------- */
     {
-        double lFull, rFull, lHalf, rHalf, lOff, rOff, lBit7, rBit7, lWrap, rWrap;
+        double lFull, rFull, lHalf, rHalf, lOff, rOff, l127, r127, l255, r255;
 
-        measure(chip, 128, &lFull, &rFull);
+        measure(chip, 128, &lFull, &rFull);       /* the reset value, 128 */
 
         y8960SsgsReset(chip);
         tone(chip, 0, 128);
         wr(chip, VOLUME_OF(0, 0), 64);
         render(&lHalf, &rHalf);
-        printf("  volume 127 L=%.1f, volume 64 L=%.1f\n", lFull, lHalf);
-        check("volume 64 is 64/127 of volume 127, on both sides",
-              near(lHalf, lFull * 64.0 / 127.0, 0.01) && near(rHalf, rFull * 64.0 / 127.0, 0.01));
+        printf("  volume 128 L=%.1f, volume 64 L=%.1f\n", lFull, lHalf);
+        check("volume 64 is half of volume 128, on both sides",
+              near(lHalf, lFull * 0.5, 0.01) && near(rHalf, rFull * 0.5, 0.01));
 
         y8960SsgsReset(chip);
         tone(chip, 0, 128);
@@ -231,18 +231,18 @@ int main(void)
         render(&lOff, &rOff);
         check("volume 0 is silence", lOff == 0.0 && rOff == 0.0);
 
-        /* Bit 7 is ignored: 128 is 0, and 255 is 127. The sheet's "128 is the
-        ** maximum" is read as 7Fh. */
+        /* 127 sits just under unity, and anything with bit 7 is unity: the
+        ** top of the linear range joins the maximum without a step. */
         y8960SsgsReset(chip);
         tone(chip, 0, 128);
-        wr(chip, VOLUME_OF(0, 0), 128);
-        render(&lBit7, &rBit7);
+        wr(chip, VOLUME_OF(0, 0), 127);
+        render(&l127, &r127);
         y8960SsgsReset(chip);
         tone(chip, 0, 128);
         wr(chip, VOLUME_OF(0, 0), 255);
-        render(&lWrap, &rWrap);
-        check("bit 7 of the volume is ignored: 128 is silence and 255 is unity",
-              lBit7 == 0.0 && rBit7 == 0.0 && lWrap == lFull && rWrap == rFull);
+        render(&l255, &r255);
+        check("volume 127 is 127/128 of unity, and 255 is unity",
+              near(l127, lFull * 127.0 / 128.0, 0.01) && l127 < lFull && l255 == lFull && r255 == rFull);
 
         check("the volume reads back all eight bits as written",
               rd(chip, VOLUME_OF(0, 0)) == 255);

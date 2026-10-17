@@ -43,7 +43,7 @@
 typedef enum {
     Y8960_IO_OPLL,      /* 7CH-7DH, enabler 1 bit 0 */
     Y8960_IO_OPL2,      /* C0H-C1H, enabler 2 bit 0 */
-    Y8960_IO_SSGS,      /* A0H-A1H, enabler 2 bit 4 */
+    Y8960_IO_SSGS,      /* A0H-A1H, enabler 2 bit 1 */
     Y8960_IO_TIMER      /* B0H-B3H, enabler 2 bit 7 */
 } Y8960IoBlock;
 
@@ -61,8 +61,8 @@ void y8960SetBuiltIn(int builtIn);
 ** themselves are only reachable through this window, so gating the tunnels
 ** would leave no way to open anything. */
 typedef enum {
-    Y8960_TUN_SSGS,     /* 7FEAh register, 7FEBh value */
-    Y8960_TUN_OPL2,     /* 7FEEh address,  7FEFh data  */
+    Y8960_TUN_SSGS,     /* 7FF0h register, 7FF1h value */
+    Y8960_TUN_OPL2,     /* 7FF2h address,  7FF3h data  */
     Y8960_TUN_OPLL,     /* 7FF4h address,  7FF5h data  */
     Y8960_TUN_COUNT
 } Y8960TunnelBlock;
@@ -74,6 +74,25 @@ typedef void (*Y8960TunnelWrite)(void* ref, int port, UInt8 value);
 ** is destroyed. Writes to an unclaimed tunnel go nowhere. */
 void y8960RegisterTunnel(Y8960TunnelBlock block, Y8960TunnelWrite write, void* ref);
 void y8960UnregisterTunnel(Y8960TunnelBlock block, void* ref);
+
+/* The MSX-MIXER block's volumes, one per sound block, written through the
+** window at 7FF7h + channel. The ADPCM's is applied inside the OPL2 block to
+** the ADPCM alone, before the OPL2's own; the hardware mixes the ADPCM into
+** the OPL2 first. The SCC block hands the writes over; the sound blocks ask
+** for their gain while rendering. Without the mixer block every gain is
+** unity. */
+typedef enum {
+    Y8960_VOL_SSGS,
+    Y8960_VOL_OPLL,
+    Y8960_VOL_OPL2,
+    Y8960_VOL_ADPCM,
+    Y8960_VOL_SCC,
+    Y8960_VOL_COUNT
+} Y8960Volume;
+
+void  y8960MixerWrite(Y8960Volume channel, UInt8 value);
+/* 4.12 fixed point, Y8960_GAIN_ONE for unity (Y8960Pan.h). */
+Int32 y8960MixerGain(Y8960Volume channel);
 
 /* One block per RomType, so a machine configuration can carry them
 ** independently while the cartridge hardware is still being designed.

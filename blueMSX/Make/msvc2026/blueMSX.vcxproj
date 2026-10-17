@@ -1325,6 +1325,7 @@
     <ClInclude Include="..\..\Src\SoundChips\Y8960Opl2Core.h" />
     <ClInclude Include="..\..\Src\SoundChips\Y8960Opl2Adpcm.h" />
     <ClInclude Include="..\..\Src\SoundChips\Y8960Opl2ex.h" />
+    <ClInclude Include="..\..\Src\SoundChips\Y8960Pan.h" />
     <ClInclude Include="..\..\Src\SoundChips\SN76489.h" />
     <ClInclude Include="..\..\Src\SoundChips\VLM5030.h" />
     <ClInclude Include="..\..\Src\SoundChips\Y8950.h" />

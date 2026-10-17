@@ -24,17 +24,17 @@ REG_B1R equ     04ffdh          ; BANK1 register, RAM mode
 SCC_B1  equ     07800h          ; SCC window inside BANK1
 
 ENA1    equ     07ff6h          ; I/O enabler 1: b0 = OPLL
-ENA2    equ     07fffh          ; I/O enabler 2: b0 = OPL2, b4 = SSGS, b7 = TIMER
+ENA2    equ     07fffh          ; I/O enabler 2: b0 = OPL2, b1 = SSGS, b7 = TIMER
 TUN0A   equ     07ff4h          ; tunnel to the OPLL, address
 TUN0D   equ     07ff5h          ; tunnel to the OPLL, data
-TUNC0A  equ     07feeh          ; tunnel to the OPL2, address
-TUNC0D  equ     07fefh          ; tunnel to the OPL2, data
+TUNC0A  equ     07ff2h          ; tunnel to the OPL2, address
+TUNC0D  equ     07ff3h          ; tunnel to the OPL2, data
 
 OPL20A  equ     0c0h            ; OPL2: address / status
 OPL20D  equ     0c1h            ; OPL2: data
 
-TUNGA   equ     07feah          ; tunnel to the SSGS, register
-TUNGD   equ     07febh          ; tunnel to the SSGS, value
+TUNGA   equ     07ff0h          ; tunnel to the SSGS, register
+TUNGD   equ     07ff1h          ; tunnel to the SSGS, value
 SSGSA   equ     0a0h            ; SSGS register select; the machine's PSG too
 SSGSD   equ     0a1h            ; SSGS data; likewise
 
@@ -180,8 +180,8 @@ t4_fail:
 ; only be read off a probe placed in tunnelWrite. It is kept so the sweep is
 ; reproducible when a probe is needed. BANK1 holds a ROM bank at this point,
 ; so the window is open.
-        ld      hl, 07feah
-        ld      b, 12
+        ld      hl, 07ff0h
+        ld      b, 6
         ld      c, 0a0h
 tun_loop:
         ld      (hl), c
@@ -460,7 +460,7 @@ t12:
 ; A: a tone on the second core, centred, entirely through the tunnel
         ld      hl, msg_t12a
         call    print
-        ld      a, 010h                 ; enabler 2 bit 4 = SSGS
+        ld      a, 002h                 ; enabler 2 bit 1 = SSGS
         ld      (ENA2), a
         ld      hl, ssgs_tone2
         call    sendg
@@ -490,7 +490,7 @@ t12:
 ; D: the gate open, the same write
         ld      hl, msg_t12d
         call    print
-        ld      a, 010h
+        ld      a, 002h
         ld      (ENA2), a
         ld      a, 02ch
         out     (SSGSA), a

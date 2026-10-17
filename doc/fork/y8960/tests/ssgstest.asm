@@ -203,7 +203,7 @@ t7_fail:
 ; --- 8. the pan and the volume read back their reset values
 ;
 ; Channel B's pan and volume are untouched, so they hold what reset left
-; there: 128 (centre) and 127 (unity). These are the registers the machine's
+; there: 128 (centre) and 128 (unity). These are the registers the machine's
 ; PSG does not have, so reading them is also proof of which chip answers.
 t8:
         ld      a, 029h                 ; first core, channel B pan
@@ -214,7 +214,7 @@ t8:
         ld      a, 021h                 ; first core, channel B volume
         out     (PSGADDR), a
         in      a, (PSGREAD)
-        cp      07fh
+        cp      080h
         jr      nz, t8_fail
 
         ld      hl, msg_t8ok

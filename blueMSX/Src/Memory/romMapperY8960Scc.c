@@ -47,14 +47,15 @@
 ** the bits of the two enablers. The specification of 2026-10-16 struck the
 ** second OPLL and OPL2 circuits and the DCSG out of it, and may yet move what
 ** remains, so these sit together rather than in the decoder. */
-#define Y8960_WIN_SSGS      0x0A    /* 7FEAh register, 7FEBh value */
-#define Y8960_WIN_OPL2      0x0E    /* 7FEEh address,  7FEFh data  */
+#define Y8960_WIN_SSGS      0x10    /* 7FF0h register, 7FF1h value */
+#define Y8960_WIN_OPL2      0x12    /* 7FF2h address,  7FF3h data  */
 #define Y8960_WIN_OPLL      0x14    /* 7FF4h address,  7FF5h data  */
 #define Y8960_WIN_ENABLE1   0x16    /* 7FF6h */
+#define Y8960_WIN_VOLUME    0x17    /* 7FF7h-7FFBh: SSG, OPLL, OPL2, ADPCM, SCC */
 #define Y8960_WIN_ENABLE2   0x1F    /* 7FFFh */
 #define Y8960_ENABLE1_OPLL  0x01
 #define Y8960_ENABLE2_OPL2  0x01
-#define Y8960_ENABLE2_SSGS  0x10
+#define Y8960_ENABLE2_SSGS  0x02
 #define Y8960_ENABLE2_TIMER 0x80
 
 typedef struct {
@@ -339,9 +340,15 @@ static void write(RomMapperY8960Scc* rm, UInt16 address, UInt8 value)
         return;
     }
 
-    /* 7FE0-7FFF: the enablers, and the tunnels to the other blocks. */
+    /* 7FE0-7FFF: the enablers, the tunnels to the other blocks, and the
+    ** mixer's volumes. */
     if (region == 1 && (address & 0x1FE0) == 0x1FE0 && mmioVisible(rm)) {
-        switch (address & 0x1F) {
+        int offset = address & 0x1F;
+        if (offset >= Y8960_WIN_VOLUME && offset < Y8960_WIN_VOLUME + Y8960_VOL_COUNT) {
+            y8960MixerWrite((Y8960Volume)(offset - Y8960_WIN_VOLUME), value);
+            return;
+        }
+        switch (offset) {
         case Y8960_WIN_ENABLE1:
             rm->ioEnable1 = value;
             break;

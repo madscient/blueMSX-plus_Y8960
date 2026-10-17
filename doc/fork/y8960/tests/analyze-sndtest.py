@@ -1,8 +1,10 @@
 """Judge a WAV recorded while sndtest.rom ran.
 
 Splits the recording into bursts of sound separated by silence, estimates the
-pitch of each burst, and compares the list with the steps of sndtest.asm that
-must sound. Anything else that sounds shows up as an extra burst.
+pitch and the level of each burst, and compares the list with the steps of
+sndtest.asm that must sound: the same pitch at full, half and full level,
+with the muted step between the last two leaving no burst. Anything else
+that sounds shows up as an extra burst.
 
 Usage:  py analyze-sndtest.py <recording.wav>
 Exit status 0 when the pitches match, 1 otherwise.
@@ -11,8 +13,10 @@ import array
 import sys
 import wave
 
-EXPECTED = [990]                    # A
-STEP_NAMES = {990: "A"}
+EXPECTED = [990, 990, 990]          # A, B, D; C is muted
+LEVELS = [1.0, 0.5, 1.0]            # relative to the first burst
+LEVEL_TOLERANCE = 0.1
+STEP_NAMES = {990: "SCC"}
 TOLERANCE = 0.03
 
 FRAME_MS = 20
@@ -92,21 +96,30 @@ def main():
     found, step = bursts(mono, rate)
 
     heard = []
+    levels = []
     for start, end in found:
         length = end - start
         # the middle of the burst, away from the attack and the release
         a = (start + length // 5) * step
         b = (end - length // 5) * step
         f = pitch(mono[a:b], rate)
+        segment = mono[a:b]
+        mean = sum(segment) / len(segment)
+        level = (sum((v - mean) ** 2 for v in segment) / len(segment)) ** 0.5
         heard.append(f)
+        levels.append(level)
         name = next((v for k, v in STEP_NAMES.items()
                      if abs(f - k) <= k * TOLERANCE), "?")
-        print("%6.2f s  %5.2f s  %7.1f Hz  %s"
-              % (start * FRAME_MS / 1000, length * FRAME_MS / 1000, f, name))
+        print("%6.2f s  %5.2f s  %7.1f Hz  rms %7.1f  %s"
+              % (start * FRAME_MS / 1000, length * FRAME_MS / 1000, f, level, name))
 
     ok = (len(heard) == len(EXPECTED) and
           all(abs(f - e) <= e * TOLERANCE for f, e in zip(heard, EXPECTED)))
-    print("PASS" if ok else "FAIL: expected %s Hz" % EXPECTED)
+    if ok:
+        ratios = [lv / levels[0] for lv in levels]
+        print("levels relative to the first: %s" % ", ".join("%.2f" % r for r in ratios))
+        ok = all(abs(r - e) <= LEVEL_TOLERANCE for r, e in zip(ratios, LEVELS))
+    print("PASS" if ok else "FAIL: expected %s Hz at levels %s" % (EXPECTED, LEVELS))
     return 0 if ok else 1
 
 

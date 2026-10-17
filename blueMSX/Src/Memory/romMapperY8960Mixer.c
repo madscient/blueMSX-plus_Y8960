@@ -1,6 +1,6 @@
 /*****************************************************************************
 **
-** Y8960 cartridge - the MSX-MIXER block: per-block left and right gain.
+** Y8960 cartridge - the MSX-MIXER block: one volume per sound block.
 **
 ** Copyright (C) 2026 madscient
 ** See https://github.com/madscient/blueMSX-plus_Y8960 for change history.
@@ -26,60 +26,57 @@
 #include "DeviceManager.h"
 #include "SaveState.h"
 #include "Board.h"
-#include "IoPort.h"
+#include "AudioMixer.h"
 #include "DebugDeviceManager.h"
 #include "Language.h"
+#include "Y8960Pan.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
-/* The addresses the cartridge's I/O port list gives this block. They are the
-** only thing about it that is written down: the register map in the manual is
-** blank, and the hardware does not decode these addresses yet. Both are
-** therefore provisional, and what the registers mean is unknown.
-**
-** So this block remembers what is written and does nothing with it. Nothing
-** reads a gain from here yet, because there is no mapping to read it through;
-** wiring one in now would be inventing the part that is missing. */
-#define Y8960_MIXER_ADDRESS 0xB6
-#define Y8960_MIXER_DATA    0xB7
-
-#define Y8960_MIXER_REGS    256
-
+/* The mixer has no I/O ports: its five volumes are written through the
+** memory mapped window (7FF7h-7FFBh), which the SCC block decodes and hands
+** here. blueMSX's own mixer has no per-device gain, so every sound block asks
+** this one for its gain while rendering, and multiplies it in itself. A
+** machine without this block gets unity everywhere. */
 typedef struct {
     int   deviceHandle;
     int   debugHandle;
-    UInt8 address;
-    UInt8 regs[Y8960_MIXER_REGS];
+    UInt8 volume[Y8960_VOL_COUNT];
 } RomMapperY8960Mixer;
 
 static RomMapperY8960Mixer* theMixer = NULL;
 
-/* No enabler bit is assigned to this block: enabler 2 names the OPL2 pair, the
-** DCSG pair, the SSGS and the timer, and nothing for the mixer. Its ports are
-** therefore not gated. */
-static void writeIo(RomMapperY8960Mixer* rm, UInt16 port, UInt8 value)
+void y8960MixerWrite(Y8960Volume channel, UInt8 value)
 {
-    if (port == Y8960_MIXER_DATA) {
-        rm->regs[rm->address] = value;
+    if (theMixer == NULL || channel >= Y8960_VOL_COUNT) {
+        return;
     }
-    else {
-        rm->address = value;
-    }
+    /* What was rendered so far keeps the old gain. */
+    mixerSync(boardGetMixer());
+    theMixer->volume[channel] = value;
 }
 
+Int32 y8960MixerGain(Y8960Volume channel)
+{
+    if (theMixer == NULL || channel >= Y8960_VOL_COUNT) {
+        return Y8960_GAIN_ONE;
+    }
+    return y8960VolumeGain(theMixer->volume[channel]);
+}
+
+/* The sheet names 128 as the maximum and the hardware side confirmed it as
+** the reset value (2026-10-17). */
 static void reset(RomMapperY8960Mixer* rm)
 {
-    rm->address = 0;
-    memset(rm->regs, 0, sizeof(rm->regs));
+    memset(rm->volume, 0x80, sizeof(rm->volume));
 }
 
 static void saveState(RomMapperY8960Mixer* rm)
 {
     SaveState* state = saveStateOpenForWrite("y8960mixer");
 
-    saveStateSet      (state, "address", rm->address);
-    saveStateSetBuffer(state, "regs",    rm->regs, sizeof(rm->regs));
+    saveStateSetBuffer(state, "volume", rm->volume, sizeof(rm->volume));
 
     saveStateClose(state);
 }
@@ -88,8 +85,8 @@ static void loadState(RomMapperY8960Mixer* rm)
 {
     SaveState* state = saveStateOpenForRead("y8960mixer");
 
-    rm->address = (UInt8)saveStateGet(state, "address", 0);
-    saveStateGetBuffer(state, "regs", rm->regs, sizeof(rm->regs));
+    memset(rm->volume, 0x80, sizeof(rm->volume));
+    saveStateGetBuffer(state, "volume", rm->volume, sizeof(rm->volume));
 
     saveStateClose(state);
 }
@@ -97,24 +94,22 @@ static void loadState(RomMapperY8960Mixer* rm)
 /* The debugger is the only way to see these, the block having no read port. */
 static void getDebugInfo(RomMapperY8960Mixer* rm, DbgDevice* dbgDevice)
 {
+    static const char* const names[Y8960_VOL_COUNT] = {
+        "SSG", "OPLL", "OPL2", "ADPCM", "SCC"
+    };
     DbgRegisterBank* regBank;
-    int r;
+    int ch;
 
-    regBank = dbgDeviceAddRegisterBank(dbgDevice, langDbgRegs(), Y8960_MIXER_REGS);
+    regBank = dbgDeviceAddRegisterBank(dbgDevice, langDbgRegs(), Y8960_VOL_COUNT);
 
-    for (r = 0; r < Y8960_MIXER_REGS; r++) {
-        char name[8];
-        sprintf(name, "R%.2x", r);
-        dbgRegisterBankAddRegister(regBank, r, name, 8, rm->regs[r]);
+    for (ch = 0; ch < Y8960_VOL_COUNT; ch++) {
+        dbgRegisterBankAddRegister(regBank, ch, names[ch], 8, rm->volume[ch]);
     }
 }
 
 static void destroy(RomMapperY8960Mixer* rm)
 {
     debugDeviceUnregister(rm->debugHandle);
-
-    ioPortUnregister(Y8960_MIXER_ADDRESS, rm);
-    ioPortUnregister(Y8960_MIXER_DATA, rm);
 
     deviceManagerUnregister(rm->deviceHandle);
 
@@ -140,12 +135,6 @@ int romMapperY8960MixerCreate(void)
 
     theMixer = rm;
     rm->debugHandle  = debugDeviceRegister(DBGTYPE_AUDIO, "Y8960 MSX-MIXER", &dbgCallbacks, rm);
-
-    /* Write only. Nothing says the block answers reads, and a device that
-    ** drives a port it does not own would pull the bus down for whoever
-    ** does. */
-    ioPortRegister(Y8960_MIXER_ADDRESS, NULL, writeIo, rm);
-    ioPortRegister(Y8960_MIXER_DATA, NULL, writeIo, rm);
 
     reset(rm);
 

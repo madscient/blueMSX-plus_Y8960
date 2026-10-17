@@ -30,7 +30,7 @@ Y8960 対応は upstream には存在しない、このフォーク固有の機�
 | ファイル | 役割 |
 |---|---|
 | `tests/banktest.asm` + `make-banktest.py` | MSX 側で走る回帰テスト。バンクマッパー・窓・ミラー・タイマ・OPLLEX・OPL2EX・SSGS。128KB に展開 |
-| `tests/sndtest.asm` + `make-sndtest.py` + `analyze-sndtest.py` | SCC の音。録音した WAV を判定する。16KB |
+| `tests/sndtest.asm` + `make-sndtest.py` + `analyze-sndtest.py` | SCC の音と、ミキサーの SCC 音量（128 / 64 / 0 / FFh）。録音した WAV を音程とレベル比で判定する。16KB |
 | `tests/ssgstest.asm` + `make-ssgstest.py` | 基盤タイプ `MSX2++` で SSGS が本体の PSG として働くか、窓とイネーブラが無いか。16KB の素の ROM |
 | `tests/adpcmtest.asm` + `make-adpcmtest.py` | OPL2EX の ADPCM がサンプルを時刻どおりに終えるか。`C0h`/`C1h` を叩くので、本体の MSX-AUDIO にも使える。16KB |
 | `tests/opllex-bank-probe.c` | OPLLEX のコア単体試験（ヘッドレス）。バンクとパン |

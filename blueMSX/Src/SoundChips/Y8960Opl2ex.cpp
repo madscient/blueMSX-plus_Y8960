@@ -24,9 +24,11 @@
 */
 #include "Y8960Opl2ex.h"
 #include "Y8960Opl2Core.h"
+#include "Y8960Pan.h"
 
 extern "C" {
 #include "Board.h"
+#include "romMapperY8960.h"
 #include "SaveState.h"
 #include "DebugDeviceManager.h"
 #include "Language.h"
@@ -62,16 +64,16 @@ struct Y8960Opl2ex {
     Int32                           handle;
     Int32                           debugHandle;
     UInt32                          mixerRate;
-    Int32                           off, o1, o2;
+    Int32                           off, o1[2], o2[2];
     UInt8                           latchedAddr;
     UInt8                           regCache[256];
-    Int32                           buffer[AUDIO_MONO_BUFFER_SIZE];
+    Int32                           buffer[AUDIO_STEREO_BUFFER_SIZE];
 
     Y8960Opl2ex(Mixer* mixer_, const std::string& name, y8960opl2::EmuTime time)
         : mixer(mixer_), cfg(mb), ram(Y8960_OPL2EX_SAMPLE_RAM)
         , chip(name, cfg, ram, Y8960_OPL2EX_IRQ, time)
         , handle(0), debugHandle(0), mixerRate(SAMPLERATE)
-        , off(0), o1(0), o2(0), latchedAddr(0)
+        , off(0), o1{0, 0}, o2{0, 0}, latchedAddr(0)
     {
         memset(regCache, 0, sizeof(regCache));
         memset(buffer,   0, sizeof(buffer));
@@ -80,12 +82,22 @@ struct Y8960Opl2ex {
 
 /* The chip runs at clock/72 whatever the mixer wants, so the extra samples are
 ** resampled here. Asking the chip for more than the loop consumes turns voices
-** into buzz, so the count is worked out before the chip is advanced. */
+** into buzz, so the count is worked out before the chip is advanced. Stereo,
+** because the pan registers place each channel. */
+static Int32 scaled(int32_t sample, Int64 gain)
+{
+    return (Int32)(((Int64)sample << Y8960_OPL2EX_GAIN_SHIFT) * gain / Y8960_GAIN_ONE);
+}
+
 static Int32* sync(void* ref, UInt32 count)
 {
     Y8960Opl2ex& c = *(Y8960Opl2ex*)ref;
     Int32 simOff = c.off;
     int chipNeed;
+    /* The mixer's OPL2 volume covers the ADPCM too, which the hardware
+    ** mixes into the OPL2 first; the ADPCM's own volume goes into the chip. */
+    Int64 gain = y8960MixerGain(Y8960_VOL_OPL2);
+    c.chip.setAdpcmGain(y8960MixerGain(Y8960_VOL_ADPCM));
 
     if (SAMPLERATE > c.mixerRate) {
         chipNeed = 0;
@@ -102,8 +114,8 @@ static Int32* sync(void* ref, UInt32 count)
         chipNeed = (int)count;
     }
 
-    if ((int)c.chipSamples.size() < chipNeed) c.chipSamples.resize((size_t)chipNeed);
-    c.chip.generateMono(c.chipSamples.data(), (unsigned)chipNeed);
+    if ((int)c.chipSamples.size() < 2 * chipNeed) c.chipSamples.resize((size_t)(2 * chipNeed));
+    c.chip.generateStereo(c.chipSamples.data(), (unsigned)chipNeed);
 
     int32_t* chipBuf = c.chipSamples.data();
     int chipPos = 0;
@@ -111,18 +123,28 @@ static Int32* sync(void* ref, UInt32 count)
     for (UInt32 i = 0; i < count; i++) {
         if (SAMPLERATE > c.mixerRate) {
             c.off -= SAMPLERATE - (Int32)c.mixerRate;
-            c.o1 = c.o2;
-            c.o2 = chipBuf[chipPos++] << Y8960_OPL2EX_GAIN_SHIFT;
+            for (int side = 0; side < 2; side++) {
+                c.o1[side] = c.o2[side];
+                c.o2[side] = scaled(chipBuf[2 * chipPos + side], gain);
+            }
+            chipPos++;
             if (c.off < 0) {
                 c.off += (Int32)c.mixerRate;
-                c.o1 = c.o2;
-                c.o2 = chipBuf[chipPos++] << Y8960_OPL2EX_GAIN_SHIFT;
+                for (int side = 0; side < 2; side++) {
+                    c.o1[side] = c.o2[side];
+                    c.o2[side] = scaled(chipBuf[2 * chipPos + side], gain);
+                }
+                chipPos++;
             }
-            c.buffer[i] = (c.o1 * (c.off / 256)
-                        +  c.o2 * (((Int32)SAMPLERATE - c.off) / 256)) / (SAMPLERATE / 256);
+            for (int side = 0; side < 2; side++) {
+                c.buffer[2 * i + side] = (c.o1[side] * (c.off / 256)
+                                       +  c.o2[side] * (((Int32)SAMPLERATE - c.off) / 256)) / (SAMPLERATE / 256);
+            }
         }
         else {
-            c.buffer[i] = chipBuf[chipPos++] << Y8960_OPL2EX_GAIN_SHIFT;
+            c.buffer[2 * i + 0] = scaled(chipBuf[2 * chipPos + 0], gain);
+            c.buffer[2 * i + 1] = scaled(chipBuf[2 * chipPos + 1], gain);
+            chipPos++;
         }
     }
 
@@ -156,8 +178,8 @@ void y8960Opl2exReset(Y8960Opl2ex* c)
 {
     c->chip.reset((y8960opl2::EmuTime)boardSystemTime());
     c->off = 0;
-    c->o1  = 0;
-    c->o2  = 0;
+    c->o1[0] = c->o1[1] = 0;
+    c->o2[0] = c->o2[1] = 0;
     c->latchedAddr = 0;
     memset(c->regCache, 0, sizeof(c->regCache));
 }
@@ -235,7 +257,7 @@ Y8960Opl2ex* y8960Opl2exCreate(Mixer* mixer)
     Y8960Opl2ex* c = new Y8960Opl2ex(mixer, name, (y8960opl2::EmuTime)boardSystemTime());
 
     c->mixerRate   = mixerGetSampleRate(mixer);
-    c->handle      = mixerRegisterChannel(mixer, MIXER_CHANNEL_Y8960, 0, sync, setRate, c);
+    c->handle      = mixerRegisterChannel(mixer, MIXER_CHANNEL_Y8960, 1, sync, setRate, c);
     c->debugHandle = debugDeviceRegister(DBGTYPE_AUDIO, name, &dbgCallbacks, c);
 
     y8960Opl2exReset(c);

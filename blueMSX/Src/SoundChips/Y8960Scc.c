@@ -38,6 +38,8 @@
 ******************************************************************************
 */
 #include "Y8960Scc.h"
+#include "Y8960Pan.h"
+#include "romMapperY8960.h"
 #include "Board.h"
 #include "SaveState.h"
 #include "DebugDeviceManager.h"
@@ -710,6 +712,8 @@ static Int32* sccSync(Y8960SccChip* scc, UInt32 count)
     Int32* buffer  = scc->buffer;
     Int32  channel;
     UInt32 index;
+    /* The mixer block's volume for this block. */
+    Int32  blockGain = y8960MixerGain(Y8960_VOL_SCC);
 
     for (index = 0; index < count; index++) {
         Int32 masterVolume[4] = {0, 0, 0, 0};
@@ -751,7 +755,8 @@ static Int32* sccSync(Y8960SccChip* scc, UInt32 count)
                 masterVolume[i] += 400 * ((scc->curWave[channel] * scc->volume[channel]) >> 4);
             }
         }
-        buffer[index] = filter4(scc, masterVolume[0], masterVolume[1], masterVolume[2], masterVolume[3]);
+        buffer[index] = (Int32)((Int64)filter4(scc, masterVolume[0], masterVolume[1], masterVolume[2], masterVolume[3])
+                                * blockGain / Y8960_GAIN_ONE);
         scc->bus = 0xFFFF;
 
 //        buffer[index] = (masterVolume[0] + masterVolume[1] + masterVolume[2] + masterVolume[3]);
