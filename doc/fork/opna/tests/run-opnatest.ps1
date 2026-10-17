@@ -23,8 +23,9 @@ if (Test-Path $capture) { $before = Get-ChildItem $capture -Filter *.wav | ForEa
 $argv = @('/machine', "`"$Machine`"", '/rom1', "`"$Rom`"",
           '/rootdir', "`"$Root`"", '/hidden')
 if ($Special -ne "") { $argv += @('/special2', $Special) }
-# An exe built elsewhere runs from an install: machines from its Machines,
-# and the rhythm ROM through its working directory.
+# An exe built elsewhere runs with the machines of an install. The rhythm ROM
+# is still read beside the exe, not from the install or the working
+# directory: without it there, the rhythm section is silent.
 if ($Install -ne "") { $argv += @('/machinedir', "`"$(Join-Path $Install 'Machines')`"") }
 $work = if ($Install -ne "") { $Install } else { Split-Path $Exe }
 $p = Start-Process -FilePath $Exe -ArgumentList $argv -WorkingDirectory $work -PassThru

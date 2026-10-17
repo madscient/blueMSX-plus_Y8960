@@ -594,6 +594,64 @@ int main(int argc, char** argv)
         ym2608Destroy(c);
     }
 
+    /* A reset puts the prescaler and the IRQ mask back, however the program
+    ** left them: the timer of 100 steps runs at 1/6 again, not three times
+    ** as fast, and raises the line. */
+    {
+        probePendingIrq = 0;
+        YM2608* c = ym2608Create(NULL, CLOCK, RAMSIZE, NULL, 0, 0x1000);
+        double period = 100 * 144.0 / CLOCK * 1e6;
+        ym2608Write(c, 0, 0x2f);
+        reg(c, 0, 0x29, 0x00);
+        ym2608Reset(c);
+        ym2608Write(c, 0, 0x24); ym2608Write(c, 1, (1024 - 100) >> 2);
+        ym2608Write(c, 0, 0x25); ym2608Write(c, 1, (1024 - 100) & 3);
+        ym2608Write(c, 0, 0x27); ym2608Write(c, 1, 0x15);
+        probeAdvance(us(period - 50));
+        int before = ym2608Read(c, 0) & 1;
+        probeAdvance(us(100));
+        int after = ym2608Read(c, 0) & 1;
+        check(before == 0 && after == 1, "reset puts the prescaler back", "timer a flag %.0f before the period, %.0f after", before, after);
+        check(probePendingIrq == 0x1000, "reset puts the irq mask back", "pending %.0f, expected %.0f", probePendingIrq, 0x1000);
+        ym2608Destroy(c);
+    }
+
+    /* CSM: each expiry of timer A keys channel 3 on for one sample. With
+    ** the fastest release the note dies away long before the next expiry,
+    ** 18.4 ms later; a key-on held until ymfm next prepares the channels
+    ** sounds throughout. At release rate 15 the level falls below 100 within
+    ** about 3 ms, so about a sixth of the samples stay above it. */
+    {
+        YM2608* c = ym2608Create(NULL, CLOCK, RAMSIZE, NULL, 0, 0);
+        for (int op = 0; op < 4; op++) {
+            int o = 2 + 4 * op;
+            reg(c, 0, 0x30 + o, 0x01);
+            reg(c, 0, 0x40 + o, op == 3 ? 0x00 : 0x7f);
+            reg(c, 0, 0x50 + o, 0x1f);
+            reg(c, 0, 0x60 + o, 0x00);
+            reg(c, 0, 0x70 + o, 0x00);
+            reg(c, 0, 0x80 + o, 0x0f);
+        }
+        reg(c, 0, 0xb2, 0x07);
+        reg(c, 0, 0xb6, 0xc0);
+        reg(c, 0, 0xa6, (4 << 3) | (618 >> 8));
+        reg(c, 0, 0xa2, 618 & 0xff);
+        ym2608Write(c, 0, 0x24); ym2608Write(c, 1, 0x00);
+        ym2608Write(c, 0, 0x25); ym2608Write(c, 1, 0x00);
+        ym2608Write(c, 0, 0x27); ym2608Write(c, 1, 0x85);
+        run(c, 50);
+        std::vector<double> s = run(c, 200);
+        size_t loud = 0;
+        double peak = 0;
+        for (size_t i = 0; i < s.size(); i++) {
+            if (fabs(s[i]) > 100) loud++;
+            if (fabs(s[i]) > peak) peak = fabs(s[i]);
+        }
+        double share = s.empty() ? 1 : (double)loud / s.size();
+        check(share < 0.3 && peak > 1000, "csm key-on lasts one sample", "%.0f %% of samples above 100 (limit 30), peak %.0f", 100 * share, peak);
+        ym2608Destroy(c);
+    }
+
     /* Busy: up right after a data write, down well after it. */
     {
         YM2608* c = ym2608Create(NULL, CLOCK, RAMSIZE, NULL, 0, 0);
@@ -714,6 +772,65 @@ int main(int argc, char** argv)
         double level = rms(run(c, 200));
         double first = rms(firstPass);
         check(level > 1000 && fabs(level / first - 1) < 0.05, "adpcm-b repeats", "rms %.1f in the third pass, %.1f in the first", level, first);
+        ym2608Destroy(c);
+    }
+
+    /* EOS raises the line when it comes up, with nobody reading status 1.
+    ** BRDY is masked in 110h, so that only EOS can raise it. */
+    {
+        probePendingIrq = 0;
+        YM2608* c = ym2608Create(NULL, CLOCK, RAMSIZE, NULL, 0, 0x1000);
+        adpcmPlay(c, false);
+        reg(c, 1, 0x10, 0x18);
+        run(c, 300);
+        UInt32 during = probePendingIrq;
+        run(c, 600);
+        UInt32 after = probePendingIrq;
+        check(during == 0 && after == 0x1000, "adpcm-b eos raises the irq", "pending %.0f while playing, %.0f after", during, after);
+        ym2608Destroy(c);
+    }
+
+    /* With the ROM bit of register 01h the chip addresses its ROM, of which
+    ** Makoto has none: reads give FFh, and writes leave the sample RAM as it
+    ** was. */
+    {
+        YM2608* c = ym2608Create(NULL, CLOCK, RAMSIZE, NULL, 0, 0);
+        ym2608GetDebugInfo(c, NULL);
+        for (int i = 0; i < 64; i++) probeAdpcmRam[i] = (UInt8)(0xb1 + i);
+        reg(c, 1, 0x00, 0x01);
+        reg(c, 1, 0x00, 0x20);
+        reg(c, 1, 0x01, 0x01);
+        reg(c, 1, 0x02, 0x00);
+        reg(c, 1, 0x03, 0x00);
+        reg(c, 1, 0x04, 0xff);
+        reg(c, 1, 0x05, 0xff);
+        reg(c, 1, 0x0c, 0xff);
+        reg(c, 1, 0x0d, 0xff);
+        ym2608Write(c, 2, 0x08);
+        ym2608Read(c, 3);
+        ym2608Read(c, 3);
+        int ff = 1;
+        int first = 0;
+        for (int i = 0; i < 4; i++) {
+            probeAdvance(us(30));
+            int value = ym2608Read(c, 3);
+            if (value != 0xff) ff = 0;
+            if (i == 0) first = value;
+        }
+        check(ff, "adpcm-b rom reads give ffh", "first byte read %.0f, expected %.0f", first, 0xff);
+
+        reg(c, 1, 0x00, 0x01);
+        reg(c, 1, 0x00, 0x60);
+        reg(c, 1, 0x01, 0x01);
+        reg(c, 1, 0x02, 0x00);
+        reg(c, 1, 0x03, 0x00);
+        reg(c, 1, 0x04, 0x00);
+        reg(c, 1, 0x05, 0x00);
+        for (int i = 0; i < 4; i++) reg(c, 1, 0x08, 0xa1 + i);
+        reg(c, 1, 0x00, 0x01);
+        int kept = 1;
+        for (int i = 0; i < 64; i++) if (probeAdpcmRam[i] != 0xb1 + i) kept = 0;
+        check(kept, "adpcm-b rom writes leave the ram", "first ram byte %.0f, expected %.0f", probeAdpcmRam[0], 0xb1);
         ym2608Destroy(c);
     }
 
