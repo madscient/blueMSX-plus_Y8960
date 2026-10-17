@@ -52,6 +52,7 @@
 #define Y8960_WIN_OPLL      0x14    /* 7FF4h address,  7FF5h data  */
 #define Y8960_WIN_ENABLE1   0x16    /* 7FF6h */
 #define Y8960_WIN_VOLUME    0x17    /* 7FF7h-7FFAh: SSG, OPLL, OPL2, SCC */
+#define Y8960_WIN_MASTER    0x1E    /* 7FFEh */
 #define Y8960_WIN_ENABLE2   0x1F    /* 7FFFh */
 #define Y8960_ENABLE1_OPLL  0x01
 #define Y8960_ENABLE2_OPL2  0x01
@@ -324,7 +325,7 @@ static void write(RomMapperY8960Scc* rm, UInt16 address, UInt8 value)
     }
 
     /* 7FE0-7FFF: the enablers, the tunnels to the other blocks, and the
-    ** mixer's volumes. */
+    ** mixer's volumes and master. */
     if (region == 1 && (address & 0x1FE0) == 0x1FE0 && mmioVisible(rm)) {
         int offset = address & 0x1F;
         if (offset >= Y8960_WIN_VOLUME && offset < Y8960_WIN_VOLUME + Y8960_VOL_COUNT) {
@@ -337,6 +338,9 @@ static void write(RomMapperY8960Scc* rm, UInt16 address, UInt8 value)
             break;
         case Y8960_WIN_ENABLE2:
             rm->ioEnable2 = value;
+            break;
+        case Y8960_WIN_MASTER:
+            y8960MixerWriteMaster(value);
             break;
         case Y8960_WIN_SSGS:     tunnelWrite(Y8960_TUN_SSGS, 0, value); break;
         case Y8960_WIN_SSGS + 1: tunnelWrite(Y8960_TUN_SSGS, 1, value); break;

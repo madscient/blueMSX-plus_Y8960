@@ -1,13 +1,13 @@
-; Y8960 sound test cartridge: the SCC and the mixer's SCC volume, by pitch
-; and level.
+; Y8960 sound test cartridge: the SCC, the mixer's SCC volume and its master
+; volume, by pitch and level.
 ;
 ; Runs from the init entry of a Y8960 SCC cartridge (a plain 16kB image at
 ; 4000h; build it with make-sndtest.py). Every step that sounds plays the
-; same pitch at a level the mixer's SCC volume (7FFAh) sets, so a recording
-; tells the steps apart by order and by level: analyze-sndtest.py lists the
-; bursts heard, with their pitch and level, and compares them with the steps
-; that must sound. The muted step has a pitch too, so a volume that fails to
-; silence shows up as an extra burst.
+; same pitch at a level the mixer's SCC volume (7FFAh) and master (7FFEh)
+; set, so a recording tells the steps apart by order and by level:
+; analyze-sndtest.py lists the bursts heard, with their pitch and level, and
+; compares them with the steps that must sound. The muted steps have a pitch
+; too, so a volume that fails to silence shows up as an extra burst.
 ;
 ; The same steps can be judged by ear; each line says what should be heard.
 ;
@@ -22,6 +22,7 @@ CHPUT   equ     000a2h
 REG_MOD equ     04ffbh          ; RAM mode register, visible in both modes
 REG_B1R equ     04ffdh          ; BANK1 register, RAM mode
 VOLSCC  equ     07ffah          ; the mixer's SCC volume, in the window
+VOLMST  equ     07ffeh          ; the mixer's master volume, in the window
 
 SCCWAV  equ     07800h          ; SCC channel 1 waveform, with BANK1 at 3Fh
 SCCFRQ  equ     07880h          ; channel 1 period, low then high
@@ -69,6 +70,32 @@ init:
 
         ld      a, 080h
         ld      (VOLSCC), a
+
+; --- E. master 40h, SCC volume 80h: half the level
+        ld      hl, msg_e
+        call    print
+        ld      a, 040h
+        ld      (VOLMST), a
+        call    play
+
+; --- F. master 40h and SCC volume 40h: a quarter, the two multiplied
+        ld      hl, msg_f
+        call    print
+        ld      a, 040h
+        ld      (VOLSCC), a
+        call    play
+
+; --- G. master 00h, SCC volume 80h: silence
+        ld      hl, msg_g
+        call    print
+        ld      a, 080h
+        ld      (VOLSCC), a
+        xor     a
+        ld      (VOLMST), a
+        call    play
+
+        ld      a, 080h
+        ld      (VOLMST), a
 
         ld      hl, msg_done
         call    print
@@ -144,5 +171,11 @@ msg_c:
         db      "C SCC VOLUME 00H: SILENCE", 13, 10, 0
 msg_d:
         db      "D SCC VOLUME FFH: FULL", 13, 10, 0
+msg_e:
+        db      "E MASTER 40H: HALF", 13, 10, 0
+msg_f:
+        db      "F MASTER 40H SCC 40H: QUARTER", 13, 10, 0
+msg_g:
+        db      "G MASTER 00H: SILENCE", 13, 10, 0
 msg_done:
         db      "DONE", 13, 10, 0

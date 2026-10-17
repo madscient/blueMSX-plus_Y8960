@@ -2,9 +2,9 @@
 
 Splits the recording into bursts of sound separated by silence, estimates the
 pitch and the level of each burst, and compares the list with the steps of
-sndtest.asm that must sound: the same pitch at full, half and full level,
-with the muted step between the last two leaving no burst. Anything else
-that sounds shows up as an extra burst.
+sndtest.asm that must sound: the same pitch at full, half, full, half and
+quarter level, the two muted steps leaving no burst. Anything else that
+sounds shows up as an extra burst.
 
 Usage:  py analyze-sndtest.py <recording.wav>
 Exit status 0 when the pitches match, 1 otherwise.
@@ -13,8 +13,8 @@ import array
 import sys
 import wave
 
-EXPECTED = [990, 990, 990]          # A, B, D; C is muted
-LEVELS = [1.0, 0.5, 1.0]            # relative to the first burst
+EXPECTED = [990, 990, 990, 990, 990]   # A, B, D, E, F; C and G are muted
+LEVELS = [1.0, 0.5, 1.0, 0.5, 0.25]    # relative to the first burst
 LEVEL_TOLERANCE = 0.1
 STEP_NAMES = {990: "SCC"}
 TOLERANCE = 0.03

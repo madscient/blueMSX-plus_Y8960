@@ -66,10 +66,10 @@ void y8960RegisterTunnel(Y8960TunnelBlock block, Y8960TunnelWrite write, void* r
 void y8960UnregisterTunnel(Y8960TunnelBlock block, void* ref);
 
 /* The MSX-MIXER block's volumes, one per sound block, written through the
-** window at 7FF7h + channel. The ADPCM has no volume of its own here: it is
-** mixed into the OPL2 and follows the OPL2's. The SCC block hands the writes
-** over; the sound blocks ask for their gain while rendering. Without the
-** mixer block every gain is unity. */
+** window at 7FF7h + channel, and a master volume at 7FFEh over all four. The
+** ADPCM has no volume of its own here: it is mixed into the OPL2 and follows
+** the OPL2's. The SCC block hands the writes over; the sound blocks ask for
+** their gain while rendering. Without the mixer block every gain is unity. */
 typedef enum {
     Y8960_VOL_SSGS,
     Y8960_VOL_OPLL,
@@ -79,7 +79,9 @@ typedef enum {
 } Y8960Volume;
 
 void  y8960MixerWrite(Y8960Volume channel, UInt8 value);
-/* 4.12 fixed point, Y8960_GAIN_ONE for unity (Y8960Pan.h). */
+void  y8960MixerWriteMaster(UInt8 value);
+/* The channel's volume times the master, 4.12 fixed point, Y8960_GAIN_ONE
+** for unity (Y8960Pan.h). */
 Int32 y8960MixerGain(Y8960Volume channel);
 
 /* One block per RomType, so a machine configuration can carry them

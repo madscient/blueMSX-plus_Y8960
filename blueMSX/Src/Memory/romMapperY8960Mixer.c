@@ -34,15 +34,17 @@
 #include <stdio.h>
 #include <string.h>
 
-/* The mixer has no I/O ports: its four volumes are written through the
-** memory mapped window (7FF7h-7FFAh), which the SCC block decodes and hands
-** here. blueMSX's own mixer has no per-device gain, so every sound block asks
-** this one for its gain while rendering, and multiplies it in itself. A
-** machine without this block gets unity everywhere. */
+/* The mixer has no I/O ports: its four volumes and the master are written
+** through the memory mapped window (7FF7h-7FFAh, 7FFEh), which the SCC block
+** decodes and hands here. blueMSX's own mixer has no per-device gain, so
+** every sound block asks this one for its gain while rendering, and
+** multiplies it in itself. A machine without this block gets unity
+** everywhere. */
 typedef struct {
     int   deviceHandle;
     int   debugHandle;
     UInt8 volume[Y8960_VOL_COUNT];
+    UInt8 master;
 } RomMapperY8960Mixer;
 
 static RomMapperY8960Mixer* theMixer = NULL;
@@ -57,19 +59,35 @@ void y8960MixerWrite(Y8960Volume channel, UInt8 value)
     theMixer->volume[channel] = value;
 }
 
+void y8960MixerWriteMaster(UInt8 value)
+{
+    if (theMixer == NULL) {
+        return;
+    }
+    mixerSync(boardGetMixer());
+    theMixer->master = value;
+}
+
+/* The master covers the cartridge's four blocks only. The MSX's own sound
+** never passes through the card, so blueMSX's other channels stay as they
+** are. */
 Int32 y8960MixerGain(Y8960Volume channel)
 {
     if (theMixer == NULL || channel >= Y8960_VOL_COUNT) {
         return Y8960_GAIN_ONE;
     }
-    return y8960VolumeGain(theMixer->volume[channel]);
+    return y8960VolumeGain(theMixer->volume[channel])
+         * y8960VolumeGain(theMixer->master) / Y8960_GAIN_ONE;
 }
 
 /* The sheet names 128 as the maximum and the hardware side confirmed it as
-** the reset value (2026-10-17). */
+** the reset value of the four volumes (2026-10-17). The sheet gives none for
+** the master; it starts at the maximum too, as anything lower would leave
+** every block quieter than its own volume says. */
 static void reset(RomMapperY8960Mixer* rm)
 {
     memset(rm->volume, 0x80, sizeof(rm->volume));
+    rm->master = 0x80;
 }
 
 static void saveState(RomMapperY8960Mixer* rm)
@@ -77,6 +95,7 @@ static void saveState(RomMapperY8960Mixer* rm)
     SaveState* state = saveStateOpenForWrite("y8960mixer");
 
     saveStateSetBuffer(state, "volume", rm->volume, sizeof(rm->volume));
+    saveStateSet(state, "master", rm->master);
 
     saveStateClose(state);
 }
@@ -87,6 +106,7 @@ static void loadState(RomMapperY8960Mixer* rm)
 
     memset(rm->volume, 0x80, sizeof(rm->volume));
     saveStateGetBuffer(state, "volume", rm->volume, sizeof(rm->volume));
+    rm->master = (UInt8)saveStateGet(state, "master", 0x80);
 
     saveStateClose(state);
 }
@@ -100,11 +120,12 @@ static void getDebugInfo(RomMapperY8960Mixer* rm, DbgDevice* dbgDevice)
     DbgRegisterBank* regBank;
     int ch;
 
-    regBank = dbgDeviceAddRegisterBank(dbgDevice, langDbgRegs(), Y8960_VOL_COUNT);
+    regBank = dbgDeviceAddRegisterBank(dbgDevice, langDbgRegs(), Y8960_VOL_COUNT + 1);
 
     for (ch = 0; ch < Y8960_VOL_COUNT; ch++) {
         dbgRegisterBankAddRegister(regBank, ch, names[ch], 8, rm->volume[ch]);
     }
+    dbgRegisterBankAddRegister(regBank, Y8960_VOL_COUNT, "MASTER", 8, rm->master);
 }
 
 static void destroy(RomMapperY8960Mixer* rm)

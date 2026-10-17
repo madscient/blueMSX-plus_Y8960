@@ -62,10 +62,10 @@ static void y8960PanGain(UInt8 pan, Int32 gain[2])
     gain[1] = r;
 }
 
-/* The gain of a volume register (the mixer's 7FF7h-7FFBh, the SSGS's
-** 20h-26h): 0 is mute, 1-127 is value / 128, and bit 7 set is unity, so the
-** top of the range joins the maximum without a step. The sheet's "0: OFF,
-** ~128: MAX"; the curve below 128 was decided 2026-10-17. */
+/* The gain of a volume register (the mixer's 7FF7h-7FFAh and 7FFEh, the
+** SSGS's 20h-26h): 0 is mute, 1-127 is value / 128, and bit 7 set is unity,
+** so the top of the range joins the maximum without a step. The sheet's
+** "0: OFF, ~128: MAX"; the curve below 128 was decided 2026-10-17. */
 static Int32 y8960VolumeGain(UInt8 volume)
 {
     if (volume & 0x80) {
