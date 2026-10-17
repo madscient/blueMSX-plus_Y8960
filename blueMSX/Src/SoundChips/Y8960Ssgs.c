@@ -60,9 +60,8 @@
 **   2Ch-2Eh  pan of core 1 channel A, B, C
 **
 ** 23h, 27h, 2Bh and 2Fh are not connected, and nothing sits at 30h and up.
-** 0Eh/0Fh and 1Eh/1Fh are the cores' GPIO registers: plain storage, except
-** on core 0 of a Y8960 built into a machine, where the PSG's wiring hangs
-** off them. The sheet puts LEDs on the low four bits of core 1's port B;
+** 0Eh/0Fh and 1Eh/1Fh are the cores' GPIO registers: plain storage, unless
+** something is attached to core 0's (nothing is, on the cartridge). The sheet puts LEDs on the low four bits of core 1's port B;
 ** they are kept as the value written, nothing drives them. */
 #define Y8960_SSGS_CORE_REGS    0x10
 #define Y8960_SSGS_VOLUME_BASE  0x20
@@ -107,7 +106,7 @@ struct Y8960SsgsChip {
     Int32  handle;
     Int32  debugHandle;
 
-    /* Null on a cartridge, where core 0's GPIO registers are storage only. */
+    /* Null on the cartridge, where core 0's GPIO registers are storage only. */
     Y8960SsgsReadCb  ioPortReadCb;
     Y8960SsgsReadCb  ioPortPollCb;
     Y8960SsgsWriteCb ioPortWriteCb;
@@ -300,8 +299,8 @@ static UInt8 peekRegister(Y8960SsgsChip* chip, UInt8 address)
 /* Registers the chip does not have read as all ones rather than as zero: the
 ** bus ANDs what every device drives, so ones are how a device says it is not
 ** answering. The registers it does have read back what was written, as the
-** PSG this is built from does. Only a Y8960 built into a machine reaches
-** this; the cartridge does not drive the read port. */
+** PSG this is built from does. The cartridge does not drive the read port;
+** this is for the probe and the debugger. */
 UInt8 y8960SsgsReadData(Y8960SsgsChip* chip)
 {
     UInt8 address = chip->address;

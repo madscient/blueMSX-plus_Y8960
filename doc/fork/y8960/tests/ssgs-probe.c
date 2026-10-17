@@ -190,9 +190,8 @@ int main(void)
 
     /* ---- reset leaves the pans at centre and the volumes at unity ------- */
     {
-        /* On an MSX2++ this chip is the machine's own PSG, so a tune that
-        ** never writes a pan or a volume has to come out of both sides at
-        ** full level. */
+        /* A tune written for a PSG never writes a pan or a volume, and has
+        ** to come out of both sides at full level. */
         double lc, rc, lMid, rMid;
 
         y8960SsgsReset(chip);

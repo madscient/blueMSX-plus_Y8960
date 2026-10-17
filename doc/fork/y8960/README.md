@@ -31,7 +31,6 @@ Y8960 対応は upstream には存在しない、このフォーク固有の機�
 |---|---|
 | `tests/banktest.asm` + `make-banktest.py` | MSX 側で走る回帰テスト。バンクマッパー・窓・ミラー・タイマ・OPLLEX・OPL2EX・SSGS。128KB に展開 |
 | `tests/sndtest.asm` + `make-sndtest.py` + `analyze-sndtest.py` | SCC の音と、ミキサーの SCC 音量（128 / 64 / 0 / FFh）。録音した WAV を音程とレベル比で判定する。16KB |
-| `tests/ssgstest.asm` + `make-ssgstest.py` | 基盤タイプ `MSX2++` で SSGS が本体の PSG として働くか、窓とイネーブラが無いか。16KB の素の ROM |
 | `tests/adpcmtest.asm` + `make-adpcmtest.py` | OPL2EX の ADPCM がサンプルを時刻どおりに終えるか。`C0h`/`C1h` を叩くので、本体の MSX-AUDIO にも使える。16KB |
 | `tests/opllex-bank-probe.c` | OPLLEX のコア単体試験（ヘッドレス）。バンクとパン |
 | `tests/opl2ex-probe.cpp` + `opl2ex-host-stub.c` | OPL2EX のコア単体試験（ヘッドレス） |
@@ -41,7 +40,6 @@ Y8960 対応は upstream には存在しない、このフォーク固有の機�
 | `tests/MSX2+ - C-BIOS + Y8960 (cartridge)/` | Y8960 SCC を**外した**構成。`/rom1 <rom> /romtype1 Y8960SCC` でカートリッジとして挿す |
 | `tests/MSX2+ - C-BIOS + Y8960 (whole cart)/` | Y8960 を**一つも持たない**構成。`/rom1 <rom> /romtype1 Y8960` でカード一式をカートリッジとして挿す。`(banktest)` と突き合わせる相手 |
 | `tests/MSX2 - Y8960 (firmware)/` | 汎用 `MSX2`（MSX BASIC 2.1）に Y8960 の 6 ブロックを載せ、Y8960 SCC に `y8960bas.rom` を載せたもの。**`Machines/Shared Roms/` の BIOS と `y8960bas.rom` が要る** |
-| `tests/MSX2++ - C-BIOS + Y8960/` | 基盤タイプ `MSX2++`。MSX-TIMER と Y8960 SCC を置き、Y8960 SCC に `ssgstest.rom` を載せたもの |
 | `tests/MSX2+ - C-BIOS + MSX-AUDIO/` | Y8960 を**持たず**、本体に MSX-AUDIO（ROM 無しの Y8950）を置いた構成。`adpcmtest.rom` を素の ROM として挿し、本体の MSX-AUDIO のバックエンドを試す |
 
 コア単体試験のビルド手順は各ファイルの冒頭にある。
@@ -50,6 +48,7 @@ Y8960 対応は upstream には存在しない、このフォーク固有の機�
 
 **6 ブロックすべてに中身が入り、MSX 側から確かめられるものは確かめ終えた。**
 DCSG と、OPLLEX / OPL2EX の 2 回路目は 2026-10-16 の仕様書で消え、外してある。
+本体内蔵の `MSX2++` は別のハードウェアになるとの回答で、2026-10-17 に撤去した。
 MSX-MIXER だけは実機側が未実装で、入口（値を憶える）までで止まっている。
 
 **現在地・次の一手・確かめずに残してあることは `implementation-plan.md` §0。**
@@ -108,14 +107,6 @@ blueMSX+.exe /machine "MSX2+ - C-BIOS + Y8960 (whole cart)" /rom1 <banktest.rom>
 
 **判別力を見るには `/romtype1 Y8960SCC` で同じ ROM を挿す。** SCC ブロックだけが
 入るので、5-7 と 10 が NG になり、音は全編無音になる。
-
-`ssgstest` は `MSX2++` の構成に `ssgstest.rom` を置いて起動する。
-1 / 2 / 6 / 7 / 8 が機械判定、3 / 4 が聴く項目、5 がかな LED を見る項目。
-
-```sh
-cp -r "doc/fork/y8960/tests/MSX2++ - C-BIOS + Y8960" "$DEST/"
-py "doc/fork/y8960/tests/make-ssgstest.py" <pasmo.exe> "$DEST/MSX2++ - C-BIOS + Y8960/ssgstest.rom"
-```
 
 `adpcmtest` は 2 行を出す。どちらも機械判定で、`/hidden` で回せる。
 

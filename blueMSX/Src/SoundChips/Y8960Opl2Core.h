@@ -34,8 +34,7 @@
 ** waveforms a YM3812 has and a Y8950 does not, the MSX-AUDIO parts the
 ** cartridge does not carry (keyboard connector, 13 bit DAC, periphery), a
 ** sample RAM that lives outside the circuit, where the block owns it, and a
-** pan per channel (F6h-FEh) and for the ADPCM (FFh), with the mixer's ADPCM
-** volume applied to the ADPCM alone.
+** pan per channel (F6h-FEh) and for the ADPCM (FFh).
 **
 ** It is a fork rather than an extension because the machine's own MSX-AUDIO
 ** keeps using the unmodified port; both end up in one binary. The namespace
@@ -371,13 +370,8 @@ public:
     void generateMono(int32_t* out, unsigned num);
 
     /* Produce `num` chip-rate stereo samples, interleaved, each channel placed
-    ** by its pan register (F6h-FEh, FFh for the ADPCM) and the ADPCM scaled
-    ** by the mixer's ADPCM volume. */
+    ** by its pan register (F6h-FEh, FFh for the ADPCM). */
     void generateStereo(int32_t* out, unsigned num);
-
-    /* The mixer's ADPCM volume (7FFAh), 4.12 fixed point. It belongs to the
-    ** mixer block, which is why it is pushed in rather than saved here. */
-    void setAdpcmGain(int32_t gain);
 
     using ResampledSoundDevice::setVolume;
     using ResampledSoundDevice::getName;
@@ -514,7 +508,6 @@ private:
 
     /* Derived from reg[F6h..FFh]; the last is the ADPCM's. 4.12 fixed point. */
     std::array<std::array<int32_t, 2>, 10> panGain;
-    int32_t adpcmGain;
     void updatePanGains();
     
     unsigned pm_phase;

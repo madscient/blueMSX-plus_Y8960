@@ -4,7 +4,7 @@
 ** ROM and runs headless. The checks cover what the fork changed: the four
 ** waveforms a YM3812 has, the sample RAM outside the circuit, the MSX-AUDIO
 ** registers the cartridge does not carry, the pan per channel and for the
-** ADPCM with the mixer's ADPCM volume, and the rhythm sounds at 1:1. They
+** ADPCM, and the rhythm sounds at 1:1. They
 ** also cover the end of an ADPCM sample, which the core has to bring about
 ** by itself: on time, with its interrupt, whatever the software is doing
 ** meanwhile. And they cover the one bit of 07h the Y8960 dropped, SP-OFF.
@@ -505,39 +505,20 @@ int main()
               melody > 1 && std::fabs(drum - melody) < melody * 0.02);
     }
 
-    /* ---- the ADPCM's pan (FFh) and the mixer's ADPCM volume ------------- */
+    /* ---- the ADPCM's pan (FFh) ------------------------------------------- */
     {
-        double full, half;
-        {
-            *boardSysTime = 1000;
-            Player p(cfg);
-            p.stereo = true;
-            p.chip.writeReg(0xFF, 1, T);                     /* hard left */
-            p.playShort(0xA0);
-            p.runMixed(600 * TICK);
-            double al = 0.0, ar = 0.0;
-            for (size_t i = 0; i + 1 < p.out.size(); i += 2) {
-                al += (double)p.out[i] * p.out[i];
-                ar += (double)p.out[i + 1] * p.out[i + 1];
-            }
-            check("the ADPCM follows FFh: left only", al > 1 && ar == 0.0);
-            full = std::sqrt(al);
+        *boardSysTime = 1000;
+        Player p(cfg);
+        p.stereo = true;
+        p.chip.writeReg(0xFF, 1, T);                         /* hard left */
+        p.playShort(0xA0);
+        p.runMixed(600 * TICK);
+        double al = 0.0, ar = 0.0;
+        for (size_t i = 0; i + 1 < p.out.size(); i += 2) {
+            al += (double)p.out[i] * p.out[i];
+            ar += (double)p.out[i + 1] * p.out[i + 1];
         }
-        {
-            *boardSysTime = 1000;
-            Player p(cfg);
-            p.stereo = true;
-            p.chip.writeReg(0xFF, 1, T);
-            p.chip.setAdpcmGain(2048);                       /* the mixer's ADPCM volume at 64 */
-            p.playShort(0xA0);
-            p.runMixed(600 * TICK);
-            double al = 0.0;
-            for (size_t i = 0; i + 1 < p.out.size(); i += 2) al += (double)p.out[i] * p.out[i];
-            half = std::sqrt(al);
-        }
-        printf("  ADPCM at unity rms = %.1f, at half gain rms = %.1f\n", full, half);
-        check("the mixer's ADPCM volume scales the ADPCM alone",
-              std::fabs(half - full * 0.5) < full * 0.02);
+        check("the ADPCM follows FFh: left only", al > 1 && ar == 0.0);
     }
 
     /* ---- SP-OFF was dropped from the Y8960 ------------------------------ */

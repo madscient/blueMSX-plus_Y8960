@@ -3,7 +3,7 @@
 ;
 ; Runs from the init entry of a Y8960 SCC cartridge (a plain 16kB image at
 ; 4000h; build it with make-sndtest.py). Every step that sounds plays the
-; same pitch at a level the mixer's SCC volume (7FFBh) sets, so a recording
+; same pitch at a level the mixer's SCC volume (7FFAh) sets, so a recording
 ; tells the steps apart by order and by level: analyze-sndtest.py lists the
 ; bursts heard, with their pitch and level, and compares them with the steps
 ; that must sound. The muted step has a pitch too, so a volume that fails to
@@ -21,7 +21,7 @@ CHPUT   equ     000a2h
 
 REG_MOD equ     04ffbh          ; RAM mode register, visible in both modes
 REG_B1R equ     04ffdh          ; BANK1 register, RAM mode
-VOLSCC  equ     07ffbh          ; the mixer's SCC volume, in the window
+VOLSCC  equ     07ffah          ; the mixer's SCC volume, in the window
 
 SCCWAV  equ     07800h          ; SCC channel 1 waveform, with BANK1 at 3Fh
 SCCFRQ  equ     07880h          ; channel 1 period, low then high

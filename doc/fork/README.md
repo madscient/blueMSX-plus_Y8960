@@ -206,15 +206,14 @@ MegaFlashROM SCC+ SD に触れているが、PR に本文も参照も無く、#7
 
 **6 ブロックが `RomType` を持ち、マシン構成に個別に置ける。すべてに中身が入っている。**
 DCSG と、OPLLEX / OPL2EX の 2 回路目は 2026-10-16 の仕様書でハードウェアから消え、外した（RomType 206 は欠番）。
-加えて基盤タイプ `MSX2++`（Y8960 内蔵、SSGS が本体の PSG）がある。
 
 | ブロック | 状態 | 土台 |
 |---|---|---|
 | OPLLEX | 実装済み・**音を確認** | `Src/SoundChips/Emu2413/`（emu2413 v1.5.9）のフォーク。レート変換器は v1.6.4 のもの |
 | OPL2EX | 実装済み・**音を確認** | `Src/SoundChips/OpenMsxY8950Latest.cpp` ほか（openMSX の Y8950 の移植版）のフォーク |
-| SSGS | 実装済み・**音を確認**（カートリッジ / 内蔵とも） | `Src/SoundChips/AY8910.c` のフォーク |
+| SSGS | 実装済み・**音を確認** | `Src/SoundChips/AY8910.c` のフォーク |
 | MSX-TIMER | 実装済み・**音は持たない** | 新規 |
-| MSX-MIXER | 実装済み・**SCC の音量を録音で確認**（窓の `7FF7h`-`7FFBh`） | 新規 |
+| MSX-MIXER | 実装済み・**SCC の音量を録音で確認**（窓の `7FF7h`-`7FFAh`） | 新規 |
 | Y8960 SCC + マッパー | 実装済み・**音を確認** | `Src/SoundChips/Y8960Scc.c`（`SCC.c` のフォーク）+ 新規マッパー |
 | I/O イネーブラ / MMIO 窓 | 実装済み | SCC のマッパーが持つ |
 

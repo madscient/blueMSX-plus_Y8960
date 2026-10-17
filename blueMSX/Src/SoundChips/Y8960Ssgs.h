@@ -53,14 +53,14 @@ void y8960SsgsReset(Y8960SsgsChip* chip);
 void y8960SsgsWriteAddress(Y8960SsgsChip* chip, UInt8 address);
 void y8960SsgsWriteData(Y8960SsgsChip* chip, UInt8 data);
 
-/* Only a Y8960 built into a machine drives a read port; as a cartridge the
-** SSGS shares its addresses with the machine's own PSG, which drives it. The
-** block decides which of the two it is, not the chip. */
+/* The cartridge does not drive a read port: the SSGS shares its addresses
+** with the machine's own PSG, which drives it. This is what a read would
+** return, kept for the probe and the debugger. */
 UInt8 y8960SsgsReadData(Y8960SsgsChip* chip);
 
-/* Attaches a GPIO to the first core's 0Eh and 0Fh. A cartridge has none, and
-** those two registers are then plain storage; a Y8960 built into a machine
-** stands in for the PSG and carries what the PSG's pins carry. */
+/* Attaches a GPIO to the first core's 0Eh and 0Fh. The cartridge has none,
+** and those two registers are then plain storage. Kept as the AY8910 has it,
+** in case a Y8960 ever stands in for a machine's PSG again. */
 void y8960SsgsSetIoPort(Y8960SsgsChip* chip, Y8960SsgsReadCb readCb,
                         Y8960SsgsReadCb pollCb, Y8960SsgsWriteCb writeCb, void* ref);
 

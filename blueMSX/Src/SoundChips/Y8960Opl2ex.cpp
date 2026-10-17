@@ -95,9 +95,8 @@ static Int32* sync(void* ref, UInt32 count)
     Int32 simOff = c.off;
     int chipNeed;
     /* The mixer's OPL2 volume covers the ADPCM too, which the hardware
-    ** mixes into the OPL2 first; the ADPCM's own volume goes into the chip. */
+    ** mixes into the OPL2 first. */
     Int64 gain = y8960MixerGain(Y8960_VOL_OPL2);
-    c.chip.setAdpcmGain(y8960MixerGain(Y8960_VOL_ADPCM));
 
     if (SAMPLERATE > c.mixerRate) {
         chipNeed = 0;

@@ -33,10 +33,6 @@
 ** Reset leaves all of them closed. The cartridge has no direct I/O port for
 ** the enablers, so software has to reach them through the window.
 **
-** A Y8960 built into an MSX2++ has neither window nor enablers, and every
-** block answers there without being opened. It keeps its bank memory and its
-** SCC; only the window goes.
-**
 ** The specification of 2026-10-16 struck the second OPLL and OPL2 circuits
 ** and the DCSG out, and may yet move what remains; the window offsets and
 ** the enabler bits are gathered at the top of romMapperY8960Scc.c. */
@@ -47,14 +43,8 @@ typedef enum {
     Y8960_IO_TIMER      /* B0H-B3H, enabler 2 bit 7 */
 } Y8960IoBlock;
 
-/* True on an MSX2++, where the Y8960 is built in and has no window, and when
-** the SCC block is absent, which leaves the enablers unreachable. */
+/* True when the SCC block is absent, which leaves the enablers unreachable. */
 int y8960IoEnabled(Y8960IoBlock block);
-
-/* Whether the Y8960 is built into the machine rather than plugged in. The
-** board sets it on every machine it builds, before the slots are filled, so a
-** machine that follows an MSX2++ does not inherit it. */
-void y8960SetBuiltIn(int builtIn);
 
 /* The window also tunnels writes straight into the sound blocks. Unlike the
 ** direct I/O ports these are NOT gated by the enablers: the enablers
@@ -76,16 +66,14 @@ void y8960RegisterTunnel(Y8960TunnelBlock block, Y8960TunnelWrite write, void* r
 void y8960UnregisterTunnel(Y8960TunnelBlock block, void* ref);
 
 /* The MSX-MIXER block's volumes, one per sound block, written through the
-** window at 7FF7h + channel. The ADPCM's is applied inside the OPL2 block to
-** the ADPCM alone, before the OPL2's own; the hardware mixes the ADPCM into
-** the OPL2 first. The SCC block hands the writes over; the sound blocks ask
-** for their gain while rendering. Without the mixer block every gain is
-** unity. */
+** window at 7FF7h + channel. The ADPCM has no volume of its own here: it is
+** mixed into the OPL2 and follows the OPL2's. The SCC block hands the writes
+** over; the sound blocks ask for their gain while rendering. Without the
+** mixer block every gain is unity. */
 typedef enum {
     Y8960_VOL_SSGS,
     Y8960_VOL_OPLL,
     Y8960_VOL_OPL2,
-    Y8960_VOL_ADPCM,
     Y8960_VOL_SCC,
     Y8960_VOL_COUNT
 } Y8960Volume;

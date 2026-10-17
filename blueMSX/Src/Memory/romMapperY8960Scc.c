@@ -51,7 +51,7 @@
 #define Y8960_WIN_OPL2      0x12    /* 7FF2h address,  7FF3h data  */
 #define Y8960_WIN_OPLL      0x14    /* 7FF4h address,  7FF5h data  */
 #define Y8960_WIN_ENABLE1   0x16    /* 7FF6h */
-#define Y8960_WIN_VOLUME    0x17    /* 7FF7h-7FFBh: SSG, OPLL, OPL2, ADPCM, SCC */
+#define Y8960_WIN_VOLUME    0x17    /* 7FF7h-7FFAh: SSG, OPLL, OPL2, SCC */
 #define Y8960_WIN_ENABLE2   0x1F    /* 7FFFh */
 #define Y8960_ENABLE1_OPLL  0x01
 #define Y8960_ENABLE2_OPL2  0x01
@@ -76,15 +76,6 @@ typedef struct {
 /* The window is the only way to reach the enablers, and the cartridge is a
 ** single card, so the other blocks find it through here. */
 static RomMapperY8960Scc* theY8960Scc = NULL;
-
-/* Set by the board before the machine is built. boardGetType() cannot answer
-** this: it folds every MSX board, MSX2++ included, down to the MSX family. */
-static int y8960BuiltIn = 0;
-
-void y8960SetBuiltIn(int builtIn)
-{
-    y8960BuiltIn = builtIn;
-}
 
 typedef struct {
     Y8960TunnelWrite write;
@@ -122,11 +113,10 @@ int y8960IoEnabled(Y8960IoBlock block)
 {
     RomMapperY8960Scc* rm = theY8960Scc;
 
-    /* The enablers live in the memory mapped window. Built into an MSX2++ the
-    ** Y8960 has no window, so every block answers. A machine that leaves the
-    ** SCC block out has no way to reach the enablers either, and its blocks
-    ** answer too rather than stay shut for good. */
-    if (rm == NULL || y8960BuiltIn) {
+    /* The enablers live in the memory mapped window. A machine that leaves
+    ** the SCC block out has no way to reach them, and its blocks answer
+    ** rather than stay shut for good. */
+    if (rm == NULL) {
         return 1;
     }
 
@@ -166,13 +156,6 @@ static int sccVisible(RomMapperY8960Scc* rm, int region)
 ** ROM bank". */
 static int mmioVisible(RomMapperY8960Scc* rm)
 {
-    /* Built into an MSX2++ the cartridge's window does not exist: the blocks
-    ** sit on the bus directly and there is nothing to open or tunnel into.
-    ** The bank memory and the SCC are still there. */
-    if (y8960BuiltIn) {
-        return 0;
-    }
-
     if (sccVisible(rm, 1)) {
         return 0;
     }

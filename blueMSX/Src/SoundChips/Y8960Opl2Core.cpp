@@ -34,8 +34,7 @@
 ** waveforms a YM3812 has and a Y8950 does not, the MSX-AUDIO parts the
 ** cartridge does not carry (keyboard connector, 13 bit DAC, periphery), a
 ** sample RAM that lives outside the circuit, where the block owns it, and a
-** pan per channel (F6h-FEh) and for the ADPCM (FFh), with the mixer's ADPCM
-** volume applied to the ADPCM alone.
+** pan per channel (F6h-FEh) and for the ADPCM (FFh).
 **
 ** It is a fork rather than an extension because the machine's own MSX-AUDIO
 ** keeps using the unmodified port; both end up in one binary. The namespace
@@ -456,7 +455,6 @@ void Y8950::reset(EmuTime time)
     /* The pans reset to the centre, the sheet's default. */
     std::fill(&reg[0xF6], &reg[0xFF] + 1, uint8_t(Y8960_PAN_CENTER));
     updatePanGains();
-    adpcmGain = Y8960_GAIN_ONE;
     status = 0x00;
     statusMask = 0;
     irq.reset();
@@ -791,7 +789,6 @@ void Y8950::generateStereo(int32_t* out, unsigned num)
         for (unsigned i = 0; i < NCH; ++i) {
             if (!bufs[i]) continue;
             float v = bufs[i][s];
-            if (i == NCH - 1) v = v * float(adpcmGain) / Y8960_GAIN_ONE;
             const auto& g = panGain[PAN_OF_BUFFER[i]];
             l += v * float(g[0]) / Y8960_GAIN_ONE;
             r += v * float(g[1]) / Y8960_GAIN_ONE;
@@ -809,11 +806,6 @@ void Y8950::updatePanGains()
         panGain[i][0] = g[0];
         panGain[i][1] = g[1];
     }
-}
-
-void Y8950::setAdpcmGain(int32_t gain)
-{
-    adpcmGain = gain;
 }
 
 /* I/O Ctrl --------------------------------------------------------- */

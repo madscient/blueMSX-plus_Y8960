@@ -34,8 +34,8 @@
 #include <stdio.h>
 #include <string.h>
 
-/* The mixer has no I/O ports: its five volumes are written through the
-** memory mapped window (7FF7h-7FFBh), which the SCC block decodes and hands
+/* The mixer has no I/O ports: its four volumes are written through the
+** memory mapped window (7FF7h-7FFAh), which the SCC block decodes and hands
 ** here. blueMSX's own mixer has no per-device gain, so every sound block asks
 ** this one for its gain while rendering, and multiplies it in itself. A
 ** machine without this block gets unity everywhere. */
@@ -95,7 +95,7 @@ static void loadState(RomMapperY8960Mixer* rm)
 static void getDebugInfo(RomMapperY8960Mixer* rm, DbgDevice* dbgDevice)
 {
     static const char* const names[Y8960_VOL_COUNT] = {
-        "SSG", "OPLL", "OPL2", "ADPCM", "SCC"
+        "SSG", "OPLL", "OPL2", "SCC"
     };
     DbgRegisterBank* regBank;
     int ch;
