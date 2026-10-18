@@ -8,7 +8,8 @@ param(
     [int]$SetVolume = 40,                            # given to the first row of $Group
     [string]$Group = "SCC",
     [switch]$Keep,                                   # keep the settings from a previous run
-    [string]$Screenshot                              # PNG of the devices window, if given
+    [string]$Screenshot,                             # PNG of the devices window, if given
+    [string[]]$ExtraArgs = @()                       # more command line, e.g. /rom1 and /romtype1
 )
 
 # Opens Tools > Sound Mixer (Devices) in a visible blueMSX+, prints the rows
@@ -93,6 +94,7 @@ $ini = Join-Path $Root "bluemsx.ini"
 $args2 = @('/machine', "`"$Machine`"", '/rootdir', "`"$Root`"")
 if ($Special1) { $args2 += @('/special1', "`"$Special1`"") }
 if ($Special2) { $args2 += @('/special2', "`"$Special2`"") }
+$args2 += $ExtraArgs
 $p = Start-Process -FilePath $Exe -ArgumentList $args2 -WorkingDirectory (Split-Path $Exe) -PassThru
 $null = $p.Handle
 
