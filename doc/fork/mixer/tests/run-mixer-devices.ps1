@@ -98,55 +98,66 @@ $args2 += $ExtraArgs
 $p = Start-Process -FilePath $Exe -ArgumentList $args2 -WorkingDirectory (Split-Path $Exe) -PassThru
 $null = $p.Handle
 
-$h = Find-BlueMsxWindow $p
-if ($h -eq [IntPtr]::Zero) { "no window; exit code $($p.ExitCode)"; exit 1 }
-Start-Sleep -Milliseconds $BootMs
+# The instance is closed in finally, so that a run cut short (an error,
+# or output piped into Select-Object -First) does not leave it on screen.
+try {
+    $h = Find-BlueMsxWindow $p
+    if ($h -eq [IntPtr]::Zero) { "no window; exit code $($p.ExitCode)"; exit 1 }
+    Start-Sleep -Milliseconds $BootMs
 
-[void][MixerDevicesProbe]::PostMessage($h, $WM_COMMAND, [IntPtr]$ID_TOOLS_MIXERDEVICES, [IntPtr]::Zero)
-$devices = [IntPtr]::Zero
-$t0 = Get-Date
-while ($devices -eq [IntPtr]::Zero -and ((Get-Date) - $t0).TotalSeconds -lt 10) {
-    Start-Sleep -Milliseconds 200
-    $devices = [MixerDevicesProbe]::TopWindow([uint32]$p.Id, "blueMSXMixerDevices")
-}
-if ($devices -eq [IntPtr]::Zero) {
-    "the devices window did not open"
+    [void][MixerDevicesProbe]::PostMessage($h, $WM_COMMAND, [IntPtr]$ID_TOOLS_MIXERDEVICES, [IntPtr]::Zero)
+    $devices = [IntPtr]::Zero
+    $t0 = Get-Date
+    while ($devices -eq [IntPtr]::Zero -and ((Get-Date) - $t0).TotalSeconds -lt 10) {
+        Start-Sleep -Milliseconds 200
+        $devices = [MixerDevicesProbe]::TopWindow([uint32]$p.Id, "blueMSXMixerDevices")
+    }
+    if ($devices -eq [IntPtr]::Zero) {
+        "the devices window did not open"
+        [void][BlueMsxControl]::SendMsg($h, $WM_CLOSE, [IntPtr]::Zero, [IntPtr]::Zero)
+        exit 1
+    }
+    Start-Sleep -Milliseconds 500
+
+    "--- title: " + [MixerDevicesProbe]::TextOf($devices)
+    if ($Screenshot) {
+        Add-Type -AssemblyName System.Drawing
+        # Without this the window size is read scaled down on a high-dpi screen
+        # while PrintWindow draws at full size, and the picture is cut off.
+        [void][MixerDevicesProbe]::SetProcessDPIAware()
+        $rect = New-Object MixerDevicesProbe+RECT
+        [void][MixerDevicesProbe]::GetWindowRect($devices, [ref]$rect)
+        $bmp = New-Object System.Drawing.Bitmap ($rect.Right - $rect.Left), ($rect.Bottom - $rect.Top)
+        $g = [System.Drawing.Graphics]::FromImage($bmp)
+        $hdc = $g.GetHdc()
+        [void][MixerDevicesProbe]::PrintWindow($devices, $hdc, 2)   # PW_RENDERFULLCONTENT
+        $g.ReleaseHdc($hdc); $g.Dispose()
+        $bmp.Save($Screenshot, [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
+        "--- screenshot: $Screenshot"
+    }
+    $rows = Get-DeviceRows $devices
+    "--- rows"
+    $rows | ForEach-Object { "{0,-10} {1,-24} on={2} volume={3} pan={4}" -f $_.Group, $_.Label, $_.On, $_.Volume, $_.Pan }
+
+    $target = $rows | Where-Object { $_.Group -eq $Group } | Select-Object -First 1
+    if ($target -and -not $Keep) {
+        [void][MixerDevicesProbe]::SendMessage($target.VolumeBar, $TBM_SETPOS, [IntPtr]1, [IntPtr]$SetVolume)
+        [void][MixerDevicesProbe]::SendMessage($devices, $WM_HSCROLL, [IntPtr]8, $target.VolumeBar)   # TB_ENDTRACK
+        "--- set the volume of $Group / $($target.Label) to $SetVolume"
+    }
+    Start-Sleep -Milliseconds 300
+
     [void][BlueMsxControl]::SendMsg($h, $WM_CLOSE, [IntPtr]::Zero, [IntPtr]::Zero)
-    exit 1
+    $exited = $p.WaitForExit(15000) -and $p.ExitCode -eq 0
+    if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+    "--- exits on WM_CLOSE: $exited"
 }
-Start-Sleep -Milliseconds 500
-
-"--- title: " + [MixerDevicesProbe]::TextOf($devices)
-if ($Screenshot) {
-    Add-Type -AssemblyName System.Drawing
-    # Without this the window size is read scaled down on a high-dpi screen
-    # while PrintWindow draws at full size, and the picture is cut off.
-    [void][MixerDevicesProbe]::SetProcessDPIAware()
-    $rect = New-Object MixerDevicesProbe+RECT
-    [void][MixerDevicesProbe]::GetWindowRect($devices, [ref]$rect)
-    $bmp = New-Object System.Drawing.Bitmap ($rect.Right - $rect.Left), ($rect.Bottom - $rect.Top)
-    $g = [System.Drawing.Graphics]::FromImage($bmp)
-    $hdc = $g.GetHdc()
-    [void][MixerDevicesProbe]::PrintWindow($devices, $hdc, 2)   # PW_RENDERFULLCONTENT
-    $g.ReleaseHdc($hdc); $g.Dispose()
-    $bmp.Save($Screenshot, [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
-    "--- screenshot: $Screenshot"
+finally {
+    if (-not $p.HasExited) {
+        $w = Find-BlueMsxWindow $p 2000
+        if ($w -ne [IntPtr]::Zero) { [void][BlueMsxControl]::SendMsg($w, $WM_CLOSE, [IntPtr]::Zero, [IntPtr]::Zero) }
+        if (-not $p.WaitForExit(15000)) { Stop-Process -Id $p.Id -Force }
+    }
 }
-$rows = Get-DeviceRows $devices
-"--- rows"
-$rows | ForEach-Object { "{0,-10} {1,-24} on={2} volume={3} pan={4}" -f $_.Group, $_.Label, $_.On, $_.Volume, $_.Pan }
-
-$target = $rows | Where-Object { $_.Group -eq $Group } | Select-Object -First 1
-if ($target -and -not $Keep) {
-    [void][MixerDevicesProbe]::SendMessage($target.VolumeBar, $TBM_SETPOS, [IntPtr]1, [IntPtr]$SetVolume)
-    [void][MixerDevicesProbe]::SendMessage($devices, $WM_HSCROLL, [IntPtr]8, $target.VolumeBar)   # TB_ENDTRACK
-    "--- set the volume of $Group / $($target.Label) to $SetVolume"
-}
-Start-Sleep -Milliseconds 300
-
-[void][BlueMsxControl]::SendMsg($h, $WM_CLOSE, [IntPtr]::Zero, [IntPtr]::Zero)
-$exited = $p.WaitForExit(15000) -and $p.ExitCode -eq 0
-if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
-"--- exits on WM_CLOSE: $exited"
 "--- sound.mix lines in bluemsx.ini"
 if (Test-Path $ini) { Get-Content $ini | Where-Object { $_ -like "sound.mix.*" } }

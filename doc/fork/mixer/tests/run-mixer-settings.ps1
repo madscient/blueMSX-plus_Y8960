@@ -34,13 +34,23 @@ $args2 = @('/machine', "`"$Machine`"", '/rootdir', "`"$Root`"", '/hidden')
 $p = Start-Process -FilePath $Exe -ArgumentList $args2 -WorkingDirectory (Split-Path $Exe) -PassThru
 $null = $p.Handle
 
-$h = Find-BlueMsxWindow $p
-if ($h -eq [IntPtr]::Zero) { "no window; exit code $($p.ExitCode)"; exit 1 }
-Start-Sleep -Milliseconds $RunMs
+# Closed in finally, so that a run cut short does not leave the hidden instance running.
+try {
+    $h = Find-BlueMsxWindow $p
+    if ($h -eq [IntPtr]::Zero) { "no window; exit code $($p.ExitCode)"; exit 1 }
+    Start-Sleep -Milliseconds $RunMs
 
-[void][BlueMsxControl]::SendMsg($h, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)   # WM_CLOSE
-$exited = $p.WaitForExit(15000) -and $p.ExitCode -eq 0
-if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+    [void][BlueMsxControl]::SendMsg($h, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)   # WM_CLOSE
+    $exited = $p.WaitForExit(15000) -and $p.ExitCode -eq 0
+    if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+}
+finally {
+    if (-not $p.HasExited) {
+        $w = Find-BlueMsxWindow $p 2000
+        if ($w -ne [IntPtr]::Zero) { [void][BlueMsxControl]::SendMsg($w, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) }
+        if (-not $p.WaitForExit(15000)) { Stop-Process -Id $p.Id -Force }
+    }
+}
 
 $lines = Get-Content $ini
 $mix = $lines | Where-Object { $_ -like "sound.mix.*" }
