@@ -120,9 +120,16 @@ int slotGetRamSlot(int page)
     return 0;
 }
 
-void slotMapPage(int slot, int sslot, int page, UInt8* pageData, 
-                 int readEnable, int writeEnable) 
+/* Per slot and subslot, so that bank switching elsewhere while a device is
+** being created does not count for that device. */
+static UInt32 registrationCount[4][4];
+
+void slotMapPage(int slot, int sslot, int page, UInt8* pageData,
+                 int readEnable, int writeEnable)
 {
+    /* A plain ROM is mapped with this alone, without slotRegister. */
+    registrationCount[slot & 3][sslot & 3]++;
+
     if (!initialized) {
         return;
     }
@@ -200,11 +207,18 @@ void slotUnregisterWrite0() {
     memset(&slotAddr0, 0, sizeof(Slot));
 }
 
+UInt32 slotGetRegistrationCount(int slot, int sslot)
+{
+    return registrationCount[slot & 3][sslot & 3];
+}
+
 void slotRegister(int slot, int sslot, int startpage, int pages,
                   SlotRead readCb, SlotRead peekCb, SlotWrite writeCb, SlotEject ejectCb, void* ref)
 {
     Slot* slotInfo;
-    
+
+    registrationCount[slot & 3][sslot & 3]++;
+
     if (!initialized) {
         return;
     }

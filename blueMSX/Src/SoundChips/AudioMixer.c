@@ -113,6 +113,18 @@ typedef struct {
     Int32 volCntLeft;
     Int32 volCntRight;
     UInt32 active;
+    // Instance
+    Int32 instEnable;
+    Int32 instVolume;
+    Int32 instPan;
+    Int32 pending;      // registered inside a device bracket not yet ended
+    Int32 location;
+    Int32 slot;
+    Int32 sslot;
+    Int32 port;
+    Int32 ordinal;
+    char  name[MIXER_CHANNEL_NAME_LENGTH];
+    char  id[MIXER_CHANNEL_ID_LENGTH];
 } MixerChannel;
 
 struct Mixer
@@ -142,6 +154,14 @@ struct Mixer
     void*   lock;
     MixerChannel midi; // This channel is only used for meter output
     Int32   channelCount;
+    UInt32  generation;
+    Int32   deviceOpen;
+    Int32   deviceSlot;
+    Int32   deviceSslot;
+    Int32   devicePort;
+    UInt32  deviceSlotRegistrations;
+    MixerChannelSettingsCallback settingsCallback;
+    void*   settingsRef;
     Int32   handleCount;
     UInt32  oldTick;
     Int32   logging;
@@ -328,14 +348,23 @@ Int32 mixerIsChannelTypeActive(Mixer* mixer, Int32 type, Int32 reset)
 
 ///////////////////////////////////////////////////////
 
+static DoubleT volumeCurve(Int32 volume)
+{
+    return pow(10.0, (volume - 100) / 60.0) - pow(10.0, -100 / 60.0);
+}
+
 static void recalculateChannelVolume(Mixer* mixer, MixerChannel* channel)
 {
-    DoubleT volume        = pow(10.0, (channel->volume - 100) / 60.0) - pow(10.0, -100 / 60.0);
-    DoubleT panLeft       = pow(10.0, (MIN(100 - channel->pan, 50) - 50) / 30.0) - pow(10.0, -50 / 30.0);
-    DoubleT panRight      = pow(10.0, (MIN(channel->pan, 50) - 50) / 30.0) - pow(10.0, -50 / 30.0);
+    /* The instance factor is normalised to 1 at volume 100, so an instance
+    ** left at its defaults gives bit for bit the type's own gain. */
+    DoubleT volume        = volumeCurve(channel->volume) * (volumeCurve(channel->instVolume) / volumeCurve(100));
+    Int32   pan           = MAX(0, MIN(100, channel->pan + channel->instPan - 50));
+    Int32   enable        = channel->enable && channel->instEnable;
+    DoubleT panLeft       = pow(10.0, (MIN(100 - pan, 50) - 50) / 30.0) - pow(10.0, -50 / 30.0);
+    DoubleT panRight      = pow(10.0, (MIN(pan, 50) - 50) / 30.0) - pow(10.0, -50 / 30.0);
 
-    channel->volumeLeft  = channel->enable * mixer->masterEnable * (Int32)(1024 * mixer->masterVolume * volume * panLeft);
-    channel->volumeRight = channel->enable * mixer->masterEnable * (Int32)(1024 * mixer->masterVolume * volume * panRight);
+    channel->volumeLeft  = enable * mixer->masterEnable * (Int32)(1024 * mixer->masterVolume * volume * panLeft);
+    channel->volumeRight = enable * mixer->masterEnable * (Int32)(1024 * mixer->masterVolume * volume * panRight);
 
     if (!mixer->stereo) {
         Int32 tmp = (channel->volumeLeft + channel->volumeRight) / 2;
@@ -401,6 +430,9 @@ Mixer* mixerCreate()
     mixer->enable = 1;
     mixer->rate = AUDIO_SAMPLERATE;
     mixer->lock = archSemaphoreCreate(1);
+    mixer->midi.instEnable = 1;
+    mixer->midi.instVolume = 100;
+    mixer->midi.instPan    = 50;
 
     if (globalMixer == NULL) globalMixer = mixer;
 
@@ -452,7 +484,223 @@ void mixerSetTapCallback(Mixer* mixer, MixerWriteCallback callback, void* ref)
     mixer->tapRef = ref;
 }
 
+static void resolveChannel(Mixer* mixer, MixerChannel* channel, Int32 location, Int32 slot, Int32 sslot, Int32 port)
+{
+    char* id = channel->id;
+    int i;
+
+    channel->location = location;
+    channel->slot     = location == MIXER_LOCATION_SLOT ? slot  : 0;
+    channel->sslot    = location == MIXER_LOCATION_SLOT ? sslot : 0;
+    channel->port     = location == MIXER_LOCATION_BOARD ? port : -1;
+    channel->ordinal  = 1;
+
+    for (i = 0; i < mixer->channelCount; i++) {
+        MixerChannel* other = mixer->channels + i;
+        if (other != channel && !other->pending &&
+            other->type     == channel->type     &&
+            other->location == channel->location &&
+            other->slot     == channel->slot     &&
+            other->sslot    == channel->sslot    &&
+            other->port     == channel->port     &&
+            strcmp(other->name, channel->name) == 0 &&
+            other->ordinal  >= channel->ordinal)
+        {
+            channel->ordinal = other->ordinal + 1;
+        }
+    }
+
+    if (location == MIXER_LOCATION_SLOT) {
+        id += sprintf(id, "slot%d-%d", channel->slot, channel->sslot);
+    }
+    else {
+        id += sprintf(id, "board");
+        if (channel->port >= 0) {
+            id += sprintf(id, "-%02x", channel->port & 0xff);
+        }
+    }
+    if (channel->name[0]) {
+        id += sprintf(id, ".%s", channel->name);
+    }
+    if (channel->ordinal > 1) {
+        sprintf(id, ".n%d", channel->ordinal);
+    }
+
+    channel->pending = 0;
+
+    if (mixer->settingsCallback != NULL) {
+        mixer->settingsCallback(mixer->settingsRef, channel->type, channel->id,
+                                &channel->instEnable, &channel->instVolume, &channel->instPan);
+    }
+    recalculateChannelVolume(mixer, channel);
+}
+
+static void endDevice(Mixer* mixer, UInt32 slotRegistrations)
+{
+    Int32 location;
+    int i;
+
+    if (!mixer->deviceOpen) {
+        return;
+    }
+
+    location = slotRegistrations != mixer->deviceSlotRegistrations ? MIXER_LOCATION_SLOT : MIXER_LOCATION_BOARD;
+
+    for (i = 0; i < mixer->channelCount; i++) {
+        if (mixer->channels[i].pending) {
+            resolveChannel(mixer, mixer->channels + i, location,
+                           mixer->deviceSlot, mixer->deviceSslot, mixer->devicePort);
+        }
+    }
+
+    mixer->deviceOpen = 0;
+    mixer->generation++;
+}
+
+void mixerBeginDevice(Mixer* mixer, int slot, int sslot, UInt32 slotRegistrations)
+{
+    mixerLock(mixer);
+    /* An open device's count belongs to its own slot, which the caller did
+    ** not pass, so its channels go to the board rather than stay unlisted. */
+    endDevice(mixer, mixer->deviceSlotRegistrations);
+    mixer->deviceOpen              = 1;
+    mixer->deviceSlot              = slot;
+    mixer->deviceSslot             = sslot;
+    mixer->devicePort              = -1;
+    mixer->deviceSlotRegistrations = slotRegistrations;
+    mixerUnlock(mixer);
+}
+
+void mixerSetDevicePort(Mixer* mixer, int port)
+{
+    mixerLock(mixer);
+    if (mixer->deviceOpen) {
+        mixer->devicePort = port;
+    }
+    mixerUnlock(mixer);
+}
+
+void mixerEndDevice(Mixer* mixer, UInt32 slotRegistrations)
+{
+    mixerLock(mixer);
+    endDevice(mixer, slotRegistrations);
+    mixerUnlock(mixer);
+}
+
+void mixerSetChannelSettingsCallback(Mixer* mixer, MixerChannelSettingsCallback callback, void* ref)
+{
+    mixerLock(mixer);
+    mixer->settingsCallback = callback;
+    mixer->settingsRef      = ref;
+    mixerUnlock(mixer);
+}
+
+UInt32 mixerGetChannelGeneration(Mixer* mixer)
+{
+    return mixer->generation;
+}
+
+int mixerGetChannelInfo(Mixer* mixer, MixerChannelInfo* info, int maxCount)
+{
+    int count = 0;
+    int i;
+
+    mixerLock(mixer);
+    for (i = 0; i < mixer->channelCount; i++) {
+        MixerChannel* channel = mixer->channels + i;
+        if (channel->pending) {
+            continue;
+        }
+        if (count < maxCount) {
+            MixerChannelInfo* entry = info + count;
+            entry->handle   = channel->handle;
+            entry->type     = channel->type;
+            entry->stereo   = channel->stereo;
+            entry->location = channel->location;
+            entry->slot     = channel->slot;
+            entry->sslot    = channel->sslot;
+            entry->port     = channel->port;
+            entry->ordinal  = channel->ordinal;
+            entry->enable   = channel->instEnable;
+            entry->volume   = channel->instVolume;
+            entry->pan      = channel->instPan;
+            strcpy(entry->name, channel->name);
+            strcpy(entry->id, channel->id);
+        }
+        count++;
+    }
+    mixerUnlock(mixer);
+
+    return count;
+}
+
+static MixerChannel* findChannel(Mixer* mixer, Int32 handle)
+{
+    int i;
+    for (i = 0; i < mixer->channelCount; i++) {
+        if (mixer->channels[i].handle == handle) {
+            return mixer->channels + i;
+        }
+    }
+    return NULL;
+}
+
+void mixerSetChannelVolume(Mixer* mixer, Int32 handle, Int32 volume)
+{
+    MixerChannel* channel;
+    mixerLock(mixer);
+    channel = findChannel(mixer, handle);
+    if (channel != NULL) {
+        channel->instVolume = volume;
+        recalculateChannelVolume(mixer, channel);
+    }
+    mixerUnlock(mixer);
+}
+
+void mixerSetChannelPan(Mixer* mixer, Int32 handle, Int32 pan)
+{
+    MixerChannel* channel;
+    mixerLock(mixer);
+    channel = findChannel(mixer, handle);
+    if (channel != NULL) {
+        channel->instPan = pan;
+        recalculateChannelVolume(mixer, channel);
+    }
+    mixerUnlock(mixer);
+}
+
+void mixerEnableChannel(Mixer* mixer, Int32 handle, Int32 enable)
+{
+    MixerChannel* channel;
+    mixerLock(mixer);
+    channel = findChannel(mixer, handle);
+    if (channel != NULL) {
+        channel->instEnable = enable ? 1 : 0;
+        recalculateChannelVolume(mixer, channel);
+    }
+    mixerUnlock(mixer);
+}
+
+Int32 mixerGetChannelVolume(Mixer* mixer, Int32 handle, int leftRight)
+{
+    MixerChannel* channel;
+    Int32 volume = 0;
+    mixerLock(mixer);
+    updateVolumes(mixer);
+    channel = findChannel(mixer, handle);
+    if (channel != NULL) {
+        volume = leftRight ? channel->volIntRight : channel->volIntLeft;
+    }
+    mixerUnlock(mixer);
+    return volume;
+}
+
 Int32 mixerRegisterChannel(Mixer* mixer, Int32 audioType, Int32 stereo, MixerUpdateCallback callback, MixerSetSampleRateCallback rateCallback, void* ref)
+{
+    return mixerRegisterChannelNamed(mixer, audioType, stereo, callback, rateCallback, ref, NULL);
+}
+
+Int32 mixerRegisterChannelNamed(Mixer* mixer, Int32 audioType, Int32 stereo, MixerUpdateCallback callback, MixerSetSampleRateCallback rateCallback, void* ref, const char* name)
 {
     MixerChannel*  channel;
     AudioTypeInfo* type    = mixer->audioTypeInfo + audioType;
@@ -490,8 +738,21 @@ Int32 mixerRegisterChannel(Mixer* mixer, Int32 audioType, Int32 stereo, MixerUpd
     channel->volume         = type->volume;
     channel->pan            = type->pan;
     channel->handle         = ++mixer->handleCount;
+    channel->instEnable     = 1;
+    channel->instVolume     = 100;
+    channel->instPan        = 50;
+    if (name != NULL) {
+        strncpy(channel->name, name, MIXER_CHANNEL_NAME_LENGTH - 1);
+    }
 
-    recalculateChannelVolume(mixer, channel);
+    if (mixer->deviceOpen) {
+        channel->pending = 1;
+        recalculateChannelVolume(mixer, channel);
+    }
+    else {
+        resolveChannel(mixer, channel, MIXER_LOCATION_BOARD, 0, 0, -1);
+    }
+    mixer->generation++;
 
     handle = channel->handle;
     mixerUnlock(mixer);
@@ -517,6 +778,7 @@ void mixerUnregisterChannel(Mixer* mixer, Int32 handle)
             mixer->channels[i] = mixer->channels[i + 1];
             i++;
         }
+        mixer->generation++;
     }
 
     mixerUnlock(mixer);
