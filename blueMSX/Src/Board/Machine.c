@@ -154,6 +154,7 @@
 #include "romMapperOpcodeMegaRam.h"
 #include "romMapperOpcodeSaveRam.h"
 #include "romMapperOpcodeSlotManager.h"
+#include "SlotManager.h"
 #include "romMapperDooly.h"
 #include "romMapperMuPack.h"
 
@@ -1073,6 +1074,8 @@ int machineInitialize(Machine* machine, UInt8** mainRam, UInt32* mainRamSize, UI
     UInt8* buf;
     int size;
     int i;
+    int deviceSlot    = -1;
+    int deviceSubslot = 0;
 
     // Prioritize 1kB Mirrored ram as main ram (works good with coleco style
     // systems with expansion ram but maybe main ram type should be an arg instead?).
@@ -1187,7 +1190,16 @@ int machineInitialize(Machine* machine, UInt8** mainRam, UInt32* mainRamSize, UI
         subslot   = machine->slotInfo[i].subslot;
         startPage = machine->slotInfo[i].startPage;
         size      = 0x2000 * machine->slotInfo[i].pageCount;
-        
+
+        /* The entries leave this body by many continues, so each device is
+        ** ended when the next one begins, and the last after the loop. */
+        if (deviceSlot >= 0) {
+            mixerEndDevice(boardGetMixer(), slotGetRegistrationCount(deviceSlot, deviceSubslot));
+        }
+        deviceSlot    = slot;
+        deviceSubslot = subslot;
+        mixerBeginDevice(boardGetMixer(), slot, subslot, slotGetRegistrationCount(slot, subslot));
+
         if (machine->slotInfo[i].romType == RAM_1KB_MIRRORED) {
             continue;
         }
@@ -1875,6 +1887,10 @@ int machineInitialize(Machine* machine, UInt8** mainRam, UInt32* mainRamSize, UI
         if( buf != NULL ) {
             free(buf);
         }
+    }
+
+    if (deviceSlot >= 0) {
+        mixerEndDevice(boardGetMixer(), slotGetRegistrationCount(deviceSlot, deviceSubslot));
     }
 
     if (jisyoRom != NULL) {

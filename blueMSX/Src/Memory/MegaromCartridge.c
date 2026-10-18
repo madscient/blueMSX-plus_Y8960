@@ -32,6 +32,7 @@
 #include "MediaDb.h"
 #include "RomLoader.h"
 #include "SlotManager.h"
+#include "Board.h"
 
 #include "ramMapper.h"
 #include "ramNormal.h"
@@ -164,7 +165,9 @@ int cartridgeInsert(int cartNo, RomType romType, const char* cart, const char* c
     if (cart == NULL) {
         return 0;
     }
-    
+
+    mixerBeginDevice(boardGetMixer(), slot, sslot, slotGetRegistrationCount(slot, sslot));
+
     switch (romType) {
     case ROM_EXTRAM16KB:
         success &= ramNormalCreate(0x4000, slot, sslot, 4, NULL, NULL);
@@ -867,6 +870,8 @@ int cartridgeInsert(int cartNo, RomType romType, const char* cart, const char* c
 
         free(buf);
     }
+
+    mixerEndDevice(boardGetMixer(), slotGetRegistrationCount(slot, sslot));
 
     return success;
 }

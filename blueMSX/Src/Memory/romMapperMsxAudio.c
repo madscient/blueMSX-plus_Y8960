@@ -540,6 +540,9 @@ int romMapperMsxAudioCreate(const char* filename, UInt8* romData,
     rm->y8950 = NULL;
 
     if (boardGetY8950Enable()) {
+        /* Without a BIOS ROM the unit is on I/O ports only, and the ports are
+        ** what tells a second unit from the first. */
+        mixerSetDevicePort(boardGetMixer(), rm->ioBase);
         rm->y8950 = y8950Create(boardGetMixer());
        	
        	ioPortRegister(rm->ioBase + 0, y8950Read, y8950Write, rm->y8950);
