@@ -38,6 +38,21 @@ blueMSX+ 自身が [blueMSX](https://msxblue.com/bluemsx/) の非公式フォー
 | 作業ブランチ | `feature/y8960`（分岐点は上流 `main` の `5afffd55`。上流 `develop` の `475dadfa` までマージ済み） |
 | ライセンス | **GPLv2**（blueMSX+ と同じ。ルートの `README.md` §License） |
 
+### 枝の役割
+
+**枝に何かを入れる前に、その枝の役割をここで見る。** 上流候補の枝は、PR をその枝から出すので、
+その機能以外のコミットを入れると PR に混ざる。
+
+| 枝 | 役割 | 入れてよいもの |
+|---|---|---|
+| `feature/y8960` | フォークの統合の枝。Y8960 のリリースと、この `doc/fork/` の置き場 | 何でも（上流の同期、上流候補の枝のマージ、フォーク固有の変更） |
+| `feature/makoto-opna` | **上流候補。Makoto の PR をこの枝から出す**。Makoto のリリースもここから作る（`opna/plan.md`） | Makoto のコミットと、上流 `develop` の同期だけ |
+| `feature/sound-mixer` | **上流候補。サウンドミキサーの PR をこの枝から出す**（`mixer/plan.md`） | ミキサーのコミットだけ。**`upstream/develop` から切ったので、追跡先を `origin` にしてから push する** |
+| `fix/*`、`feature/key-matrix-input` など | 上流に出した PR の枝。状態は下の「出した記録」 | その PR の修正だけ |
+
+上流候補の枝は `upstream/develop` から切る。**`git worktree add -b <枝> ... upstream/develop` や `git checkout -b <枝> upstream/develop` は
+追跡先を `upstream` にする**ので、引数なしの `git push` が上流へ向かう。最初の push は `git push -u origin <枝>` で行う。
+
 **追従は `upstream/develop` を `feature/y8960` にマージする**（2026-09-13 ユーザー判断）。
 `--no-ff` でマージコミットを残す。**リベースはしない** — `feature/y8960` は `origin` に
 公開済みで、履歴を書き換えることになるため。

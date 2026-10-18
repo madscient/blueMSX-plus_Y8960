@@ -10,6 +10,7 @@ unofficial fork である。blueMSX+ 自身が blueMSX の非公式フォーク�
 |---|---|
 | **作業の規則（AI 向け）** | **`doc/fork/ai/README.md`** |
 | フォークの事実関係・ライセンス・実装状況 | `doc/fork/README.md` |
+| **枝の役割（枝に何かを入れる前に見る）** | `doc/fork/README.md` の「枝の役割」 |
 | ビルドと起動の手順 | `doc/fork/build/README.md` |
 | Y8960 の文書 | `doc/fork/y8960/README.md` |
 | Y8960 の実装計画・決定・経緯 | `doc/fork/y8960/implementation-plan.md` |
