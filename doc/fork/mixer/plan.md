@@ -332,6 +332,35 @@ I/O だけのデバイスで 2 つ載せられるのは MSX-AUDIO（`C0h` / `C2h
 
 フォーク側（各枝にマージした後）: `y8960` の種別名と 4 ブロックの名前、`opnafm` / `opnassg`。
 
+### フォークへの取り込みと、上流へ別々に出すこと（2026-10-19 調べた）
+
+**取り込んだ後でも、ミキサーと Y8960 / Makoto を別々の PR にできる。** 条件は次のとおり。
+
+- `feature/sound-mixer` は上流に出せるものだけの枝のまま保つ。**確認済み**: `upstream/develop` `475dadfa` との差は 29 ファイルで、
+  `doc/` と `CLAUDE.md` を含まない（`git diff --name-only`）。ミキサーの PR はこの枝からそのまま出す
+- フォークの枝へは **`git merge` で取り込む**（cherry-pick・rebase・squash をしない）。同じコミットがフォークに入るので、
+  上流が PR をそのままマージすれば、後の `develop` の同期で同じコミットとして戻ってくる。上流はマージコミットで取り込んでいる
+  （**確認済み**: `upstream/develop` の直近の PR はすべて `Merge pull request`。#99 は出した形のまま戻った（`implementation-plan.md` §0））
+- **取り込んだ後は `feature/sound-mixer` の履歴を書き換えない。** レビューで直すことになったら、この枝に新しいコミットを積み、
+  もう一度フォークへマージする。コミットを整理するなら、取り込む前に済ませる
+- Y8960 / Makoto の PR は、これまでどおり `upstream/develop` から切り直す（`doc/fork/README.md` の「上流へ出すとき」）ので、
+  フォークにミキサーが入っていても PR には混ざらない。**ただし、ミキサーの新しい口を使う部分**（種別の短い名前 `y8960` /
+  `opnafm` / `opnassg`、Y8960 の 4 ブロックの名前付きの登録）は、ミキサーの PR が上流に入るまで出せない。別のコミットにしておき、
+  ミキサーが入った後に足す
+
+取り込むときの衝突（**確認済み**: `git merge-tree`。実際のマージはしていない）:
+
+| 枝 | ミキサーの変更による衝突 | 上流 `develop` の新しいコミットによる衝突 |
+|---|---|---|
+| `feature/y8960`（`develop` より 41 コミット遅れ） | `Properties.c`（種別の設定の行の隣） | `MediaDb.{h,cpp}`、`Win32Menu.c` |
+| `feature/makoto-opna`（同 125 コミット遅れ） | `Properties.c` | `FileHistory.c`、`MediaDb.h`、`MegaromCartridge.c`、`Win32Menu.c` |
+
+`feature/sound-mixer` は新しい `develop` の上にあるので、**取り込むと上流の同期も一緒に起きる。** 上流は GFX9000 / Video9000 に
+RomType 181 / 182 とメニュー ID 41123 / 41124 を取った。RomType は Y8960（200-207）とも Makoto（188）とも重ならないが、
+**メニュー ID 41123 は Y8960 の `ID_FILE_CART_Y8960` と同じ番号**なので、フォーク側で振り直す必要がある
+（**確認済み(読解)**: 両方の枝の `Win32Menu.c` と `MediaDb.h`）。先に `develop` の同期を別に済ませてからミキサーを取り込めば、
+ミキサーの取り込みで起きる衝突は `Properties.c` だけになる。
+
 ### 設計の細目（未検証）
 
 - **個体の値はミキサーが持ち、保存値は差し込み口で引く。** ミキサー（`SoundChips/`）は設定（`Emulator/`）を
