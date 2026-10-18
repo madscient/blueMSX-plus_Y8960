@@ -359,17 +359,26 @@ static void checkInstanceIds(void)
           findInfo(mixer, handles[3], &info) && info.volume == 70 &&
           measure(mixer, 3, 12) == expected(100, 70, 50, 0));
 
-    /* The same type in the other slot and in a subslot. Beginning a device
-    ** ends the open one; the loop's last device is ended after the loop. */
+    /* The same type in the other slot and in a subslot. */
     mixerBeginDevice(mixer, 2, 0, regs);
     registerOne(mixer, MIXER_CHANNEL_SCC, 4, NULL);
     regs++;
+    mixerEndDevice(mixer, regs);
+    check("id: the same type in another slot", idIs(mixer, 4, "slot2-0"));
     mixerBeginDevice(mixer, 3, 1, regs);
-    check("id: beginning a device ends the open one", idIs(mixer, 4, "slot2-0"));
     registerOne(mixer, MIXER_CHANNEL_SCC, 5, NULL);
     regs++;
     mixerEndDevice(mixer, regs);
     check("id: subslots are part of the place", idIs(mixer, 5, "slot3-1"));
+
+    /* A device left open when the next begins: the count passed belongs to
+    ** the new device's slot, so it says nothing about the open one. Its
+    ** channels must not stay unlisted, and must not be taken for a slot. */
+    mixerBeginDevice(mixer, 1, 2, regs);
+    registerOne(mixer, MIXER_CHANNEL_YAMAHA_SFG, 13, NULL);
+    mixerBeginDevice(mixer, 2, 3, regs + 5);
+    check("id: a device left open goes to the board", idIs(mixer, 13, "board"));
+    mixerEndDevice(mixer, regs + 5);
     check("settings: another slot gets its own values",
           findInfo(mixer, handles[4], &info) && info.volume == 100);
 
@@ -405,13 +414,13 @@ static void checkInstanceIds(void)
     check("id: another name is not numbered", idIs(mixer, 10, "slot1-1.ssg"));
     check("id: a repeated name is numbered", idIs(mixer, 11, "slot1-1.opll.n2"));
 
-    check("info: lists every ended channel", mixerGetChannelInfo(mixer, &info, 0) == 13);
+    check("info: lists every ended channel", mixerGetChannelInfo(mixer, &info, 0) == 14);
 
     gen = mixerGetChannelGeneration(mixer);
     mixerUnregisterChannel(mixer, handles[10]);
     check("generation: moves when a channel goes", mixerGetChannelGeneration(mixer) != gen);
     check("info: a removed channel is not listed", !findInfo(mixer, handles[10], &info) &&
-          mixerGetChannelInfo(mixer, &info, 0) == 12);
+          mixerGetChannelInfo(mixer, &info, 0) == 13);
 
     checkLockBalanced("id");
     mixerDestroy(mixer);
