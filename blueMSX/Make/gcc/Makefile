@@ -129,6 +129,7 @@ SOURCE_FILES += Win32ScreenShot.c
 SOURCE_FILES += Win32ShortcutsConfig.c 
 SOURCE_FILES += Win32snd.c 
 SOURCE_FILES += Win32ThemeClassic.c 
+SOURCE_FILES += Win32MixerDevices.c 
 SOURCE_FILES += Win32Thread.c 
 SOURCE_FILES += Win32Timer.c 
 SOURCE_FILES += Win32ToolLoader.c

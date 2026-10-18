@@ -690,6 +690,7 @@
     <ClCompile Include="..\..\Src\Win32\Win32ShortcutsConfig.c" />
     <ClCompile Include="..\..\Src\Win32\Win32snd.c" />
     <ClCompile Include="..\..\Src\Win32\Win32ThemeClassic.c" />
+    <ClCompile Include="..\..\Src\Win32\Win32MixerDevices.c" />
     <ClCompile Include="..\..\Src\Win32\Win32Thread.c" />
     <ClCompile Include="..\..\Src\Win32\Win32Timer.c" />
     <ClCompile Include="..\..\Src\Win32\Win32Toast.cpp" />
@@ -1049,6 +1050,7 @@
     <ClInclude Include="..\..\Src\Win32\Win32Sound.h" />
     <ClInclude Include="..\..\Src\Win32\Win32TextUtf8.h" />
     <ClInclude Include="..\..\Src\Win32\Win32ThemeClassic.h" />
+    <ClInclude Include="..\..\Src\Win32\Win32MixerDevices.h" />
     <ClInclude Include="..\..\Src\Win32\Win32Toast.h" />
     <ClInclude Include="..\..\Src\Win32\Win32ToolLoader.h" />
     <ClInclude Include="..\..\Src\Win32\Win32Uart.h" />

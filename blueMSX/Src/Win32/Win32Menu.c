@@ -128,6 +128,7 @@ extern int showLoadMemoryDlg(HWND hwnd);
 #define ID_TOOLS_SHORTCUTSEDITOR        40065
 #define ID_TOOLS_KEYBOARDEDITOR         40066
 #define ID_TOOLS_MIXER                  40061
+#define ID_TOOLS_MIXERDEVICES           40062
 #define ID_TOOLS_LOADMEMORY             40067
 
 #define ID_NOWIND_ENABLEDOS2            40100
@@ -1351,6 +1352,7 @@ static HMENU menuCreateTools(Properties* pProperties, Shortcuts* shortcuts)
     }
     if (appConfigGetInt("menu.tools.mixer", 1) != 0) {
         AppendMenuU(hMenu, MF_STRING, ID_TOOLS_MIXER, langMenuToolsMixer());
+        AppendMenuU(hMenu, MF_STRING, ID_TOOLS_MIXERDEVICES, langMenuToolsMixerDevices());
     }
     if (appConfigGetInt("menu.tools.loadmemory", 1) != 0) {
         AppendMenuU(hMenu, MF_STRING, ID_TOOLS_LOADMEMORY, langMenuToolsLoadMemory());
@@ -2452,6 +2454,7 @@ int menuCommand(Properties* pProperties, int command)
     case ID_TOOLS_SHORTCUTSEDITOR:          actionToolsShowShorcutEditor(); return 0;
     case ID_TOOLS_KEYBOARDEDITOR:           actionToolsShowKeyboardEditor();return 0;
     case ID_TOOLS_MIXER:                    actionToolsShowMixer();         return 0;
+    case ID_TOOLS_MIXERDEVICES:             actionToolsShowMixerDevices();  return 0;
     case ID_TOOLS_LOADMEMORY:               showLoadMemoryDlg(getMainHwnd()); return 0;
     case ID_HELP_HELP:                      actionHelpShowHelp();           return 0;
     case ID_HELP_ABOUT:                     actionHelpShowAbout();          return 0;

@@ -501,6 +501,15 @@ char* langMenuToolsMachine() { return ls->menuToolsMachine; }
 char* langMenuToolsShortcuts() { return ls->menuToolsShortcuts; }
 char* langMenuToolsCtrlEditor() { return ls->menuToolsCtrlEditor; }
 char* langMenuToolsMixer() { return ls->menuToolsMixer; }
+char* langMenuToolsMixerDevices() { return ls->menuToolsMixerDevices; }
+char* langMixerDevicesTitle() { return ls->mixerDevicesTitle; }
+char* langMixerDevicesNone() { return ls->mixerDevicesNone; }
+char* langMixerDevicesEnable() { return ls->mixerDevicesEnable; }
+char* langMixerDevicesVolume() { return ls->mixerDevicesVolume; }
+char* langMixerDevicesPan() { return ls->mixerDevicesPan; }
+char* langMixerDevicesLevel() { return ls->mixerDevicesLevel; }
+char* langMixerDevicesSlot() { return ls->mixerDevicesSlot; }
+char* langMixerDevicesBoard() { return ls->mixerDevicesBoard; }
 char* langMenuToolsLoadMemory() { return ls->menuToolsLoadMemory; }
 char* langMenuToolsDebugger() { return ls->menuToolsDebugger; }
 char* langMenuToolsTrainer() { return ls->menuToolsTrainer; }
@@ -1011,6 +1020,7 @@ char* langShortcutShowMachines() { return ls->shortcutShowMachines; }
 char* langShortcutShowShortcuts() { return ls->shortcutShowShortcuts; }
 char* langShortcutShowKeyboard() { return ls->shortcutShowKeyboard; }
 char* langShortcutShowMixer() { return ls->shortcutShowMixer; }
+char* langShortcutShowMixerDevices() { return ls->shortcutShowMixerDevices; }
 char* langShortcutShowDebugger() { return ls->shortcutShowDebugger; }
 char* langShortcutShowTrainer() { return ls->shortcutShowTrainer; }
 char* langShortcutShowHelp() { return ls->shortcutShowHelp; }

@@ -1560,6 +1560,10 @@ void actionToolsShowMixer() {
     archShowMixer();
 }
 
+void actionToolsShowMixerDevices() {
+    archShowMixerDevices();
+}
+
 void actionToolsShowDebugger() {
     archShowDebugger();
 }

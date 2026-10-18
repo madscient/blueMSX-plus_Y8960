@@ -287,6 +287,15 @@ void langInitJapanese(LanguageStrings* ls)
     ls->menuToolsShortcuts      = "ショートカット構成編集";
     ls->menuToolsCtrlEditor     = "コントローラー / キーボード構成編集"; 
     ls->menuToolsMixer          = "ミキサー";
+    ls->menuToolsMixerDevices   = "ミキサー（個体ごと）";
+    ls->mixerDevicesTitle       = "blueMSX - ミキサー（個体ごと）";
+    ls->mixerDevicesNone        = "音源がありません。";
+    ls->mixerDevicesEnable      = "有効";
+    ls->mixerDevicesVolume      = "音量";
+    ls->mixerDevicesPan         = "パン";
+    ls->mixerDevicesLevel       = "レベル";
+    ls->mixerDevicesSlot        = "スロット";
+    ls->mixerDevicesBoard       = "本体";
     ls->menuToolsDebugger       = "デバッガー";
     ls->menuToolsTrainer        = "トレーナー";
     ls->menuToolsTraceLogger    = "トレースロガー";
@@ -823,6 +832,7 @@ void langInitJapanese(LanguageStrings* ls)
     ls->shortcutShowShortcuts   = "ショートカットエディターの表示";
     ls->shortcutShowKeyboard    = "キーボード構成編集の表示";
     ls->shortcutShowMixer       = "ミキサーの表示"; 
+    ls->shortcutShowMixerDevices = "ミキサー（個体ごと）の表示";
 	ls->shortcutShowDebugger    = "デバッガー表示";
     ls->shortcutShowTrainer     = "トレーナー表示";
     ls->shortcutShowHelp        = "ヘルプダイアログの表示";
