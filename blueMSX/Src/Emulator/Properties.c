@@ -652,6 +652,7 @@ const char* propGetMixerTypeName(int mixerType)
     case MIXER_CHANNEL_PCM:        return "pcm";
     case MIXER_CHANNEL_IO:         return "io";
     case MIXER_CHANNEL_CASSETTE:   return "cassette";
+    case MIXER_CHANNEL_Y8960:      return "y8960";
     }
     /* MIDI is played outside the mixer and has no channels. */
     return NULL;

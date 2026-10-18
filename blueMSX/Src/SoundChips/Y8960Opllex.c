@@ -180,8 +180,8 @@ Y8960OpllexChip* y8960OpllexCreate(Mixer* mixer, const char* name)
     chip->mixer = mixer;
     chip->opll  = Y8960OPLL_new(Y8960_OPLLEX_CLOCK, mixerGetSampleRate(mixer));
 
-    chip->handle      = mixerRegisterChannel(mixer, MIXER_CHANNEL_Y8960, 1,
-                                             y8960OpllexSync, y8960OpllexSetSampleRate, chip);
+    chip->handle      = mixerRegisterChannelNamed(mixer, MIXER_CHANNEL_Y8960, 1,
+                                                  y8960OpllexSync, y8960OpllexSetSampleRate, chip, "opll");
     chip->debugHandle = debugDeviceRegister(DBGTYPE_AUDIO, name, &dbgCallbacks, chip);
 
     y8960OpllexReset(chip);

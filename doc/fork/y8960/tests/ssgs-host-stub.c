@@ -22,6 +22,15 @@ Int32 mixerRegisterChannel(Mixer* mixer, Int32 audioType, Int32 stereo,
     return 1;
 }
 
+Int32 mixerRegisterChannelNamed(Mixer* mixer, Int32 audioType, Int32 stereo,
+                                MixerUpdateCallback callback,
+                                MixerSetSampleRateCallback rateCallback, void* param,
+                                const char* name)
+{
+    (void)name;
+    return mixerRegisterChannel(mixer, audioType, stereo, callback, rateCallback, param);
+}
+
 void mixerUnregisterChannel(Mixer* mixer, Int32 handle) { (void)mixer; (void)handle; }
 void mixerSync(Mixer* mixer) { (void)mixer; }
 

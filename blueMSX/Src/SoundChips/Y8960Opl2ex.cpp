@@ -256,7 +256,7 @@ Y8960Opl2ex* y8960Opl2exCreate(Mixer* mixer)
     Y8960Opl2ex* c = new Y8960Opl2ex(mixer, name, (y8960opl2::EmuTime)boardSystemTime());
 
     c->mixerRate   = mixerGetSampleRate(mixer);
-    c->handle      = mixerRegisterChannel(mixer, MIXER_CHANNEL_Y8960, 1, sync, setRate, c);
+    c->handle      = mixerRegisterChannelNamed(mixer, MIXER_CHANNEL_Y8960, 1, sync, setRate, c, "opl2");
     c->debugHandle = debugDeviceRegister(DBGTYPE_AUDIO, name, &dbgCallbacks, c);
 
     y8960Opl2exReset(c);

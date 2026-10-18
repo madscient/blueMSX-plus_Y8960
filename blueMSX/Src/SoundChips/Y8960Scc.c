@@ -425,7 +425,7 @@ Y8960SccChip* y8960SccCreate(Mixer* mixer)
 
 //    scc->debugHandle = debugDeviceRegister(DBGTYPE_AUDIO, langDbgDevScc(), &dbgCallbacks, scc);
 
-    scc->handle = mixerRegisterChannel(mixer, MIXER_CHANNEL_Y8960, 0, sccSync, NULL, scc);
+    scc->handle = mixerRegisterChannelNamed(mixer, MIXER_CHANNEL_Y8960, 0, sccSync, NULL, scc, "scc");
 
     sccRestartDeformTicks(scc);
     y8960SccReset(scc);

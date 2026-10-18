@@ -509,7 +509,7 @@ Y8960SsgsChip* y8960SsgsCreate(Mixer* mixer, const char* name)
 
     /* Six channels out of one stereo device: the pan pots place each of them,
     ** so the mixer cannot be left to do it. */
-    chip->handle      = mixerRegisterChannel(mixer, MIXER_CHANNEL_Y8960, 1, y8960SsgsSync, NULL, chip);
+    chip->handle      = mixerRegisterChannelNamed(mixer, MIXER_CHANNEL_Y8960, 1, y8960SsgsSync, NULL, chip, "ssg");
     chip->debugHandle = debugDeviceRegister(DBGTYPE_AUDIO, name, &dbgCallbacks, chip);
 
     y8960SsgsReset(chip);
