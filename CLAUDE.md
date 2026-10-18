@@ -17,6 +17,7 @@ unofficial fork である。blueMSX+ 自身が blueMSX の非公式フォーク�
 | キー入力の注入・ウィンドウを出さない実行の計画 | `doc/fork/automation/plan.md` |
 | ディスクイメージ書き出しの計画・経緯 | `doc/fork/disk-export/plan.md` |
 | Makoto（OPNA）対応の計画・経緯 | `doc/fork/opna/plan.md` |
+| サウンドミキサーの作り直しの計画・経緯 | `doc/fork/mixer/plan.md` |
 | リリースの手順と記録 | `doc/fork/README.md` の「リリース」 |
 
 **セッションをまたいだら `implementation-plan.md` §0 を最初に読む。**
