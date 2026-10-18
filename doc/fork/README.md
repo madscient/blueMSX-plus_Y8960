@@ -35,7 +35,7 @@ blueMSX+ 自身が [blueMSX](https://msxblue.com/bluemsx/) の非公式フォー
 | このフォーク | `origin` = madscient/blueMSX-plus_Y8960 |
 | 直接の上流 | Hesoten/blueMSX-plus（remote 名 `upstream`） |
 | そのまた上流 | blueMSX 本家 |
-| 作業ブランチ | `feature/y8960`（分岐点は上流 `main` の `5afffd55`。上流 `develop` の `83d8f0f1` までマージ済み） |
+| 作業ブランチ | `feature/y8960`（分岐点は上流 `main` の `5afffd55`。上流 `develop` の `475dadfa` までマージ済み） |
 | ライセンス | **GPLv2**（blueMSX+ と同じ。ルートの `README.md` §License） |
 
 **追従は `upstream/develop` を `feature/y8960` にマージする**（2026-09-13 ユーザー判断）。
@@ -54,6 +54,7 @@ blueMSX+ 自身が [blueMSX](https://msxblue.com/bluemsx/) の非公式フォー
 | 2026-10-05 | `develop` `ae181356`（3 コミット。PR #99 の 2 コミットとそのマージ。本体 MSX-AUDIO の openMSX バックエンドの ADPCM の終端） | `6a484779` | 無し | ビルド 0 エラー / 0 警告（再コンパイルは 4 本で、Y8960 のソースは含まない）。入った 3 本は OPL2EX のフォーク元だが、OPL2EX には同じ修正が `0a066de3` で入っており、移植は無し（変更行を突き合わせた。違いはコメントの 3 行だけ）。`adpcmtest` が、本体 MSX-AUDIO の openMSX バックエンドでマージ前の NG からマージ後の OK に変わり、Y8960 では前後とも OK（**確認済み**、`/hidden` で画面）。**`banktest` `ssgstest` `sndtest` `run-keytest` は回していない**（入った 3 本を使う機種構成が無いため）。`y8960/implementation-plan.md` §11 の (36) |
 | 2026-10-07 | `develop` `9cfe017f`（8 コミット。PR #101 / #102。MSX-AUDIO の ADPCM の終端の追い修正、割り込みを選ばれたバックエンドからだけ出す、テープの保存） | `47317652` | 無し | ビルド 0 エラー / 6 警告（すべて上流と同一の `Win32*.c`）。追い修正 4 件を OPL2EX と読み比べ、停止番地を手前へ動かしたときの 1 行を移植した（`56292e3e`。コア単体の試験に 3 項目を足し、移植前に 2 項目が落ちることを見た）。`adpcmtest`（本体 MSX-AUDIO の 2 バックエンドと Y8960）、`banktest` の機械判定 15 項目、`ssgstest` の機械判定 5 項目、`run-keytest` 12 項目がすべて OK、`sndtest` が PASS（**確認済み**、`/hidden` で画面と録音）。`y8960/implementation-plan.md` §11 の (37) |
 | 2026-10-16 | `develop` `96771382`（28 コミット。PR #103-#107 / #110 / #111。Rookie Drive NX、フォルダディスクの修正、MegaFlashROM SCC+ SD の修正、物理ドライブの接続、フォルダをハードディスク・フロッピーとして挿して書き戻す） | `43b73cad` | `MediaDb.{h,cpp}`、`Win32Menu.c`（上流が Rookie Drive NX に RomType 180 とメニュー ID 41122 を取り、フォークの Y8960 と重なった。**Y8960 の RomType を 200-207 へ移した**。ユーザー判断。`v3.1.1-y8960.2` の利用者の `config.ini`・履歴・ステートが壊れる破壊的変更） | ビルド 0 エラー / 7 警告（(37) と同じ 6 件と `SimpleDebugger` の 1 件。Y8960 のファイルには無い）。フォーク元の音源コアへの上流の修正は 0 件で、移植は無し。新しい番号の構成で `banktest` の機械判定 15 項目、`ssgstest` の機械判定 5 項目がすべて OK、`/romtype1 Y8960`（207）でも `banktest` 15 項目 OK、`/listromtypes` と `/listmachines` が終了コード 0（**確認済み**、`/hidden` で画面）。**`sndtest` と `run-keytest` は回していない**（上流は `SoundChips/` と `Input/` に触れていない）。`y8960/implementation-plan.md` §11 の (38) |
+| 2026-10-19 | `develop` `475dadfa`（41 コミット。PR #112-#118。GFX9000 / Video9000、ROM の判定、フラッシュの書き込み保護、zip の一覧、コマンドラインの ROM の拡張子） | `24246cc5` | `MediaDb.{h,cpp}`、`Win32Menu.c`（上流が RomType 181 / 182 とメニュー ID 41123 / 41124 を取った。RomType は重ならず両方残した。**メニュー ID 41123 が `Y8960 Cartridge` と重なり、Y8960 側を 41125 へ移した**。メニュー ID は外に出ない） | ビルド 0 エラー / 6 警告（すべて上流と同一の `Win32*.c`）。フォーク元の音源コアへの上流の修正は 0 件で、移植は無し。出力先の試験構成と `banktest.rom` が古いままだったので写し直した。`banktest` の機械判定 15 項目（カード一式でも 15 項目）、`run-keytest` 12 項目がすべて OK、`/listromtypes` と `/listmachines` が終了コード 0（**確認済み**、`/hidden` で画面）。**`sndtest` は回していない**（上流は `SoundChips/` に触れていない）。`y8960/implementation-plan.md` §11 の (46) |
 
 **`Board/MSX.c` の `machineInitialize` から `msxPsgCreate` までは、上流とフォークの両方が触っている。**
 フォークは PSG の生成を `BOARD_MSX2PP` で分岐し、上流は同じ場所に R800 のウェイト設定を置いた
