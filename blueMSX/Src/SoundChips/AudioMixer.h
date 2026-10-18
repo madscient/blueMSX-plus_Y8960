@@ -61,8 +61,6 @@ typedef enum {
     MIXER_CHANNEL_RIGHT
 } MixerChannelPan;
 
-#define MAX_CHANNELS 16
-
 typedef Int32* (*MixerUpdateCallback)(void*, UInt32);
 typedef void (*MixerSetSampleRateCallback)(void*, UInt32);
 typedef Int32 (*MixerWriteCallback)(void*, Int16*, UInt32);
