@@ -27,4 +27,6 @@ image[:len(code)] = code
 
 with open(out, "wb") as f:
     f.write(image)
-print("wrote %s (%d bytes, %d used)" % (out, len(image), len(code)))
+# The source is named in the output, because the third argument picks it and
+# a wrong one still produces a ROM under the name given.
+print("wrote %s from %s (%d bytes, %d used)" % (out, source, len(image), len(code)))
