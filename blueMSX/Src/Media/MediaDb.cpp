@@ -132,6 +132,8 @@ RomType mediaDbStringToType(const char* romName)
     if (iequals(name, "NEO16"))            return ROM_NEO16;
     if (iequals(name, "Yamanooto"))        return ROM_YAMANOOTO;
     if (iequals(name, "RookieDriveNX"))    return ROM_ROOKIEDRIVE;
+    if (iequals(name, "GFX9000"))          return ROM_GFX9000;
+    if (iequals(name, "Video9000"))        return ROM_VIDEO9000;
     if (iequals(name, "Y8960OPLLEX"))      return ROM_Y8960OPLLEX;
     if (iequals(name, "Y8960OPL2EX"))      return ROM_Y8960OPL2EX;
     if (iequals(name, "Y8960SSGS"))        return ROM_Y8960SSGS;
@@ -691,6 +693,8 @@ extern "C" const char* romTypeToString(RomType romType)
     case ROM_NEO16:       return "NEO-16";
     case ROM_YAMANOOTO:   return "Yamanooto";
     case ROM_ROOKIEDRIVE: return "Rookie Drive NX";
+    case ROM_GFX9000:     return "GFX9000";
+    case ROM_VIDEO9000:   return "Video9000";
     case ROM_Y8960OPLLEX: return "Y8960 OPLLEX";
     case ROM_Y8960OPL2EX: return "Y8960 OPL2EX";
     case ROM_Y8960SSGS:   return "Y8960 SSGS";
@@ -884,6 +888,8 @@ extern "C" const char* romTypeToShortString(RomType romType)
     case ROM_NEO16:       return "NEO-16";
     case ROM_YAMANOOTO:   return "YAMANOOTO";
     case ROM_ROOKIEDRIVE: return "ROOKIEDRIVE";
+    case ROM_GFX9000:     return "GFX9000";
+    case ROM_VIDEO9000:   return "VIDEO9000";
     case ROM_Y8960OPLLEX: return "Y8960OPLLEX";
     case ROM_Y8960OPL2EX: return "Y8960OPL2EX";
     case ROM_Y8960SSGS:   return "Y8960SSGS";
@@ -1409,10 +1415,12 @@ extern "C" MediaType* mediaDbGuessRom(const void *buffer, int size)
     }
 
 
-	if (size <= 0x10000) {
+    /* Images over 32 KB that are not 64 KB with a header at 4000h may be
+    ** megaroms, so they are told apart by their bank writes like the larger
+    ** ones below. */
+	if (size <= 0x8000 || (size == 0x10000 && romData[0x4000] == 'A' && romData[0x4001] == 'B')) {
 		if (size == 0x10000) {
-            if (romData[0x4000] == 'A' && romData[0x4001] == 'B') mediaType->romType = ROM_PLAIN;
-            else mediaType->romType = ROM_ASCII16;
+            mediaType->romType = ROM_PLAIN;
 			return mediaType;
 		} 
         
@@ -1466,6 +1474,12 @@ extern "C" MediaType* mediaDbGuessRom(const void *buffer, int size)
     UInt32 yamanootoEnar = 0;
     UInt32 yamanootoRegs = 0;
     for (i = 0; i < size - 3; i++) {
+        /* The boot code that sets the banks up sits at the start of the ROM,
+        ** and later data can look like ld (nnnn),a.  Go on past the first
+        ** 16 KB only when it holds no bank write at all. */
+        if (i == 0x4000 && counters[2] + counters[3] + counters[4] + counters[5] > 0) {
+            break;
+        }
         if (romData[i] == 0x32) {
             UInt32 value = romData[i + 1] + ((UInt32)romData[i + 2] << 8);
 
@@ -1517,10 +1531,11 @@ extern "C" MediaType* mediaDbGuessRom(const void *buffer, int size)
         }
     }
 
-    /* Yamanooto register writes take priority: an SCC-using Yamanooto ROM
-    ** would otherwise get mis-tagged as Konami-SCC.  0x7FFC-0x7FFE are inert
-    ** until REGEN is set through ENAR, so a lone hit means nothing. */
-    if (yamanootoEnar > 0 && yamanootoRegs > 0) {
+    /* Yamanooto writes ENAR (0x7FFF) before its other registers, but a game
+    ** that uses ENAR only for flash saves writes the Konami-SCC banks instead.
+    ** Konami-SCC ignores 0x7FFF; the other registers are inert until ENAR. */
+    if (yamanootoEnar > 0 && (yamanootoRegs > 0 ||
+        (konami5Unique > 0 && konami5Unique >= ascii8Unique && konami5Unique >= konami4Unique))) {
         mediaType->romType = ROM_YAMANOOTO;
         return mediaType;
     }
@@ -1536,6 +1551,19 @@ extern "C" MediaType* mediaDbGuessRom(const void *buffer, int size)
     if (ascii16Unique > 0 && ascii8Unique == 0 &&
         ascii16Unique >= konami4Unique && ascii16Unique >= konami5Unique) {
         mediaType->romType = ROM_ASCII16;
+        return mediaType;
+    }
+
+    /* A 64 KB megarom with no bank write in sight is taken for ASCII16, which
+    ** shows its first 16 KB at both 4000h and 8000h. */
+    if (size == 0x10000 && counters[2] + counters[3] + counters[4] + counters[5] == 0) {
+        mediaType->romType = ROM_ASCII16;
+        return mediaType;
+    }
+
+    /* An image under 64 KB with no bank write in sight is taken for a plain ROM. */
+    if (size < 0x10000 && counters[2] + counters[3] + counters[4] + counters[5] == 0) {
+        mediaType->romType = ROM_PLAIN;
         return mediaType;
     }
 

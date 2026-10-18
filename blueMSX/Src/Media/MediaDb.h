@@ -211,6 +211,8 @@ enum  {
     ROM_YAMANOOTO   = 178,           /* Yamanooto */
     ROM_FLASHROMSCC = 179,           /* Flash-ROM SCC (Developer Edition) */
     ROM_ROOKIEDRIVE = 180,           /* Rookie Drive NX */
+    ROM_GFX9000     = 181,           /* GFX9000 (V9990) */
+    ROM_VIDEO9000   = 182,           /* Video9000 (V9990 with superimpose) */
     /* Y8960 cartridge, one RomType per device block so that a machine
     ** configuration can carry the blocks independently. The block sits
     ** at 200 so that upstream can keep adding types below it without
