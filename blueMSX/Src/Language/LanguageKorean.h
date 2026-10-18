@@ -84,7 +84,21 @@ void langInitKorean(LanguageStrings* ls)
     ls->errorCreateDiskImage    = "디스크 이미지 파일을 만들 수 없습니다.";
     ls->errorCreateTapeImage    = "테이프 이미지 파일을 만들 수 없습니다.";
     ls->errorNoCasInZip         = "zip파일 내부의 cas를 찾을 수 없습니다.";
-    ls->errorDirAsDskOverflow   = "%d 개의 파일(총 %d KB)이 720 KB 디스크 이미지에 맞지 않아 건너뛰었습니다.";
+    ls->errorUnknownFileType    = "파일을 열 수 없습니다: 알 수 없는 파일 형식입니다.";
+    ls->errorDirDiskTooLarge    = "%d개의 파일이 디스크에 들어가지 않아 제외되었습니다.";
+    ls->errorDirDiskOnline      = "온라인 전용 파일 %d개가 제외되었습니다. 포함하려면 이 장치에서 사용할 수 있게 하십시오.";
+    ls->errorDirDiskSubdirs     = "선택한 형식에서는 다룰 수 없어 %d개의 디렉토리가 제외되었습니다.";
+    ls->errorDirDiskUnreadable  = "디렉토리를 읽을 수 없어 삽입하지 못했습니다:\n%s";
+    ls->dlgDirWriteSummary      = "MSX가 이 디렉토리의 내용을 변경했습니다:\n%s\n\n새 파일: %d\n변경된 파일: %d\n삭제된 파일 (.blueMSX-trash로 이동): %d\n건너뜀: %d\n\n변경 내용을 디렉토리에 기록하시겠습니까?";
+    ls->dlgDirWriteMass         = "대부분의 파일이 삭제되었습니다. MSX에서 볼륨을 포맷했을 수 있습니다.";
+    ls->dlgDirWriteApply        = "기록";
+    ls->dlgDirWriteDiscard      = "버리기";
+    ls->dlgDirWriteDiscardSure  = "MSX가 만든 변경 내용을 정말 버리시겠습니까? 버린 변경 내용은 되돌릴 수 없습니다.";
+    ls->errorDirWriteInvalid    = "디스크의 파일 시스템(FAT와 디렉토리)이 기록 도중의 상태이거나 손상되어 MSX가 이 디렉토리에 가한 변경 내용을 기록할 수 없습니다:\n%s\n\nMSX가 아직 디스크에 기록하는 중이었을 수 있다면 '아니요'를 선택하고, 기록이 끝난 다음(MSX-DOS 프롬프트 또는 BASIC의 Ok가 나타난 다음) 다시 시도하십시오. MSX에서 디스크를 포맷하거나 파티션을 다시 나눈 경우에는 변경 내용을 기록할 수 없습니다.\n\n변경 내용을 버리시겠습니까?";
+    ls->errorDirWriteFailed     = "%d개 항목을 디렉토리에 기록하지 못했습니다. 다음 디렉토리의 log.txt에 목록이 있습니다:\n%s";
+    ls->errorDirWriteHost       = "MSX의 변경 내용을 이 디렉토리에 기록할 수 없습니다:\n%s\n\n디렉토리가 읽기 전용이거나 디스크 공간이 부족할 수 있습니다.\n\n변경 내용을 버리시겠습니까?";
+    ls->infoDirWriteState       = "MSX가 저장된 상태에서 실행 중입니다. MSX 전원을 껐다 다시 켤 때까지 이 디렉토리의 변경 내용은 기록되지 않습니다.";
+    ls->infoDirMemory           = "디렉토리 변경 내용을 보관하는 데 필요한 메모리가 %d MB를 넘었습니다.";
     ls->errorNoHelp             = "blueMSX+ 도움말을 찾을 수 없습니다.";
     ls->errorStartEmu           = "MSX 에뮬레이터를 시작할 수 없습니다.";
     ls->errorStartEmuNoMachine           = "에뮬레이션에 사용할 MSX 머신이 설정되지 않았습니다. 옵션 -> 에뮬레이션 -> MSX 머신 에서 선택하세요.";
@@ -95,7 +109,10 @@ void langInitKorean(LanguageStrings* ls)
     ls->errorPortableReadonly   = "이동 장치는 읽기 전용입니다.";        
     ls->errorMidiOpenFailed     = "MIDI 장치 '%s'을(를) 열 수 없습니다. 다른 응용 프로그램에서 사용 중일 수 있습니다.";
     ls->infoTitle               = "blueMSX+ 정보";
-    ls->infoGameReaderRedirect  = "blueMSX+ 는 MSX Game Reader 를 직접 지원하지 않습니다 (ASCII 사의 XP 시대 정품 드라이버는 최신 Windows 에서 작동하지 않습니다).\n\n대신 MSX Game Reader - Web Dumper (Kunihiko Ohnaka 제작) 를 브라우저에서 열까요?";
+    ls->infoGameReaderNoDll     = "MSX Game Reader 를 사용하려면 MSXGr.dll 이 필요합니다.\nASCII 정품 DLL 은 현재 Windows 에서 작동하지 않으므로 MSXGr-WinUSB (Sebbeug 제작) 를 설치하거나 MSX Game Reader - Web Dumper (Kunihiko Ohnaka 제작) 를 이용하세요.";
+    ls->infoGameReaderNoDevice  = "카트리지 슬롯 %d 용 MSX Game Reader 를 찾을 수 없습니다. 올바르게 연결되어 있는지 확인하세요.";
+    ls->dlgGameReaderGetDll     = "MSXGr-WinUSB 다운로드 페이지 열기";
+    ls->dlgGameReaderWebDumper  = "Web Dumper 열기";
     ls->infoColorDepth          = "blueMSX+ 는 16 또는 32 비트 색상 심도에서 가장 잘 작동합니다.";
     ls->errorKeyboardThemeMissing = "키보드 편집기 테마를 찾을 수 없습니다.";
     ls->errorMixerThemeMissing    = "믹서 테마를 찾을 수 없습니다.";
@@ -181,6 +198,7 @@ void langInitKorean(LanguageStrings* ls)
     ls->menuCartFlashCart       = "플래시 카트리지";
 
     ls->menuDiskInsertNew       = "새로운 디스크 이미지 삽입";              
+    ls->menuDiskInsertPhysical  = "물리 드라이브 삽입";
     ls->menuDiskInsertCdrom     = "시디롬 삽입";       // New in 2.7
     ls->menuDiskDirInsert       = "디렉토리 삽입";
     ls->menuDiskAutoStart       = "삽입후에 재시작";
@@ -332,6 +350,18 @@ void langInitKorean(LanguageStrings* ls)
     ls->dlgTabType               = "형식";
     ls->dlgTabFilename           = "파일 이름";
     ls->dlgZipReset             = "삽입후 재시작";
+
+    ls->dlgPhysDriveTitle       = "blueMSX+ - 물리 드라이브";
+    ls->dlgPhysDriveChoose      = "삽입할 이동식 드라이브를 선택하십시오:";
+    ls->dlgPhysDriveNone        = "이동식 드라이브를 찾을 수 없습니다.";
+    ls->dlgPhysDriveWarning     = "물리 드라이브에 직접 접근하려면 관리자 권한이 필요합니다.\n\n"
+                                  "blueMSX+에 삽입되어 있는 동안에는 Windows에서 이 드라이브에 접근할 수 없습니다. MSX 쪽의 조작뿐 아니라 에뮬레이터의 버그이나 쓰기 도중의 비정상 종료로도 드라이브의 파일 시스템과 데이터가 손상되거나 지워질 수 있습니다. 중요한 데이터는 미리 백업하십시오.\n\n"
+                                  "꺼내기 전에 드라이브를 뽑지 마십시오.";
+    ls->dlgPhysDriveNoWarning   = "이 경고를 다시 표시하지 않음";
+    ls->dlgPhysDriveContinue    = "계속";
+    ls->dlgPhysDriveInUse       = "드라이브를 Windows 또는 다른 프로그램이 사용 중입니다. 사용 중인 파일과 창을 닫은 다음 다시 시도하십시오.";
+    ls->dlgPhysDriveFailed      = "드라이브를 열 수 없습니다.";
+    ls->infoRewindNoMedium      = "물리 드라이브가 삽입되어 있거나 MSX가 디렉토리에 만든 변경 내용이 아직 기록되지 않은 동안에는 되감기를 사용할 수 없습니다.";
 
     ls->dlgAboutTitle           = "blueMSX+에 대하여";
 

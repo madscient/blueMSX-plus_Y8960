@@ -144,6 +144,12 @@
 
 #define IDD_LARGEMSG                    138
 
+#define IDD_GAMEREADER_NODLL            139
+
+#define IDD_PHYSDRIVE                   140
+
+#define IDD_PHYSDRIVE_WARNING           141
+
 #define IDC_JOY1                        1000
 #define IDC_JOY2                        1001
 #define IDC_CHARSET                     1002
@@ -374,6 +380,12 @@
 #define IDC_DSKRESET                    1201
 #define IDC_DSKLOADTXT                  1202
 
+#define IDC_PHYSDRIVE_TEXT              1205
+#define IDC_PHYSDRIVE_LIST              1206
+#define IDC_PHYSDRIVE_NOWARNING         1207
+#define IDC_PHYSDRIVE_ICON              1208
+#define IDC_PHYSDRIVE_OTHER             1209
+
 #define IDC_VIDEOPROGRESSTEXT           1210
 #define IDC_RECORDER_CAPLABEL           1211
 #define IDC_RECORDER_CAPPATH            1212
@@ -571,6 +583,11 @@
 
 #define IDC_LARGEMSG_TEXT                   3200
 #define IDC_LARGEMSG_ICON                   3201
+
+#define IDC_GRNODLL_TEXT                    3206
+#define IDC_GRNODLL_ICON                    3207
+#define IDC_GRNODLL_GETDLL                  3208
+#define IDC_GRNODLL_WEBDUMPER               3209
 
 #define IDC_STATIC                      -1
 

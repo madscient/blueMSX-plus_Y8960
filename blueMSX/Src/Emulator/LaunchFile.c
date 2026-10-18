@@ -38,6 +38,7 @@
 #include "Board.h"
 #include "ArchFile.h"
 #include "Disk.h"
+#include "Actions.h"
 #include "Casette.h"
 #include "ArchDialog.h"
 #include <stdio.h>
@@ -169,7 +170,7 @@ int insertCartridge(Properties* properties, int drive, const char* fname, const 
                 sizeSc += (int)strlen(fileListSc + sizeSc) + 1;
             }
 
-            fileList = malloc(sizeRom + sizeMx1 + sizeMx2 + sizeSms + sizeCol + sizeRi + sizeSg);
+            fileList = malloc(sizeRom + sizeMx1 + sizeMx2 + sizeSms + sizeCol + sizeRi + sizeSg + sizeSc);
             memcpy(fileList, fileListRom, sizeRom);
             memcpy(fileList + sizeRom, fileListMx1, sizeMx1);
             memcpy(fileList + sizeRom + sizeMx1, fileListMx2, sizeMx2);
@@ -284,6 +285,13 @@ int insertDiskette(Properties* properties, int drive, const char* fname, const c
     int noautostart = forceAutostart == -1;
     int isZip = isFileExtension(fname, ".zip");
 
+    if (diskIsHostMediumName(fname)) {
+        return 0;
+    }
+    if (!actionHarddiskCanChange(drive, 0)) {
+        return 0;
+    }
+
     if (fname) strcpy(filename, fname);
 
     emulatorResetMixer();
@@ -328,7 +336,7 @@ int insertDiskette(Properties* properties, int drive, const char* fname, const c
                 sizeDi2 += (int)strlen(fileListDi2 + sizeDi2) + 1;
             }
             for (i = 0; i < count360; i++) {
-                sizeDi2 += (int)strlen(fileList360 + size360) + 1;
+                size360 += (int)strlen(fileList360 + size360) + 1;
             }
             for (i = 0; i < count720; i++) {
                 size720 += (int)strlen(fileList720 + size720) + 1;
@@ -374,12 +382,17 @@ int insertDiskette(Properties* properties, int drive, const char* fname, const c
         }
     }
 
+    if (!actionDirWriteBack(drive)) {
+        return 0;
+    }
+
     strcpy(properties->media.disks[drive].fileName, filename);
     strcpy(properties->media.disks[drive].fileNameInZip, diskName);
     updateExtendedDiskName(drive, properties->media.disks[drive].fileName, properties->media.disks[drive].fileNameInZip);
 #ifndef NO_FILE_HISTORY
     if (drive < 2) {
-        updateFileHistory(*properties->filehistory.diskdrive[drive], NULL, filename, 0);
+        updateFileHistory(*properties->filehistory.diskdrive[drive], properties->filehistory.diskdriveFormat[drive], filename,
+                          diskIsDirPath(filename) ? properties->media.disks[drive].dirFormat : 0);
     }
 #endif
 
@@ -388,13 +401,68 @@ int insertDiskette(Properties* properties, int drive, const char* fname, const c
         emulatorStart(NULL);
     }
     else if (emulatorGetState() != EMU_STOPPED) {
+        int unreadable = 0;
+
         emulatorSuspend();
         boardChangeDiskette(drive, filename, isZip ? diskName : NULL);
+#if defined(_WIN32) || defined(WIN32)
+        unreadable = diskIsDirPath(filename) && !diskIsDir(drive);
+        if (unreadable) {
+            properties->media.disks[drive].fileName[0] = 0;
+            properties->media.disks[drive].fileNameInZip[0] = 0;
+            updateExtendedDiskName(drive, properties->media.disks[drive].fileName, properties->media.disks[drive].fileNameInZip);
+            boardChangeDiskette(drive, NULL, NULL);
+        }
+#endif
         emulatorResume();
+#if defined(_WIN32) || defined(WIN32)
+        if (unreadable) {
+            archShowDirUnreadable(filename);
+        }
+        else if (diskIsDir(drive)) {
+            actionDirInsertedNotice();
+        }
+#endif
     }
 
     return 1;
 }
+
+#if defined(_WIN32) || defined(WIN32)
+/* fname may point into the history, which the insert reorders, so it is not read after the insert. */
+int insertDisketteRecalled(Properties* properties, int drive, const char* fname)
+{
+    int format = 0;
+    int previous = properties->media.disks[drive].dirFormat;
+
+    if (drive >= 2 || !diskIsDirPath(fname)) {
+        return insertDiskette(properties, drive, fname, NULL, 0);
+    }
+    if (!actionDirWriteBack(drive)) {
+        return 0;
+    }
+#ifndef NO_FILE_HISTORY
+    {
+        int i;
+
+        for (i = 0; i < MAX_HISTORY; i++) {
+            if (strcmp(properties->filehistory.diskdrive[drive][i], fname) == 0) {
+                format = properties->filehistory.diskdriveFormat[drive][i];
+                break;
+            }
+        }
+    }
+#endif
+    properties->media.disks[drive].dirFormat = format;
+    diskSetDirFormat(drive, format);
+    if (!insertDiskette(properties, drive, fname, NULL, 0)) {
+        properties->media.disks[drive].dirFormat = previous;
+        diskSetDirFormat(drive, previous);
+        return 0;
+    }
+    return 1;
+}
+#endif
 
 int insertCassette(Properties* properties, int drive, const char* fname, const char* inZipFile, int forceAutostart) {
     int autostart = forceAutostart == 1;
@@ -538,7 +606,7 @@ static int insertDisketteOrCartridge(Properties* properties, int drive, const ch
         sizeDi2 += (int)strlen(fileListDi2 + sizeDi2) + 1;
     }
     for (i = 0; i < count360; i++) {
-        sizeDi2 += (int)strlen(fileList360 + size360) + 1;
+        size360 += (int)strlen(fileList360 + size360) + 1;
     }
     for (i = 0; i < count720; i++) {
         size720 += (int)strlen(fileList720 + size720) + 1;
@@ -548,7 +616,7 @@ static int insertDisketteOrCartridge(Properties* properties, int drive, const ch
     }
 
     if (countDsk > 0) {
-        fileListDsk = malloc(sizeDsx + sizeDi1 + sizeDi2);
+        fileListDsk = malloc(sizeDsx + sizeDi1 + sizeDi2 + size360 + size720 + sizeSf7);
         memcpy(fileListDsk, fileListDsx, sizeDsx);
         memcpy(fileListDsk + sizeDsx, fileListDi1, sizeDi1);
         memcpy(fileListDsk + sizeDsx + sizeDi1, fileListDi2, sizeDi2);
@@ -694,6 +762,37 @@ int launchFileIsSupported(const char* fileName)
            isFileExtension(fileName, ".wav") || isFileExtension(fileName, ".zip");
 }
 
+/* A file of any extension whose size and "AB" header look like a ROM image.
+** A .sram is left out: inserted as a cartridge it would save over itself. */
+static int launchFileLooksLikeRom(const char* fileName)
+{
+    UInt8 head[0x4002];
+    size_t length;
+    long size;
+    FILE* file;
+
+    if (isFileExtension(fileName, ".sram")) {
+        return 0;
+    }
+
+    file = fopen(fileName, "rb");
+    if (file == NULL) {
+        return 0;
+    }
+    fseek(file, 0, SEEK_END);
+    size = ftell(file);
+    if (size < 0x2000 || size > 64 * 1024 * 1024 || size % 0x2000 != 0) {
+        fclose(file);
+        return 0;
+    }
+    fseek(file, 0, SEEK_SET);
+    length = fread(head, 1, sizeof(head), file);
+    fclose(file);
+
+    return (length >= 2 && head[0] == 'A' && head[1] == 'B') ||
+           (length == sizeof(head) && head[0x4000] == 'A' && head[0x4001] == 'B');
+}
+
 int tryLaunchUnknownFile(Properties* properties, const char* fileName, int forceAutostart) 
 {
     int rv = 0;
@@ -703,7 +802,16 @@ int tryLaunchUnknownFile(Properties* properties, const char* fileName, int force
     /* A replay is a saved state with an input log inside it, so it opens the
     ** same way and starts playing itself. */
     if (isFileExtension(fileName, ".sta") || isFileExtension(fileName, ".cap")) {
+        emulatorSuspend();
+        if (!actionDirWriteBack(-1)) {
+            emulatorResume();
+            return 0;
+        }
+        if (emulatorGetState() != EMU_STOPPED) {
+            emulatorStop();
+        }
         emulatorStart(fileName);
+        actionDirStateNotice();
         return 1;
     }
 
@@ -739,7 +847,10 @@ int tryLaunchUnknownFile(Properties* properties, const char* fileName, int force
     else if (isFileExtension(fileName, ".zip")) {
         rv = insertDisketteOrCartridge(properties, properties->cartridge.quickStartDrive, fileName, forceAutostart);
     }
-    
+    else if (launchFileLooksLikeRom(fileName)) {
+        rv = insertCartridge(properties, properties->cartridge.quickStartDrive, fileName, NULL, ROM_UNKNOWN, forceAutostart);
+    }
+
     archUpdateMenu(0);
 
     return rv ? 1 : (launchAnswered ? -1 : 0);

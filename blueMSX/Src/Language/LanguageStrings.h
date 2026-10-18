@@ -81,7 +81,21 @@ typedef struct {
     char* errorCreateDiskImage;
     char* errorCreateTapeImage;
     char* errorNoCasInZip;
-    char* errorDirAsDskOverflow;
+    char* errorUnknownFileType;
+    char* errorDirDiskTooLarge;
+    char* errorDirDiskOnline;
+    char* errorDirDiskSubdirs;
+    char* errorDirDiskUnreadable;
+    char* dlgDirWriteSummary;
+    char* dlgDirWriteMass;
+    char* dlgDirWriteApply;
+    char* dlgDirWriteDiscard;
+    char* dlgDirWriteDiscardSure;
+    char* errorDirWriteInvalid;
+    char* errorDirWriteFailed;
+    char* errorDirWriteHost;
+    char* infoDirWriteState;
+    char* infoDirMemory;
     char* errorNoHelp;
     char* errorStartEmu;
     /* Machine-load failure details shown as the body of errorStartEmu. */
@@ -94,7 +108,10 @@ typedef struct {
     char* errorMidiOpenFailed;            /* %s = device name */
     char* infoColorDepth;
     char* infoTitle;
-    char* infoGameReaderRedirect;
+    char* infoGameReaderNoDll;
+    char* infoGameReaderNoDevice;
+    char* dlgGameReaderGetDll;
+    char* dlgGameReaderWebDumper;
     char* errorKeyboardThemeMissing;
     char* errorMixerThemeMissing;
     char* errorRecorderTitle;
@@ -177,6 +194,7 @@ typedef struct {
     char* menuCartFlashCart;
 
     char* menuDiskInsertNew;
+    char* menuDiskInsertPhysical;
     char* menuDiskInsertCdrom;
     char* menuDiskDirInsert;
     char* menuDiskAutoStart;
@@ -328,6 +346,16 @@ typedef struct {
     char* dlgTabType;
     char* dlgTabFilename;
     char* dlgZipReset;
+
+    char* dlgPhysDriveTitle;
+    char* dlgPhysDriveChoose;
+    char* dlgPhysDriveNone;
+    char* dlgPhysDriveWarning;
+    char* dlgPhysDriveNoWarning;
+    char* dlgPhysDriveContinue;
+    char* dlgPhysDriveInUse;
+    char* dlgPhysDriveFailed;
+    char* infoRewindNoMedium;
 
     char* dlgAboutTitle;
 

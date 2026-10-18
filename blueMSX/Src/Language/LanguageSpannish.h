@@ -84,7 +84,21 @@ void langInitSpanish(LanguageStrings* ls)
     ls->errorCreateDiskImage    = "No se pudo crear el archivo de imagen de disco.";
     ls->errorCreateTapeImage    = "No se pudo crear el archivo de imagen de cinta.";
     ls->errorNoCasInZip         = "No hay archivo .cas en el archivo zip.";
-    ls->errorDirAsDskOverflow   = "%d archivo(s) (%d KB en total) no caben en la imagen de disco de 720 KB y se han omitido.";
+    ls->errorUnknownFileType    = "No se puede abrir el archivo: tipo de archivo desconocido.";
+    ls->errorDirDiskTooLarge    = "%d archivo(s) no cabían en el disco y se han omitido.";
+    ls->errorDirDiskOnline      = "Se han omitido %d archivo(s) disponibles solo en línea. Haga que estén disponibles en este dispositivo para incluirlos.";
+    ls->errorDirDiskSubdirs     = "Se han omitido %d directorio(s) porque el formato elegido no los admite.";
+    ls->errorDirDiskUnreadable  = "No se ha podido insertar el directorio porque no se ha podido leer:\n%s";
+    ls->dlgDirWriteSummary      = "El MSX ha modificado el contenido de este directorio:\n%s\n\nArchivos nuevos: %d\nArchivos modificados: %d\nArchivos borrados (movidos a .blueMSX-trash): %d\nOmitidos: %d\n\n¿Escribir los cambios en el directorio?";
+    ls->dlgDirWriteMass         = "Se ha borrado la mayoría de los archivos. Puede que el MSX haya formateado el volumen.";
+    ls->dlgDirWriteApply        = "Escribir";
+    ls->dlgDirWriteDiscard      = "Descartar";
+    ls->dlgDirWriteDiscardSure  = "¿Descartar de verdad los cambios que ha hecho el MSX? No se podrán recuperar.";
+    ls->errorDirWriteInvalid    = "Los cambios que el MSX ha hecho en este directorio no se pueden escribir, porque el sistema de archivos del disco (la FAT y los directorios) está escrito a medias o dañado:\n%s\n\nSi es posible que el MSX todavía estuviera escribiendo en el disco, elija No, espere a que termine (el símbolo de MSX-DOS o el Ok de BASIC) e inténtelo de nuevo. Si el MSX ha formateado o reparticionado el disco, los cambios no se pueden escribir.\n\n¿Descartar los cambios?";
+    ls->errorDirWriteFailed     = "%d elemento(s) no se pudieron escribir. El archivo log.txt de este directorio los enumera:\n%s";
+    ls->errorDirWriteHost       = "Los cambios hechos por el MSX no se han podido escribir en este directorio:\n%s\n\nPuede que el directorio sea de solo lectura o que el disco esté lleno.\n\n¿Descartar los cambios?";
+    ls->infoDirWriteState       = "El MSX funciona a partir de un estado guardado. Los cambios en este directorio no se escribirán hasta que el MSX se haya apagado y vuelto a encender.";
+    ls->infoDirMemory           = "La memoria necesaria para guardar los cambios en el directorio ya supera los %d MB.";
     ls->errorNoHelp             = "Imposible encontrar archivo de ayuda de BlueMSX.";
     ls->errorStartEmu           = "Error al iniciar MSX emulator.";
     ls->errorStartEmuNoMachine           = "No hay ninguna máquina MSX configurada para la emulación. Elija una en Opciones -> Emulación -> Familia MSX.";
@@ -95,7 +109,10 @@ void langInitSpanish(LanguageStrings* ls)
     ls->errorPortableReadonly   = "El dispositivo portable es sólo lectura";        
     ls->errorMidiOpenFailed     = "No se pudo abrir el dispositivo MIDI '%s'. Puede estar en uso por otra aplicación.";
     ls->infoTitle               = "Info de blueMSX+";
-    ls->infoGameReaderRedirect  = "blueMSX+ no admite directamente MSX Game Reader (el controlador original de ASCII de la era XP ya no funciona en Windows moderno).\n\n¿Abrir MSX Game Reader - Web Dumper (por Kunihiko Ohnaka) en su navegador?";
+    ls->infoGameReaderNoDll     = "Se necesita MSXGr.dll para usar MSX Game Reader.\nEl DLL original de ASCII no funciona en Windows actual, así que instale MSXGr-WinUSB (por Sebbeug) o use MSX Game Reader - Web Dumper (por Kunihiko Ohnaka).";
+    ls->infoGameReaderNoDevice  = "No se encontró ningún MSX Game Reader para la ranura de cartucho %d. Compruebe que esté bien conectado.";
+    ls->dlgGameReaderGetDll     = "Abrir la descarga de MSXGr-WinUSB";
+    ls->dlgGameReaderWebDumper  = "Abrir el Web Dumper";
     ls->infoColorDepth          = "blueMSX+ funciona mejor con profundidad de color de 16 o 32 bits.";
     ls->errorKeyboardThemeMissing = "No se pudo encontrar el tema del editor de teclado.";
     ls->errorMixerThemeMissing    = "No se pudo encontrar el tema del mezclador.";
@@ -181,6 +198,7 @@ void langInitSpanish(LanguageStrings* ls)
     ls->menuCartFlashCart       = "Cartuchos Flash";
 
     ls->menuDiskInsertNew       = "Insertar nueva imagen de Disco";              
+    ls->menuDiskInsertPhysical  = "Insertar unidad física";
     ls->menuDiskInsertCdrom     = "Insertar CD-Rom";       // New in 2.7
     ls->menuDiskDirInsert       = "Insertar directorio"; 
     ls->menuDiskAutoStart       = "Reinicio Tras Insertar";
@@ -332,6 +350,18 @@ void langInitSpanish(LanguageStrings* ls)
     ls->dlgTabType               = "Tipo";
     ls->dlgTabFilename           = "Nombre Archivo";
     ls->dlgZipReset             = "Reiniciar Tras Insertar";
+
+    ls->dlgPhysDriveTitle       = "blueMSX+ - Unidad física";
+    ls->dlgPhysDriveChoose      = "Elija la unidad extraíble que desea insertar:";
+    ls->dlgPhysDriveNone        = "No se ha encontrado ninguna unidad extraíble.";
+    ls->dlgPhysDriveWarning     = "Se necesitan derechos de administrador para acceder directamente a una unidad física.\n\n"
+                                  "Windows no puede acceder a la unidad mientras está insertada en blueMSX+. Las operaciones realizadas desde el MSX, así como un error del emulador o un cierre inesperado durante la escritura, pueden dañar o borrar el sistema de archivos y los datos de la unidad. Haga antes una copia de seguridad de los datos importantes.\n\n"
+                                  "No desconecte la unidad del equipo antes de sacarla del emulador.";
+    ls->dlgPhysDriveNoWarning   = "No volver a mostrar esta advertencia";
+    ls->dlgPhysDriveContinue    = "Continuar";
+    ls->dlgPhysDriveInUse       = "Windows u otro programa está usando la unidad. Cierre los archivos y las ventanas que la usan e inténtelo de nuevo.";
+    ls->dlgPhysDriveFailed      = "No se pudo abrir la unidad.";
+    ls->infoRewindNoMedium      = "El rebobinado no está disponible mientras hay insertada una unidad física o mientras los cambios que el MSX ha hecho en un directorio aún no se han escrito en él.";
 
     ls->dlgAboutTitle           = "blueMSX+ - Acerca de";
 

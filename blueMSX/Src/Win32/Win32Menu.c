@@ -43,6 +43,7 @@
 #include "Actions.h"
 #include "Casette.h"
 #include "Disk.h"
+#include "Win32PhysicalDisk.h"
 #include "VideoManager.h"
 #include "Win32VideoIn.h"
 #include "Win32Eth.h"
@@ -51,6 +52,8 @@
 #include "ArchInput.h"
 #include "JoystickPort.h"
 #include "GameReader.h"
+#include "ArchDialog.h"
+#include "Emulator.h"
 #include "AppConfig.h"
 
 /* showLoadMemoryDlg is the IDD_LOAD_MEMORY entry point, defined
@@ -182,7 +185,10 @@ extern int showLoadMemoryDlg(HWND hwnd);
 #define ID_FILE_CART_ASCII16X           41119
 #define ID_FILE_CART_YAMANOOTO          41120
 #define ID_FILE_CART_FLASHROMSCC        41121
-#define ID_FILE_CART_MAKOTO             41122
+#define ID_FILE_CART_ROOKIEDRIVE        41122
+#define ID_FILE_CART_GFX9000            41123
+#define ID_FILE_CART_VIDEO9000          41124
+#define ID_FILE_CART_MAKOTO             41126
 #define ID_FILE_CART_JOYREXPSG          41110
 #define ID_FILE_CART_EXTRAM16KB         41111
 #define ID_FILE_CART_EXTRAM32KB         41112
@@ -232,6 +238,7 @@ extern int showLoadMemoryDlg(HWND hwnd);
 #define ID_HARDDISK_HISTORY             41605
 #define ID_NOWINDHD_INSERT              41606
 #define ID_NOWINDDD_INSERT              41607
+#define ID_HARDDISK_INSERTPHYSICAL      41608
 
 
 
@@ -337,6 +344,9 @@ static const char* getCleanFileName(const char* fileName)
     if (strcmp(fileName, CARTNAME_ASCII16X) == 0)       return "ASCII16-X";
     if (strcmp(fileName, CARTNAME_YAMANOOTO) == 0)      return "Yamanooto";
     if (strcmp(fileName, CARTNAME_FLASHROMSCC) == 0)    return "Flash-ROM SCC";
+    if (strcmp(fileName, CARTNAME_ROOKIEDRIVE) == 0)    return "Rookie Drive NX";
+    if (strcmp(fileName, CARTNAME_GFX9000) == 0)        return "GFX9000";
+    if (strcmp(fileName, CARTNAME_VIDEO9000) == 0)      return "Video9000";
     if (strcmp(fileName, CARTNAME_ESERAM256) == 0)      return langRomTypeEseRam256();
     if (strcmp(fileName, CARTNAME_ESERAM512) == 0)      return langRomTypeEseRam512();
     if (strcmp(fileName, CARTNAME_ESERAM1MB) == 0)      return langRomTypeEseRam1mb();
@@ -348,6 +358,8 @@ static const char* getCleanFileName(const char* fileName)
     if (strcmp(fileName, CARTNAME_ESESCC256) == 0)      return langRomTypeEseSCC256();
     if (strcmp(fileName, CARTNAME_ESESCC512) == 0)      return langRomTypeEseSCC512();
     if (strcmp(fileName, CARTNAME_GOUDASCSI) == 0)      return langRomTypeGoudaSCSI();
+
+    if (diskIsHostMediumName(fileName))                 return fileName + strlen(DISK_HOSTMEDIUM_PREFIX);
 
     return stripPath(fileName);
 }
@@ -631,6 +643,7 @@ static HMENU menuCreateCartSpecial(int cartNo, Properties* pProperties, Shortcut
     AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)hMenuIde, langMenuCartIde());
     AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)hMenuScsi, langMenuCartScsi());
     AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)hMenuNowind, "Nowind USB Disk Controller");
+    AppendMenuU(hMenu, MF_STRING, idOffset + ID_FILE_CART_ROOKIEDRIVE, "Rookie Drive NX");
     AppendMenuU(hMenu, MF_SEPARATOR, 0, NULL);
     AppendMenuU(hMenu, MF_STRING, idOffset + ID_FILE_CART_FMPAC, langMenuCartFMPac());
     AppendMenuU(hMenu, MF_STRING, idOffset + ID_FILE_CART_PAC, langMenuCartPac());
@@ -638,6 +651,9 @@ static HMENU menuCreateCartSpecial(int cartNo, Properties* pProperties, Shortcut
     AppendMenuU(hMenu, MF_STRING, idOffset + ID_FILE_CART_SONYHBI55, langMenuCartHBI55());
     AppendMenuU(hMenu, MF_SEPARATOR, 0, NULL);
     AppendMenuU(hMenu, MF_STRING, idOffset + ID_FILE_CART_NMS1210, "Philips NMS1210 Serial Interface");
+    AppendMenuU(hMenu, MF_SEPARATOR, 0, NULL);
+    AppendMenuU(hMenu, MF_STRING, idOffset + ID_FILE_CART_GFX9000, "GFX9000");
+    AppendMenuU(hMenu, MF_STRING, idOffset + ID_FILE_CART_VIDEO9000, "Video9000");
     AppendMenuU(hMenu, MF_SEPARATOR, 0, NULL);
     AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)hMenuExtRam, langMenuCartExternalRam());
     AppendMenuU(hMenu, MF_SEPARATOR, 0, NULL);
@@ -892,7 +908,7 @@ static HMENU menuCreateDisk(int diskNo, Properties* pProperties, Shortcuts* shor
 
 #ifndef NO_FILE_HISTORY
     if (appConfigGetInt("filehistory", 1) != 0) {
-        verifyFileHistory(*pProperties->filehistory.diskdrive[diskNo], NULL);
+        verifyFileHistory(*pProperties->filehistory.diskdrive[diskNo], pProperties->filehistory.diskdriveFormat[diskNo]);
     }
 #endif
     setMenuColor(hMenu);
@@ -977,22 +993,30 @@ static HMENU menuCreateNowindSettings(Properties* pProperties)
     return hMenu;
 }
 
-static HMENU menuCreateIdeHd(int diskNo, Properties* pProperties, Shortcuts* shortcuts, int showCdrom)
+static HMENU menuCreateIdeHd(int diskNo, Properties* pProperties, Shortcuts* shortcuts, int showCdrom, int showPhysical)
 {
     int idOffset = diskNo * ID_HARDDISK_OFFSET;
     HMENU hMenu = CreatePopupMenu();
     char langBuffer[560];
+    UINT image = actionHarddiskCanChange(diskNo, 0) ? 0 : MF_GRAYED;
+    UINT dir = actionHarddiskCanChange(diskNo, 1) ? 0 : MF_GRAYED;
 
     setMenuColor(hMenu);
 
-    AppendMenuU(hMenu, MF_STRING, idOffset + ID_HARDDISK_INSERT, langMenuInsert());
+    /* While the MSX runs, most interfaces could not tell it that the medium changed. */
+    AppendMenuU(hMenu, MF_STRING | image, idOffset + ID_HARDDISK_INSERT, langMenuInsert());
+    AppendMenuU(hMenu, MF_STRING | dir, idOffset + ID_HARDDISK_INSERTDIR, langMenuDiskDirInsert());
     if (showCdrom) {
-        AppendMenuU(hMenu, MF_STRING, idOffset + ID_HARDDISK_INSERTCDROM, langMenuDiskDirInsertCdrom());
+        AppendMenuU(hMenu, MF_STRING | image, idOffset + ID_HARDDISK_INSERTCDROM, langMenuDiskDirInsertCdrom());
     }
-    AppendMenuU(hMenu, MF_STRING, idOffset + ID_HARDDISK_INSERTNEW, langMenuDiskInsertNew());
+    if (showPhysical) {
+        AppendMenuU(hMenu, MF_STRING | image, idOffset + ID_HARDDISK_INSERTPHYSICAL, langMenuDiskInsertPhysical());
+    }
+    AppendMenuU(hMenu, MF_STRING | image, idOffset + ID_HARDDISK_INSERTNEW, langMenuDiskInsertNew());
     AppendMenuU(hMenu, MF_SEPARATOR, 0, NULL);
     sprintf(langBuffer, "%s%hs%hs", langMenuEject(), (*pProperties->media.disks[diskNo].fileName ? ": " : ""), getCleanFileName(pProperties->media.disks[diskNo].fileName));
-    AppendMenuU(hMenu, MF_STRING | (*pProperties->media.disks[diskNo].fileName ? 0 : MF_GRAYED), idOffset + ID_HARDDISK_REMOVE, langBuffer);
+    AppendMenuU(hMenu, MF_STRING | (*pProperties->media.disks[diskNo].fileName && actionHarddiskCanChange(diskNo, diskIsDir(diskNo)) ? 0 : MF_GRAYED),
+                idOffset + ID_HARDDISK_REMOVE, langBuffer);
 
     return hMenu;
 }
@@ -1013,37 +1037,37 @@ static HMENU menuCreateHarddisk(Properties* pProperties, Shortcuts* shortcuts)
         case HD_SUNRISEIDE:
             hasHd = 1;
             sprintf(langBuffer, "IDE%d  - Sunrise Primary", i);
-            AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)menuCreateIdeHd(diskGetHdDriveId(i, 0), pProperties, shortcuts, 0), langBuffer);
+            AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)menuCreateIdeHd(diskGetHdDriveId(i, 0), pProperties, shortcuts, 0, 0), langBuffer);
             sprintf(langBuffer, "IDE%d  - Sunrise Secondary", i);
-            AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)menuCreateIdeHd(diskGetHdDriveId(i, 1), pProperties, shortcuts, 0), langBuffer);
+            AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)menuCreateIdeHd(diskGetHdDriveId(i, 1), pProperties, shortcuts, 0, 0), langBuffer);
             break;
         case HD_BEERIDE:
             hasHd = 1;
             sprintf(langBuffer, "IDE%d Beer", i);
-            AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)menuCreateIdeHd(diskGetHdDriveId(i, 0), pProperties, shortcuts, 0), langBuffer);
+            AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)menuCreateIdeHd(diskGetHdDriveId(i, 0), pProperties, shortcuts, 0, 0), langBuffer);
             break;
         case HD_NOWIND:
             hasHd = 1;
             sprintf(langBuffer, "Disk 1");
-            AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)menuCreateIdeHd(diskGetHdDriveId(i, 0), pProperties, shortcuts, 0), langBuffer);
+            AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)menuCreateIdeHd(diskGetHdDriveId(i, 0), pProperties, shortcuts, 0, 0), langBuffer);
             sprintf(langBuffer, "Disk 2");
-            AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)menuCreateIdeHd(diskGetHdDriveId(i, 1), pProperties, shortcuts, 0), langBuffer);
+            AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)menuCreateIdeHd(diskGetHdDriveId(i, 1), pProperties, shortcuts, 0, 0), langBuffer);
             sprintf(langBuffer, "Disk 3");
-            AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)menuCreateIdeHd(diskGetHdDriveId(i, 2), pProperties, shortcuts, 0), langBuffer);
+            AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)menuCreateIdeHd(diskGetHdDriveId(i, 2), pProperties, shortcuts, 0, 0), langBuffer);
             sprintf(langBuffer, "Disk 4");
-            AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)menuCreateIdeHd(diskGetHdDriveId(i, 3), pProperties, shortcuts, 0), langBuffer);
+            AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)menuCreateIdeHd(diskGetHdDriveId(i, 3), pProperties, shortcuts, 0, 0), langBuffer);
             AppendMenuU(hMenu, MF_SEPARATOR, 0, NULL);
             AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)menuCreateNowindSettings(pProperties), langPropSettings());
             break;
         case HD_RSIDE:
             hasHd = 1;
             sprintf(langBuffer, "IDE%d RS IDE", i);
-            AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)menuCreateIdeHd(diskGetHdDriveId(i, 0), pProperties, shortcuts, 0), langBuffer);
+            AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)menuCreateIdeHd(diskGetHdDriveId(i, 0), pProperties, shortcuts, 0, 0), langBuffer);
             break;
         case HD_GIDE:
             hasHd = 1;
             sprintf(langBuffer, "IDE%d GIDE", i);
-            AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)menuCreateIdeHd(diskGetHdDriveId(i, 0), pProperties, shortcuts, 0), langBuffer);
+            AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)menuCreateIdeHd(diskGetHdDriveId(i, 0), pProperties, shortcuts, 0, 0), langBuffer);
             break;
         case HD_MEGASCSI:
         case HD_WAVESCSI:
@@ -1051,10 +1075,10 @@ static HMENU menuCreateHarddisk(Properties* pProperties, Shortcuts* shortcuts)
             for (j = 0; j < 8; j++) {
                 sprintf(langBuffer, "SCSI%d %s-SCSI #%d", i, (boardGetHdType(i) == HD_MEGASCSI) ? "MEGA" : "WAVE", j);
 #if 1  // CD_UPDATE: Don't grey out id #6
-                AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)menuCreateIdeHd(diskGetHdDriveId(i, j), pProperties, shortcuts, 1), langBuffer);
+                AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)menuCreateIdeHd(diskGetHdDriveId(i, j), pProperties, shortcuts, 1, 0), langBuffer);
 #else
                 if (j != 6) {
-                    AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)menuCreateIdeHd(diskGetHdDriveId(i, j), pProperties, shortcuts, 1), langBuffer);
+                    AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)menuCreateIdeHd(diskGetHdDriveId(i, j), pProperties, shortcuts, 1, 0), langBuffer);
                 } else {
                     AppendMenuU(hMenu, MF_STRING | MF_GRAYED, 0, langBuffer);
                 }
@@ -1066,15 +1090,20 @@ static HMENU menuCreateHarddisk(Properties* pProperties, Shortcuts* shortcuts)
             // CD_UPDATE: Add id #3 (should it be 8 as the mega scsi??
             for (j = 0; j < 8; j++) {
                 sprintf(langBuffer, "SCSI%d Gouda SCSI #%d", i, j);
-                AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)menuCreateIdeHd(diskGetHdDriveId(i, j), pProperties, shortcuts, 1), langBuffer);
+                AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)menuCreateIdeHd(diskGetHdDriveId(i, j), pProperties, shortcuts, 1, 0), langBuffer);
             }
             break;
         case HD_MFRSD:
             hasHd = 1;
             sprintf(langBuffer, "SD%d - MFR SCC+ SD slot 1", i);
-            AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)menuCreateIdeHd(diskGetHdDriveId(i, 0), pProperties, shortcuts, 0), langBuffer);
+            AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)menuCreateIdeHd(diskGetHdDriveId(i, 0), pProperties, shortcuts, 0, 1), langBuffer);
             sprintf(langBuffer, "SD%d - MFR SCC+ SD slot 2", i);
-            AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)menuCreateIdeHd(diskGetHdDriveId(i, 1), pProperties, shortcuts, 0), langBuffer);
+            AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)menuCreateIdeHd(diskGetHdDriveId(i, 1), pProperties, shortcuts, 0, 1), langBuffer);
+            break;
+        case HD_ROOKIEDRIVE:
+            hasHd = 1;
+            sprintf(langBuffer, "USB%d - Rookie Drive NX", i);
+            AppendMenuU(hMenu, MF_POPUP, (UINT_PTR)menuCreateIdeHd(diskGetHdDriveId(i, 0), pProperties, shortcuts, 0, 1), langBuffer);
             break;
         }
     }
@@ -2017,19 +2046,28 @@ int menuCommand(Properties* pProperties, int command)
         case ID_FILE_CART_EXTRAM4MB:
             insertCartridge(pProperties, i, CARTNAME_EXTRAM4MB, NULL, ROM_EXTRAM4MB, 0);
             return 1;
-        case ID_FILE_CART_GAMEREADER:
-            /* MSXGr.dll no longer installs cleanly; redirect to the
-            ** WebUSB-based dumper instead. */
-            if (MessageBoxU(getMainHwnd(),
-                            langInfoGameReaderRedirect(),
-                            langInfoTitle(),
-                            MB_OKCANCEL | MB_ICONINFORMATION) == IDOK) {
-                const char* url = (pProperties->language == EMU_LANG_JAPANESE)
-                                  ? "https://kunichiko.github.io/MSX-GameReader-web/?lang=ja"
-                                  : "https://kunichiko.github.io/MSX-GameReader-web/?lang=en";
-                ShellExecuteA(getMainHwnd(), "open", url, NULL, NULL, SW_SHOWNORMAL);
+        case ID_FILE_CART_GAMEREADER: {
+            /* Once insertCartridge has run it is too late to refuse. */
+            int grState;
+            int grWanted = 1;
+            int grRunning = emulatorGetState() == EMU_RUNNING;
+            int j;
+
+            for (j = 0; j < PROP_MAX_CARTS; j++) {
+                if (j != i && pProperties->media.carts[j].fileName[0] &&
+                    pProperties->media.carts[j].type == ROM_GAMEREADER) grWanted++;
             }
+
+            if (grRunning) emulatorSuspend();
+            grState = gameReaderAvailability(grWanted);
+            if (grRunning) emulatorResume();
+            if (grState != GAMEREADER_AVAILABLE) {
+                archShowGameReaderUnavailableDialog(grState, i);
+                return 1;
+            }
+            insertCartridge(pProperties, i, CARTNAME_GAMEREADER, NULL, ROM_GAMEREADER, 0);
             return 1;
+        }
         case ID_FILE_CART_SUNRISEIDE:
             insertCartridge(pProperties, i, CARTNAME_SUNRISEIDE, NULL, ROM_SUNRISEIDE, 0);
             return 1;
@@ -2129,6 +2167,15 @@ int menuCommand(Properties* pProperties, int command)
         case ID_FILE_CART_MEGAFLSHSCCPLUS_SD:
             insertCartridge(pProperties, i, CARTNAME_MEGAFLSHSCCPLUS_SD, NULL, ROM_MEGAFLSHSCCPLUS_SD, 0);
             return 1;
+        case ID_FILE_CART_ROOKIEDRIVE:
+            insertCartridge(pProperties, i, CARTNAME_ROOKIEDRIVE, NULL, ROM_ROOKIEDRIVE, 0);
+            return 1;
+        case ID_FILE_CART_GFX9000:
+            insertCartridge(pProperties, i, CARTNAME_GFX9000, NULL, ROM_GFX9000, 0);
+            return 1;
+        case ID_FILE_CART_VIDEO9000:
+            insertCartridge(pProperties, i, CARTNAME_VIDEO9000, NULL, ROM_VIDEO9000, 0);
+            return 1;
         case ID_FILE_CART_ASCII16X:
             insertCartridge(pProperties, i, CARTNAME_ASCII16X, NULL, ROM_ASCII16X, 0);
             return 1;
@@ -2209,7 +2256,7 @@ int menuCommand(Properties* pProperties, int command)
         if (appConfigGetInt("filehistory", 1) != 0) {
             h = cmd - ID_FILE_DISK_HISTORY;
             if (h >= 0 && h < MAX_HISTORY) {
-                insertDiskette(pProperties, i, pProperties->filehistory.diskdrive[i][h], NULL, 0);
+                insertDisketteRecalled(pProperties, i, pProperties->filehistory.diskdrive[i][h]);
                 return 1;
             }
         }
@@ -2268,6 +2315,9 @@ int menuCommand(Properties* pProperties, int command)
         case ID_HARDDISK_INSERTNEW:
             actionHarddiskInsertNew(i); 
             return 0;
+        case ID_HARDDISK_INSERTPHYSICAL:
+            physicalDiskInsert(i);
+            return 0;
         case ID_HARDDISK_INSERTDIR:
             actionHarddiskInsertDir(i);
             return 0;
@@ -2311,12 +2361,16 @@ int menuCommand(Properties* pProperties, int command)
     
     i = command - ID_VIDEO_CONNECTORS;
     if (i >= 0 && i < 16) {
+        int running = emulatorGetState() == EMU_RUNNING;
+
+        if (running) emulatorSuspend();
         if (videoManagerGetActive() == i) {
             videoManagerSetActive(-1);
         }
         else {
             videoManagerSetActive(i);
         }
+        if (running) emulatorResume();
         return 1;
     }
 

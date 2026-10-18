@@ -84,7 +84,21 @@ void langInitDutch(LanguageStrings* ls)
     ls->errorCreateDiskImage    = "Kan de schijfkopie niet aanmaken.";
     ls->errorCreateTapeImage    = "Kan het cassettebestand niet aanmaken.";
     ls->errorNoCasInZip         = "Er zijn geen .CAS-bestanden gevonden in het ZIP-bestand.";
-    ls->errorDirAsDskOverflow   = "%d bestand(en) (%d KB totaal) pasten niet op de 720 KB-schijfkopie en zijn overgeslagen.";
+    ls->errorUnknownFileType    = "Kan het bestand niet openen: onbekend bestandstype.";
+    ls->errorDirDiskTooLarge    = "%d bestand(en) pasten niet op de schijf en zijn weggelaten.";
+    ls->errorDirDiskOnline      = "%d bestand(en) die alleen online beschikbaar zijn, zijn weggelaten. Maak ze beschikbaar op dit apparaat om ze op te nemen.";
+    ls->errorDirDiskSubdirs     = "%d map(pen) zijn weggelaten omdat het gekozen formaat ze niet kan bevatten.";
+    ls->errorDirDiskUnreadable  = "Het invoeren van de map is mislukt omdat deze niet kon worden gelezen:\n%s";
+    ls->dlgDirWriteSummary      = "De MSX heeft de inhoud van deze map gewijzigd:\n%s\n\nNieuwe bestanden: %d\nGewijzigde bestanden: %d\nVerwijderde bestanden (verplaatst naar .blueMSX-trash): %d\nOvergeslagen: %d\n\nDe wijzigingen naar de map schrijven?";
+    ls->dlgDirWriteMass         = "De meeste bestanden zijn verwijderd. Mogelijk heeft de MSX het volume geformatteerd.";
+    ls->dlgDirWriteApply        = "Schrijven";
+    ls->dlgDirWriteDiscard      = "Verwerpen";
+    ls->dlgDirWriteDiscardSure  = "De wijzigingen die de MSX heeft aangebracht echt verwerpen? Ze kunnen niet worden hersteld.";
+    ls->errorDirWriteInvalid    = "De wijzigingen die de MSX in deze map heeft aangebracht, kunnen niet worden geschreven, omdat het bestandssysteem op de schijf (de FAT en de mappen) half geschreven of beschadigd is:\n%s\n\nAls de MSX mogelijk nog naar de schijf aan het schrijven was, kies dan Nee, wacht tot hij klaar is (de MSX-DOS-prompt of de Ok van BASIC) en probeer het opnieuw. Als de MSX de schijf heeft geformatteerd of opnieuw gepartitioneerd, kunnen de wijzigingen niet worden geschreven.\n\nDe wijzigingen verwerpen?";
+    ls->errorDirWriteFailed     = "%d item(s) konden niet worden teruggeschreven. log.txt in deze map somt ze op:\n%s";
+    ls->errorDirWriteHost       = "De wijzigingen van de MSX konden niet naar deze map worden geschreven:\n%s\n\nDe map is mogelijk alleen-lezen of de schijf is vol.\n\nDe wijzigingen verwerpen?";
+    ls->infoDirWriteState       = "De MSX draait vanuit een opgeslagen status. Wijzigingen in deze map worden pas teruggeschreven nadat de MSX is uit- en weer ingeschakeld.";
+    ls->infoDirMemory           = "Het geheugen voor de wijzigingen in de map is nu meer dan %d MB.";
     ls->errorNoHelp             = "Het blueMSX+ helpbestand is niet gevonden.";
     ls->errorStartEmu           = "Het is niet gelukt om de MSX emulator te starten.";
     ls->errorStartEmuNoMachine           = "Er is geen MSX-machine ingesteld voor emulatie. Kies er een bij Opties -> Emulatie -> MSX-familie.";
@@ -95,7 +109,10 @@ void langInitDutch(LanguageStrings* ls)
     ls->errorPortableReadonly   = "Het draagbare apparaat is Alleen-Lezen";
     ls->errorMidiOpenFailed     = "Kon MIDI-apparaat '%s' niet openen. Mogelijk in gebruik door andere toepassing.";
     ls->infoTitle               = "blueMSX+ Info";
-    ls->infoGameReaderRedirect  = "blueMSX+ ondersteunt de MSX Game Reader niet direct (de originele XP-driver van ASCII werkt niet meer op moderne Windows).\n\nWilt u in plaats daarvan de MSX Game Reader - Web Dumper (van Kunihiko Ohnaka) in uw browser openen?";
+    ls->infoGameReaderNoDll     = "MSXGr.dll is nodig om de MSX Game Reader te gebruiken.\nDe originele DLL van ASCII werkt niet op het huidige Windows; installeer MSXGr-WinUSB (van Sebbeug) of gebruik de MSX Game Reader - Web Dumper (van Kunihiko Ohnaka).";
+    ls->infoGameReaderNoDevice  = "Geen MSX Game Reader gevonden voor cartridgesleuf %d. Controleer of deze goed is aangesloten.";
+    ls->dlgGameReaderGetDll     = "MSXGr-WinUSB downloaden";
+    ls->dlgGameReaderWebDumper  = "Web Dumper openen";
     ls->infoColorDepth          = "blueMSX+ werkt het best met 16 of 32 bits kleurdiepte.";
     ls->errorKeyboardThemeMissing = "Kon het thema van de Toetsenbord-editor niet vinden.";
     ls->errorMixerThemeMissing    = "Kon het thema van de Mixer niet vinden.";
@@ -181,6 +198,7 @@ void langInitDutch(LanguageStrings* ls)
     ls->menuCartFlashCart       = "Flash-cartridges";
 
     ls->menuDiskInsertNew       = "Voer Nieuw Diskettebestand in";
+    ls->menuDiskInsertPhysical  = "Voer Fysiek Station in";
     ls->menuDiskInsertCdrom     = "Voer CD-ROM in";
     ls->menuDiskDirInsert       = "Voer Map in";
     ls->menuDiskAutoStart       = "Herstart na invoeren";
@@ -332,6 +350,18 @@ void langInitDutch(LanguageStrings* ls)
     ls->dlgTabType              = "Type";
     ls->dlgTabFilename          = "Bestandsnaam";
     ls->dlgZipReset             = "Herstart na invoeren";
+
+    ls->dlgPhysDriveTitle       = "blueMSX+ - Fysiek station";
+    ls->dlgPhysDriveChoose      = "Kies het verwisselbare station dat u wilt invoeren:";
+    ls->dlgPhysDriveNone        = "Er is geen verwisselbaar station gevonden.";
+    ls->dlgPhysDriveWarning     = "Voor directe toegang tot een fysiek station zijn beheerdersrechten nodig.\n\n"
+                                  "Windows heeft geen toegang tot het station zolang het in blueMSX+ is ingevoerd. Bewerkingen vanaf de MSX, maar ook een fout in de emulator of een crash tijdens het schrijven, kunnen het bestandssysteem en de gegevens op het station beschadigen of wissen. Maak eerst een back-up van belangrijke gegevens.\n\n"
+                                  "Koppel het station niet los voordat u het hebt uitgeworpen.";
+    ls->dlgPhysDriveNoWarning   = "Deze waarschuwing niet meer tonen";
+    ls->dlgPhysDriveContinue    = "Doorgaan";
+    ls->dlgPhysDriveInUse       = "Het station is in gebruik door Windows of een ander programma. Sluit de bestanden en vensters die het gebruiken en probeer het opnieuw.";
+    ls->dlgPhysDriveFailed      = "Het station kon niet worden geopend.";
+    ls->infoRewindNoMedium      = "Terugspoelen is niet beschikbaar zolang er een fysiek station is ingevoerd of zolang wijzigingen die de MSX in een map heeft aangebracht nog niet naar die map zijn geschreven.";
 
     ls->dlgAboutTitle           = "Over blueMSX+";
 

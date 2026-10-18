@@ -84,7 +84,21 @@ void langInitFrench(LanguageStrings* ls)
     ls->errorCreateDiskImage    = "Impossible de créer le fichier image disque.";
     ls->errorCreateTapeImage    = "Impossible de créer le fichier image cassette.";
     ls->errorNoCasInZip         = "Il n'y a pas de fichier .cas dans votre archive zip";
-    ls->errorDirAsDskOverflow   = "%d fichier(s) (%d KB au total) ne tiennent pas dans l'image disque de 720 KB et ont été ignorés.";
+    ls->errorUnknownFileType    = "Impossible d'ouvrir le fichier : type de fichier inconnu.";
+    ls->errorDirDiskTooLarge    = "%d fichier(s) ne tenaient pas sur le disque et ont été omis.";
+    ls->errorDirDiskOnline      = "%d fichier(s) disponibles uniquement en ligne ont été omis. Rendez-les disponibles sur cet appareil pour les inclure.";
+    ls->errorDirDiskSubdirs     = "%d répertoire(s) ont été omis car le format choisi ne peut pas les contenir.";
+    ls->errorDirDiskUnreadable  = "Impossible d'insérer le répertoire, car il n'a pas pu être lu :\n%s";
+    ls->dlgDirWriteSummary      = "Le MSX a modifié le contenu de ce répertoire :\n%s\n\nNouveaux fichiers : %d\nFichiers modifiés : %d\nFichiers supprimés (déplacés dans .blueMSX-trash) : %d\nIgnorés : %d\n\nÉcrire les modifications dans le répertoire ?";
+    ls->dlgDirWriteMass         = "La plupart des fichiers ont été supprimés. Le MSX a peut-être formaté le volume.";
+    ls->dlgDirWriteApply        = "Écrire";
+    ls->dlgDirWriteDiscard      = "Abandonner";
+    ls->dlgDirWriteDiscardSure  = "Voulez-vous vraiment abandonner les modifications faites par le MSX ? Elles ne pourront pas être restaurées.";
+    ls->errorDirWriteInvalid    = "Les modifications apportées par le MSX à ce répertoire ne peuvent pas être écrites, car le système de fichiers du disque (sa FAT et ses répertoires) est à moitié écrit ou endommagé :\n%s\n\nS'il est possible que le MSX ait encore été en train d'écrire sur le disque, choisissez Non, attendez qu'il ait terminé (l'invite MSX-DOS ou le Ok du BASIC) et réessayez. Si le MSX a formaté ou repartitionné le disque, les modifications ne peuvent pas être écrites.\n\nAbandonner les modifications ?";
+    ls->errorDirWriteFailed     = "%d élément(s) n'ont pas pu être écrits dans le répertoire. Le fichier log.txt du répertoire suivant en donne la liste :\n%s";
+    ls->errorDirWriteHost       = "Les modifications faites par le MSX n'ont pas pu être écrites dans ce répertoire :\n%s\n\nLe répertoire est peut-être en lecture seule ou le disque est plein.\n\nAbandonner les modifications ?";
+    ls->infoDirWriteState       = "Le MSX fonctionne à partir d'un état enregistré. Les modifications de ce répertoire ne seront pas écrites tant que le MSX n'aura pas été éteint puis rallumé.";
+    ls->infoDirMemory           = "La mémoire nécessaire pour conserver les modifications du répertoire dépasse maintenant %d Mo.";
     ls->errorNoHelp             = "Impossible de trouver le fichier d'aide.";
     ls->errorStartEmu           = "Erreur lors du lancement de l'émulateur.";
     ls->errorStartEmuNoMachine           = "Aucune machine MSX n'est configurée pour l'émulation. Choisissez-en une dans Options -> Emulation -> Type de MSX.";
@@ -95,7 +109,10 @@ void langInitFrench(LanguageStrings* ls)
     ls->errorPortableReadonly   = "Ce dispositif portable est uniquement en mode écriture";        
     ls->errorMidiOpenFailed     = "Impossible d'ouvrir le périphérique MIDI '%s'. Une autre application l'utilise peut-être.";
     ls->infoTitle               = "Info blueMSX+";
-    ls->infoGameReaderRedirect  = "blueMSX+ ne prend pas directement en charge le MSX Game Reader (le pilote d'origine d'ASCII de l'ère XP ne fonctionne plus sous Windows moderne).\n\nOuvrir le MSX Game Reader - Web Dumper (par Kunihiko Ohnaka) dans votre navigateur à la place?";
+    ls->infoGameReaderNoDll     = "MSXGr.dll est nécessaire pour utiliser le MSX Game Reader.\nLa DLL d'origine d'ASCII ne fonctionne plus sous Windows actuel : installez MSXGr-WinUSB (par Sebbeug) ou utilisez le MSX Game Reader - Web Dumper (par Kunihiko Ohnaka).";
+    ls->infoGameReaderNoDevice  = "Aucun MSX Game Reader trouvé pour le port cartouche %d. Vérifiez qu'il est correctement connecté.";
+    ls->dlgGameReaderGetDll     = "Page de téléchargement MSXGr-WinUSB";
+    ls->dlgGameReaderWebDumper  = "Ouvrir le Web Dumper";
     ls->infoColorDepth          = "blueMSX+ fonctionne mieux avec une profondeur de couleur 16 ou 32 bits.";
     ls->errorKeyboardThemeMissing = "Impossible de trouver le thème de l'éditeur de clavier.";
     ls->errorMixerThemeMissing    = "Impossible de trouver le thème du mixeur.";
@@ -181,6 +198,7 @@ void langInitFrench(LanguageStrings* ls)
     ls->menuCartFlashCart       = "Cartouches Flash";
 
     ls->menuDiskInsertNew       = "Insérer un nouveau disque";              
+    ls->menuDiskInsertPhysical  = "Insérer un lecteur physique";
     ls->menuDiskInsertCdrom     = "Insérer CD-Rom";       // New in 2.7
     ls->menuDiskDirInsert       = "Insérer répertoire"; 
     ls->menuDiskAutoStart       = "Reset après insertion";
@@ -332,6 +350,18 @@ void langInitFrench(LanguageStrings* ls)
     ls->dlgTabType              = "Type";
     ls->dlgTabFilename          = "Nom du fichier";
     ls->dlgZipReset             = "Reset après l'insertion";
+
+    ls->dlgPhysDriveTitle       = "blueMSX+ - Lecteur physique";
+    ls->dlgPhysDriveChoose      = "Choisissez le lecteur amovible à insérer :";
+    ls->dlgPhysDriveNone        = "Aucun lecteur amovible n'a été trouvé.";
+    ls->dlgPhysDriveWarning     = "L'accès direct à un lecteur physique nécessite les droits d'administrateur.\n\n"
+                                  "Windows ne peut pas accéder au lecteur tant qu'il est inséré dans blueMSX+. Les opérations effectuées depuis le MSX, mais aussi un bogue de l'émulateur ou un plantage pendant une écriture, peuvent endommager ou effacer le système de fichiers et les données du lecteur. Sauvegardez d'abord les données importantes.\n\n"
+                                  "Ne débranchez pas le lecteur avant de l'avoir éjecté.";
+    ls->dlgPhysDriveNoWarning   = "Ne plus afficher cet avertissement";
+    ls->dlgPhysDriveContinue    = "Continuer";
+    ls->dlgPhysDriveInUse       = "Le lecteur est utilisé par Windows ou par un autre programme. Fermez les fichiers et les fenêtres qui l'utilisent, puis réessayez.";
+    ls->dlgPhysDriveFailed      = "Impossible d'ouvrir le lecteur.";
+    ls->infoRewindNoMedium      = "Le rembobinage n'est pas disponible tant qu'un lecteur physique est inséré, ou tant que les modifications faites par le MSX dans un répertoire n'y sont pas encore écrites.";
 
     ls->dlgAboutTitle           = "blueMSX+ - A propos";
 

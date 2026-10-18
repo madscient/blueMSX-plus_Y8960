@@ -84,7 +84,21 @@ void langInitEnglish(LanguageStrings* ls)
     ls->errorCreateDiskImage    = "Could not create the disk image file.";
     ls->errorCreateTapeImage    = "Could not create the tape image file.";
     ls->errorNoCasInZip         = "Could not locate a .CAS file in the ZIP archive.";
-    ls->errorDirAsDskOverflow   = "%d file(s) (%d KB total) did not fit in the 720 KB disk image and were skipped.";
+    ls->errorUnknownFileType    = "Cannot open the file: its type is unknown.";
+    ls->errorDirDiskTooLarge    = "%d file(s) did not fit on the disk and were left out.";
+    ls->errorDirDiskOnline      = "%d online-only file(s) were left out. Make them available on this device to include them.";
+    ls->errorDirDiskSubdirs     = "Subdirectories left out because the chosen format cannot hold them: %d.";
+    ls->errorDirDiskUnreadable  = "Failed to insert the directory because it could not be read:\n%s";
+    ls->dlgDirWriteSummary      = "The MSX changed the contents of this directory:\n%s\n\nNew files: %d\nChanged files: %d\nDeleted files (moved to .blueMSX-trash): %d\nSkipped: %d\n\nWrite the changes to the directory?";
+    ls->dlgDirWriteMass         = "Most of the files were deleted. The MSX may have formatted the volume.";
+    ls->dlgDirWriteApply        = "Write";
+    ls->dlgDirWriteDiscard      = "Discard";
+    ls->dlgDirWriteDiscardSure  = "Really discard the changes the MSX made? They cannot be restored.";
+    ls->errorDirWriteInvalid    = "The changes the MSX made to this directory cannot be written, because the file system on the disk (its FAT and directories) is half-written or damaged:\n%s\n\nIf the MSX may still have been writing to the disk, choose No, wait until it has finished (the MSX-DOS prompt or the BASIC Ok) and try again. If the MSX formatted or repartitioned the disk, the changes cannot be written.\n\nDiscard the changes?";
+    ls->errorDirWriteFailed     = "%d item(s) could not be written back. log.txt in the following directory lists them:\n%s";
+    ls->errorDirWriteHost       = "The changes the MSX made could not be written to this directory:\n%s\n\nThe directory may be read-only, or the disk may be full.\n\nDiscard the changes?";
+    ls->infoDirWriteState       = "The MSX is running from a saved state. Changes to this directory will not be written back until the MSX has been powered off and on again.";
+    ls->infoDirMemory           = "The memory needed to hold the changes to the directory now exceeds %d MB.";
     ls->errorNoHelp             = "Could not locate the blueMSX+ help file.";
     ls->errorStartEmu           = "Failed to Start MSX emulator.";
     ls->errorStartEmuNoMachine           = "No machine has been set for emulation. Pick one from Options -> Emulation -> MSX machine.";
@@ -95,7 +109,10 @@ void langInitEnglish(LanguageStrings* ls)
     ls->errorPortableReadonly   = "Portable device is readonly";
     ls->errorMidiOpenFailed     = "Failed to open MIDI device '%s'. It may be in use by another application.";
     ls->infoTitle                  = "blueMSX+ Info";
-    ls->infoGameReaderRedirect     = "blueMSX+ does not directly support the MSX Game Reader (the original ASCII XP-era driver no longer works on modern Windows).\n\nOpen the MSX Game Reader - Web Dumper (by Kunihiko Ohnaka) in your browser instead?";
+    ls->infoGameReaderNoDll        = "The MSXGr.dll library is required to use the MSX Game Reader.\nThe original ASCII DLL does not work on current Windows, so please install MSXGr-WinUSB (by Sebbeug), or use the MSX Game Reader - Web Dumper (by Kunihiko Ohnaka).";
+    ls->infoGameReaderNoDevice     = "No MSX Game Reader was found for cartridge slot %d. Please check that it is connected properly.";
+    ls->dlgGameReaderGetDll        = "Open the MSXGr-WinUSB download page";
+    ls->dlgGameReaderWebDumper     = "Open the Web Dumper";
     ls->infoColorDepth             = "blueMSX+ works best in 16 or 32 bit color depth.";
     ls->errorKeyboardThemeMissing  = "Could not find the Keyboard Editor theme.";
     ls->errorMixerThemeMissing     = "Could not find the Mixer theme.";
@@ -181,6 +198,7 @@ void langInitEnglish(LanguageStrings* ls)
     ls->menuCartFlashCart       = "Flash Cartridges";
 
     ls->menuDiskInsertNew       = "Insert New Disk Image";
+    ls->menuDiskInsertPhysical  = "Insert Physical Drive";
     ls->menuDiskInsertCdrom     = "Insert CD-ROM";       // New in 2.7
     ls->menuDiskDirInsert       = "Insert Directory";
     ls->menuDiskAutoStart       = "Reset After Insert";
@@ -332,6 +350,20 @@ void langInitEnglish(LanguageStrings* ls)
     ls->dlgTabType              = "Type";
     ls->dlgTabFilename          = "Filename";
     ls->dlgZipReset             = "Reset after insert";
+
+    ls->dlgPhysDriveTitle       = "blueMSX+ - Physical drive";
+    ls->dlgPhysDriveChoose      = "Choose a removable drive to insert:";
+    ls->dlgPhysDriveNone        = "No removable drive was found.";
+    ls->dlgPhysDriveWarning     = "Administrator rights are required to access a physical drive directly.\n\n"
+                                  "Windows cannot access the drive while it is inserted in blueMSX+. Operations on the MSX side, "
+                                  "as well as a bug in the emulator or a crash while writing, can corrupt or erase "
+                                  "the file system and data on the drive. Back up important data first.\n\n"
+                                  "Do not unplug the drive before ejecting it.";
+    ls->dlgPhysDriveNoWarning   = "Do not show this warning again";
+    ls->dlgPhysDriveContinue    = "Continue";
+    ls->dlgPhysDriveInUse       = "The drive is in use by Windows or another program. Close the files and windows that use it and try again.";
+    ls->dlgPhysDriveFailed      = "The drive could not be opened.";
+    ls->infoRewindNoMedium      = "Rewind is not available while a physical drive is inserted, or while changes the MSX made to a directory are not yet written to it.";
 
     ls->dlgAboutTitle           = "blueMSX+ - About";
 

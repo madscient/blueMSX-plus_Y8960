@@ -115,6 +115,7 @@ SOURCE_FILES += Win32directXSound.c
 SOURCE_FILES += Win32Eth.c
 SOURCE_FILES += Win32Event.c 
 SOURCE_FILES += Win32file.c 
+SOURCE_FILES += Win32PhysicalDisk.c
 SOURCE_FILES += Win32FileTypes.c
 SOURCE_FILES += Win32Glob.c
 SOURCE_FILES += Win32Help.c 
@@ -308,7 +309,8 @@ SOURCE_FILES += R800Debug.c
 SOURCE_FILES += R800SaveState.c 
 
 SOURCE_FILES += Casette.c 
-SOURCE_FILES += DirAsDisk.c
+SOURCE_FILES += DirDisk.c
+SOURCE_FILES += DirWriteBack.c
 SOURCE_FILES += Disk.c
 SOURCE_FILES += FdcAudio.c
 SOURCE_FILES += ft245.c

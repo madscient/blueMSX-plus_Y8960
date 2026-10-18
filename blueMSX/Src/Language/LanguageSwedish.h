@@ -84,7 +84,21 @@ void langInitSwedish(LanguageStrings* ls)
     ls->errorCreateDiskImage    = "Kunde inte skapa diskavbildsfilen.";
     ls->errorCreateTapeImage    = "Kunde inte skapa kassettfilen.";
     ls->errorNoCasInZip         = "Kunde inte hitta en .cas fil i zip arkivet.";
-    ls->errorDirAsDskOverflow   = "%d fil(er) (%d KB totalt) får inte plats i 720 KB-diskavbilden och hoppades över.";
+    ls->errorUnknownFileType    = "Kan inte öppna filen: okänd filtyp.";
+    ls->errorDirDiskTooLarge    = "%d fil(er) fick inte plats på disken och utelämnades.";
+    ls->errorDirDiskOnline      = "%d fil(er) som bara finns online utelämnades. Gör dem tillgängliga på den här enheten för att ta med dem.";
+    ls->errorDirDiskSubdirs     = "%d mapp(ar) utelämnades eftersom det valda formatet inte kan innehålla dem.";
+    ls->errorDirDiskUnreadable  = "Det gick inte att sätta in mappen eftersom den inte kunde läsas:\n%s";
+    ls->dlgDirWriteSummary      = "MSX har ändrat innehållet i den här mappen:\n%s\n\nNya filer: %d\nÄndrade filer: %d\nBorttagna filer (flyttade till .blueMSX-trash): %d\nÖverhoppade: %d\n\nVill du skriva ändringarna till mappen?";
+    ls->dlgDirWriteMass         = "De flesta filerna har tagits bort. MSX kan ha formaterat volymen.";
+    ls->dlgDirWriteApply        = "Skriv";
+    ls->dlgDirWriteDiscard      = "Förkasta";
+    ls->dlgDirWriteDiscardSure  = "Vill du verkligen förkasta ändringarna som MSX har gjort? De kan inte återställas.";
+    ls->errorDirWriteInvalid    = "De ändringar MSX har gjort i den här mappen kan inte skrivas, eftersom filsystemet på disken (FAT och mappar) är ofullständigt skrivet eller skadat:\n%s\n\nOm MSX fortfarande kan ha skrivit till disken väljer du Nej, väntar tills den är klar (MSX-DOS-prompten eller Ok i BASIC) och försöker igen. Om MSX har formaterat eller partitionerat om disken kan ändringarna inte skrivas.\n\nVill du förkasta ändringarna?";
+    ls->errorDirWriteFailed     = "%d objekt kunde inte skrivas tillbaka. log.txt i den här mappen listar dem:\n%s";
+    ls->errorDirWriteHost       = "De ändringar MSX har gjort kunde inte skrivas till den här mappen:\n%s\n\nMappen kan vara skrivskyddad eller disken full.\n\nVill du förkasta ändringarna?";
+    ls->infoDirWriteState       = "MSX körs från ett sparat tillstånd. Ändringar i den här mappen skrivs inte tillbaka förrän MSX har stängts av och slagits på igen.";
+    ls->infoDirMemory           = "Minnet som krävs för ändringarna i mappen överstiger nu %d MB.";
     ls->errorNoHelp             = "Kunde inte hitta hjälpfilen.";
     ls->errorStartEmu           = "Misslyckades att starta emulatorn.";
     ls->errorStartEmuNoMachine           = "Ingen MSX-maskin är inställd för emulering. Välj en under Egenskaper -> Emulering -> MSX familj.";
@@ -95,7 +109,10 @@ void langInitSwedish(LanguageStrings* ls)
     ls->errorPortableReadonly   = "Flyttbar enhet är inte skrivbar";
     ls->errorMidiOpenFailed     = "Det gick inte att öppna MIDI-enheten '%s'. Kan användas av annan applikation.";
     ls->infoTitle               = "blueMSX+ Info";
-    ls->infoGameReaderRedirect  = "blueMSX+ stöder inte MSX Game Reader direkt (den ursprungliga XP-drivrutinen från ASCII fungerar inte längre på moderna Windows).\n\nÖppna MSX Game Reader - Web Dumper (av Kunihiko Ohnaka) i webbläsaren istället?";
+    ls->infoGameReaderNoDll     = "MSXGr.dll krävs för att använda MSX Game Reader.\nASCII:s original-DLL fungerar inte på nuvarande Windows, så installera MSXGr-WinUSB (av Sebbeug) eller använd MSX Game Reader - Web Dumper (av Kunihiko Ohnaka).";
+    ls->infoGameReaderNoDevice  = "Ingen MSX Game Reader hittades för kassettplats %d. Kontrollera att den är korrekt ansluten.";
+    ls->dlgGameReaderGetDll     = "Öppna hämtningssidan för MSXGr-WinUSB";
+    ls->dlgGameReaderWebDumper  = "Öppna Web Dumper";
     ls->infoColorDepth          = "blueMSX+ fungerar bäst med 16 eller 32 bitars färgdjup.";
     ls->errorKeyboardThemeMissing = "Tangentbordsredigerarens tema kunde inte hittas.";
     ls->errorMixerThemeMissing    = "Mixerns tema kunde inte hittas.";
@@ -181,6 +198,7 @@ void langInitSwedish(LanguageStrings* ls)
     ls->menuCartFlashCart       = "Flash-kassetter";
 
     ls->menuDiskInsertNew       = "Sätt in ny diskett fil";
+    ls->menuDiskInsertPhysical  = "Sätt in fysisk enhet";
     ls->menuDiskInsertCdrom     = "Sätt in CD-Rom";      // New in 2.7
     ls->menuDiskDirInsert       = "Sätt in mapp";
     ls->menuDiskAutoStart       = "Starta om efter insättning/urdragning";
@@ -333,6 +351,18 @@ void langInitSwedish(LanguageStrings* ls)
     ls->dlgTabType              = "Typ";
     ls->dlgTabFilename          = "Filnamn";
     ls->dlgZipReset             = "Starta om vid insättning";
+
+    ls->dlgPhysDriveTitle       = "blueMSX+ - Fysisk enhet";
+    ls->dlgPhysDriveChoose      = "Välj den flyttbara enhet som ska sättas in:";
+    ls->dlgPhysDriveNone        = "Ingen flyttbar enhet hittades.";
+    ls->dlgPhysDriveWarning     = "Administratörsrättigheter krävs för direkt åtkomst till en fysisk enhet.\n\n"
+                                  "Windows kan inte komma åt enheten medan den är insatt i blueMSX+. Åtgärder från MSX-sidan, liksom ett fel i emulatorn eller en krasch under skrivning, kan skada eller radera filsystemet och data på enheten. Säkerhetskopiera viktiga data först.\n\n"
+                                  "Koppla inte bort enheten från datorn innan du har tagit ur den i emulatorn.";
+    ls->dlgPhysDriveNoWarning   = "Visa inte den här varningen igen";
+    ls->dlgPhysDriveContinue    = "Fortsätt";
+    ls->dlgPhysDriveInUse       = "Enheten används av Windows eller ett annat program. Stäng de filer och fönster som använder den och försök igen.";
+    ls->dlgPhysDriveFailed      = "Enheten kunde inte öppnas.";
+    ls->infoRewindNoMedium      = "Tillbakaspolning är inte tillgänglig medan en fysisk enhet är insatt, eller medan ändringar som MSX har gjort i en mapp ännu inte har skrivits till den.";
     
     ls->dlgAboutTitle           = "blueMSX+ - Information";
 

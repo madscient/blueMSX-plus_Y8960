@@ -210,8 +210,11 @@ enum  {
     ROM_NEO16       = 177,           /* NEO-16 mapper */
     ROM_YAMANOOTO   = 178,           /* Yamanooto */
     ROM_FLASHROMSCC = 179,           /* Flash-ROM SCC (Developer Edition) */
-    /* 180-187 are taken by a fork (madscient/blueMSX-plus_Y8960) whose
-    ** released machine configurations already store them. */
+    ROM_ROOKIEDRIVE = 180,           /* Rookie Drive NX */
+    ROM_GFX9000     = 181,           /* GFX9000 (V9990) */
+    ROM_VIDEO9000   = 182,           /* Video9000 (V9990 with superimpose) */
+    /* Released builds that carry Makoto already store 188 in machine
+    ** configurations, so it keeps that number. */
     ROM_MAKOTO      = 188,           /* Makoto YM2608 (OPNA) cartridge */
     ROM_MAXROMID    = 188
 };

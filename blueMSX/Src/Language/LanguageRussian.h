@@ -84,7 +84,21 @@ void langInitRussian(LanguageStrings* ls)
     ls->errorCreateDiskImage    = "Не удалось создать файл образа диска.";
     ls->errorCreateTapeImage    = "Не удалось создать файл образа кассеты.";
     ls->errorNoCasInZip         = "Не нашлось .cas файла в zip архиве.";
-    ls->errorDirAsDskOverflow   = "%d файл(ов) (всего %d КБ) не поместились в образ диска 720 КБ и были пропущены.";
+    ls->errorUnknownFileType    = "Не удаётся открыть файл: неизвестный тип файла.";
+    ls->errorDirDiskTooLarge    = "Файлов, которые не поместились на диск и были пропущены: %d.";
+    ls->errorDirDiskOnline      = "Пропущено файлов, доступных только в сети: %d. Чтобы включить их, сделайте их доступными на этом устройстве.";
+    ls->errorDirDiskSubdirs     = "Пропущено папок, которые не поддерживает выбранный формат: %d.";
+    ls->errorDirDiskUnreadable  = "Не удалось вставить папку, так как её невозможно прочитать:\n%s";
+    ls->dlgDirWriteSummary      = "MSX изменил содержимое этой папки:\n%s\n\nНовых файлов: %d\nИзменённых файлов: %d\nУдалённых файлов (перемещены в .blueMSX-trash): %d\nПропущено: %d\n\nЗаписать изменения в папку?";
+    ls->dlgDirWriteMass         = "Большинство файлов удалено. Возможно, MSX отформатировал том.";
+    ls->dlgDirWriteApply        = "Записать";
+    ls->dlgDirWriteDiscard      = "Отбросить";
+    ls->dlgDirWriteDiscardSure  = "Действительно отбросить изменения, сделанные MSX? Их нельзя будет восстановить.";
+    ls->errorDirWriteInvalid    = "Изменения, сделанные MSX в этой папке, невозможно записать, так как файловая система на диске (FAT и папки) записана не до конца или повреждена:\n%s\n\nЕсли запись MSX на диск, возможно, ещё не завершилась, выберите «Нет», дождитесь её окончания (появления приглашения MSX-DOS или Ok в BASIC) и повторите попытку. Если на MSX диск был отформатирован или заново разбит на разделы, изменения записать невозможно.\n\nОтбросить изменения?";
+    ls->errorDirWriteFailed     = "Не удалось записать элементов: %d. Они перечислены в файле log.txt в этой папке:\n%s";
+    ls->errorDirWriteHost       = "Изменения, сделанные MSX, не удалось записать в эту папку:\n%s\n\nВозможно, папка доступна только для чтения или диск заполнен.\n\nОтбросить изменения?";
+    ls->infoDirWriteState       = "MSX работает из сохранённого состояния. Изменения в этой папке не будут записываться, пока MSX не будет выключен и включён снова.";
+    ls->infoDirMemory           = "Память для хранения изменений в папке превысила %d МБ.";
     ls->errorNoHelp             = "Не нашлось файла помощи blueMSX+.";
     ls->errorStartEmu           = "Не удалось начать эмуляцию.";
     ls->errorStartEmuNoMachine           = "Не выбрана MSX-машина для эмуляции. Выберите её в разделе Опции -> Эмуляция -> Машина MSX.";
@@ -95,7 +109,10 @@ void langInitRussian(LanguageStrings* ls)
     ls->errorPortableReadonly   = "Портативное устройство только для чтения";
     ls->errorMidiOpenFailed     = "Не удалось открыть MIDI-устройство '%s'. Возможно, оно используется другим приложением.";
     ls->infoTitle               = "Информация blueMSX+";
-    ls->infoGameReaderRedirect  = "blueMSX+ не поддерживает MSX Game Reader напрямую (оригинальный драйвер ASCII эпохи XP больше не работает на современном Windows).\n\nОткрыть MSX Game Reader - Web Dumper (автор Kunihiko Ohnaka) в браузере?";
+    ls->infoGameReaderNoDll     = "Для работы с MSX Game Reader нужен MSXGr.dll.\nОригинальная библиотека ASCII не работает в современном Windows, поэтому установите MSXGr-WinUSB (автор Sebbeug) или воспользуйтесь MSX Game Reader - Web Dumper (автор Kunihiko Ohnaka).";
+    ls->infoGameReaderNoDevice  = "Для картриджного слота %d не найден MSX Game Reader. Проверьте, правильно ли он подключен.";
+    ls->dlgGameReaderGetDll     = "Открыть загрузку MSXGr-WinUSB";
+    ls->dlgGameReaderWebDumper  = "Открыть Web Dumper";
     ls->infoColorDepth          = "blueMSX+ лучше всего работает при глубине цвета 16 или 32 бита.";
     ls->errorKeyboardThemeMissing = "Не удалось найти тему редактора клавиатуры.";
     ls->errorMixerThemeMissing    = "Не удалось найти тему микшера.";
@@ -181,6 +198,7 @@ void langInitRussian(LanguageStrings* ls)
     ls->menuCartFlashCart       = "Flash-картриджи";
 
     ls->menuDiskInsertNew       = "Вставить новый образ дискеты";
+    ls->menuDiskInsertPhysical  = "Вставить физический диск";
     ls->menuDiskInsertCdrom     = "Вставить CD-Rom диск";       // New in 2.7
     ls->menuDiskDirInsert       = "Вставить папку";
     ls->menuDiskAutoStart       = "Сбросить после загрузки дискеты";
@@ -332,6 +350,18 @@ void langInitRussian(LanguageStrings* ls)
     ls->dlgTabType              = "Тип";
     ls->dlgTabFilename          = "Название";
     ls->dlgZipReset             = "Сброс после загрузки";
+
+    ls->dlgPhysDriveTitle       = "blueMSX+ - Физический диск";
+    ls->dlgPhysDriveChoose      = "Выберите съёмный диск, который нужно вставить:";
+    ls->dlgPhysDriveNone        = "Съёмные диски не найдены.";
+    ls->dlgPhysDriveWarning     = "Для прямого доступа к физическому диску требуются права администратора.\n\n"
+                                  "Пока диск вставлен в blueMSX+, Windows не имеет к нему доступа. Действия со стороны MSX, а также ошибка эмулятора или аварийное завершение во время записи могут повредить или стереть файловую систему и данные на диске. Заранее сделайте резервную копию важных данных.\n\n"
+                                  "Не отсоединяйте диск от компьютера, пока не уберёте его в эмуляторе.";
+    ls->dlgPhysDriveNoWarning   = "Больше не показывать это предупреждение";
+    ls->dlgPhysDriveContinue    = "Продолжить";
+    ls->dlgPhysDriveInUse       = "Диск используется Windows или другой программой. Закройте файлы и окна, которые его используют, и повторите попытку.";
+    ls->dlgPhysDriveFailed      = "Не удалось открыть диск.";
+    ls->infoRewindNoMedium      = "Перемотка назад недоступна, пока вставлен физический диск или пока изменения, сделанные MSX в папке, ещё не записаны в неё.";
 
     ls->dlgAboutTitle           = "blueMSX+ - О blueMSX+";
 

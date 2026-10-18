@@ -51,7 +51,9 @@
 #include "VideoRender.h"
 #include "CommandLine.h"
 #include "RomTypeList.h"
-#include "Language.h"   
+#include "GameReader.h"
+#include "ArchDialog.h"
+#include "Language.h"
 #include "SaveState.h"
 #include "resource.h"
 #include "Casette.h"
@@ -91,6 +93,7 @@
 #include "Win32machineConfig.h"
 #include "Win32ShortcutsConfig.h"
 #include "Win32Cdrom.h"
+#include "Win32PhysicalDisk.h"
 #include "Actions.h"
 #include "LaunchFile.h"
 #include "TokenExtract.h"
@@ -3233,10 +3236,11 @@ static LRESULT CALLBACK wndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lPar
             ** the INVALID_FILE_ATTRIBUTES it returns has the directory bit. */
             fa = GetFileAttributesU(fname);
             if (fa != INVALID_FILE_ATTRIBUTES && (fa & FILE_ATTRIBUTE_DIRECTORY)) {
-                insertDiskette(pProperties, 0, fname, NULL, 0);
+                insertDisketteRecalled(pProperties, 0, fname);
             }
-            else {
-                tryLaunchUnknownFile(pProperties, fname, 0);
+            else if (tryLaunchUnknownFile(pProperties, fname, 0) == 0 &&
+                     !launchFileIsSupported(fname)) {
+                archShowUnknownFileTypeDialog(fname);
             }
         }
         return 0;
@@ -3300,6 +3304,12 @@ static LRESULT CALLBACK wndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 
             /* Only WM_COPYDATA posts this, with a name it allocated. */
             if (fileName == NULL) {
+                return 0;
+            }
+            emulatorSuspend();
+            if (!actionDirWriteBack(-1)) {
+                emulatorResume();
+                free(fileName);
                 return 0;
             }
 
@@ -3900,8 +3910,27 @@ static LRESULT CALLBACK wndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lPar
         return 0;
         
     case WM_CLOSE:
+        /* Asked here, where staying open is still possible. */
+        emulatorSuspend();
+        if (!actionDirWriteBack(-1)) {
+            emulatorResume();
+            return 0;
+        }
+        emulatorStop();
         DestroyWindow(hwnd);
         return 0;
+
+    case WM_QUERYENDSESSION:
+        if (actionDirAnyPending()) {
+            emulatorSuspend();
+            if (!actionDirWriteBack(-1)) {
+                emulatorResume();
+                return FALSE;
+            }
+            /* The directories are written and let go; the MSX must not go on with them. */
+            emulatorStop();
+        }
+        return TRUE;
 
     case WM_DESTROY:
         
@@ -3913,6 +3942,7 @@ static LRESULT CALLBACK wndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lPar
         }
         
         emulatorStop();
+        physicalDiskEjectAll();
         toolUnLoadAll();
         if (pProperties->video.windowSize != P_VIDEO_SIZEFULLSCREEN) {
             RECT r;
@@ -4486,7 +4516,8 @@ static void commandLineReport(const char* message)
         return;
     }
 
-    sprintf(text, "blueMSX+: %s\r\n", message);
+    _snprintf(text, sizeof(text) - 1, "blueMSX+: %s\r\n", message);
+    text[sizeof(text) - 1] = 0;
     /* This goes to the error stream, or a redirected listing would collect the
     ** complaint too. */
     if (!consoleWriteTo(STD_ERROR_HANDLE, text) && !st.hidden) {
@@ -4677,6 +4708,8 @@ WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst, PSTR szLine, int iShow)
     RECT wr;
     MSG msg;
     int i;
+    int grNth;
+    int grShown;
     int readOnlyDir;
     const char* tempName;
     int scrDepth;
@@ -4689,6 +4722,10 @@ WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst, PSTR szLine, int iShow)
 #else
     szLine = commandLineUtf8();
 #endif
+
+    if (physicalDiskHelperCommand(szLine, &i)) {
+        return i;
+    }
 
     st.hidden = emuCheckFlagArgument(szLine, "hidden");
 
@@ -5189,8 +5226,23 @@ WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst, PSTR szLine, int iShow)
     
     mediaDbSetDefaultRomType(pProperties->cartridge.defaultType);
 
+    /* Asked slot by slot, so the slot named is the first one the readers to
+    ** hand cannot cover. Only the first is named, but every slot it cannot
+    ** cover is left out of the insert below. */
+    grNth = 0;
+    grShown = 0;
     for (i = 0; i < PROP_MAX_CARTS; i++) {
-        if (pProperties->media.carts[i].fileName[0]) insertCartridge(pProperties, i, pProperties->media.carts[i].fileName, pProperties->media.carts[i].fileNameInZip, pProperties->media.carts[i].type, -1);
+        int grState = GAMEREADER_AVAILABLE;
+        if (pProperties->media.carts[i].fileName[0]) {
+            if (pProperties->media.carts[i].type == ROM_GAMEREADER) {
+                grState = gameReaderAvailability(++grNth);
+                if (grState != GAMEREADER_AVAILABLE && !grShown) {
+                    archShowGameReaderUnavailableDialog(grState, i);
+                    grShown = 1;
+                }
+            }
+            if (grState == GAMEREADER_AVAILABLE) insertCartridge(pProperties, i, pProperties->media.carts[i].fileName, pProperties->media.carts[i].fileNameInZip, pProperties->media.carts[i].type, -1);
+        }
         updateExtendedRomName(i, pProperties->media.carts[i].fileName, pProperties->media.carts[i].fileNameInZip);
     }
 
@@ -5295,6 +5347,9 @@ WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst, PSTR szLine, int iShow)
         /* Covers record-end paths that never hit emulatorStop (RLE buffer
         ** overflow inside boardCaptureUInt8); no-op when nothing pending. */
         actionReplayFlushCompletionToast();
+        if (!st.hidden) {
+            actionDirMemoryNotice();
+        }
     }
 
     emulatorExit();
@@ -5388,11 +5443,136 @@ void archShowNoCasInZipDialog() {
     enterDialogShow();
 }
 
-void archShowDirAsDskOverflowDialog(int skippedCount, int skippedBytes) {
-    char msg[512];
+void archShowUnknownFileTypeDialog(const char* fileName) {
+    char body[PROP_MAXPATH + 512];
+
+    _snprintf(body, sizeof(body) - 1, "%s\n\n%s", langErrorUnknownFileType(), fileName);
+    body[sizeof(body) - 1] = 0;
     enterDialogShow();
-    sprintf(msg, langErrorDirAsDskOverflow(), skippedCount, (skippedBytes + 1023) / 1024);
+    MessageBoxU(NULL, body, langErrorTitle(), MB_OK | MB_ICONERROR);
+    exitDialogShow();
+}
+
+void archShowDirDiskSkippedDialog(int tooLarge, int onlineOnly, int subDirs) {
+    char msg[1536] = "";
+
+    if (tooLarge > 0) {
+        sprintf(msg + strlen(msg), langErrorDirDiskTooLarge(), tooLarge);
+    }
+    if (onlineOnly > 0) {
+        strcat(msg, msg[0] ? "\n\n" : "");
+        sprintf(msg + strlen(msg), langErrorDirDiskOnline(), onlineOnly);
+    }
+    if (subDirs > 0) {
+        strcat(msg, msg[0] ? "\n\n" : "");
+        sprintf(msg + strlen(msg), langErrorDirDiskSubdirs(), subDirs);
+    }
+    if (st.hidden) {
+        commandLineReport(msg);
+        return;
+    }
+    enterDialogShow();
     MessageBoxU(NULL, msg, langMenuDiskDirInsert(), MB_OK | MB_ICONWARNING);
+    exitDialogShow();
+}
+
+void archShowDirUnreadable(const char* directory) {
+    char msg[1536];
+
+    snprintf(msg, sizeof(msg), langErrorDirDiskUnreadable(), directory);
+    if (st.hidden) {
+        commandLineReport(msg);
+        return;
+    }
+    enterDialogShow();
+    MessageBoxU(getMainHwnd(), msg, langWarningTitle(), MB_OK | MB_ICONWARNING);
+    exitDialogShow();
+}
+
+int archDirUnattended(void) {
+    return st.hidden;
+}
+
+void archReportDirUnattended(const char* directory, int written) {
+    char text[1024];
+
+    snprintf(text, sizeof(text), "%s %s", written ? "Writing what the MSX changed to the directory:" :
+             "Dropping what the MSX changed, as its writeback option is not given:", directory);
+    commandLineReport(text);
+}
+
+int archAskDirChanges(const char* directory, int created, int changed, int deleted, int skipped, int mass) {
+    char text[4096];
+    int answer;
+
+    snprintf(text, sizeof(text) - 512, langDlgDirWriteSummary(), directory, created, changed, deleted, skipped);
+    if (mass) {
+        strcat(text, "\n\n");
+        strncat(text, langDlgDirWriteMass(), 500);
+    }
+    enterDialogShow();
+    do {
+        answer = win32WarningDialog(getMainHwnd(), text, NULL, NULL, langDlgDirWriteApply(), langDlgDirWriteDiscard());
+    } while (answer == 2 && MessageBoxU(getMainHwnd(), langDlgDirWriteDiscardSure(), langWarningTitle(),
+                                        MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) != IDYES);
+    exitDialogShow();
+    return answer;
+}
+
+int archAskDirInvalid(const char* directory) {
+    char text[4096];
+    int answer;
+
+    snprintf(text, sizeof(text), langErrorDirWriteInvalid(), directory);
+    if (st.hidden) {
+        commandLineReport(text);
+        return 1;
+    }
+    enterDialogShow();
+    answer = MessageBoxU(getMainHwnd(), text, langWarningTitle(), MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2);
+    exitDialogShow();
+    return answer == IDYES;
+}
+
+int archAskDirHostError(const char* directory) {
+    char text[4096];
+    int answer;
+
+    snprintf(text, sizeof(text), langErrorDirWriteHost(), directory);
+    if (st.hidden) {
+        commandLineReport(text);
+        return 1;
+    }
+    enterDialogShow();
+    answer = MessageBoxU(getMainHwnd(), text, langWarningTitle(), MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2);
+    exitDialogShow();
+    return answer == IDYES;
+}
+
+void archShowDirStateLoaded(void) {
+    if (st.hidden) {
+        commandLineReport(langInfoDirWriteState());
+        return;
+    }
+    archCaptureToastInfo(langInfoDirWriteState());
+}
+
+void archShowDirWriteFailed(int failed, const char* session) {
+    char text[4096];
+    char shown[1024];
+    char* slash;
+
+    snprintf(shown, sizeof(shown), "%s", session);
+    for (slash = shown; (slash = strchr(slash, '/')) != NULL; ) {
+        *slash = '\\';
+    }
+    snprintf(text, sizeof(text), langErrorDirWriteFailed(), failed, shown);
+    if (st.hidden) {
+        commandLineReport(text);
+        return;
+    }
+    enterDialogShow();
+    MessageBoxU(getMainHwnd(), text, langWarningTitle(), MB_OK | MB_ICONWARNING);
     exitDialogShow();
 }
 
@@ -5622,6 +5802,200 @@ int MessageBoxLargeU(HWND hwnd, const char* mainInstr, const char* content,
         return MessageBoxW(hwnd, wcontent, wcap, type);
     }
     return (int)rv;
+}
+
+static INT_PTR CALLBACK gameReaderNoDllProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+    switch (msg) {
+    case WM_INITDIALOG: {
+        wchar_t wtext[2048];
+        HWND hStatic  = GetDlgItem(hDlg, IDC_GRNODLL_TEXT);
+        HWND hIconCtl = GetDlgItem(hDlg, IDC_GRNODLL_ICON);
+        HWND btnHwnds[3];
+        int  btnW[3];
+        int  i;
+
+        SetWindowTextU(hDlg, langInfoTitle());
+        SetWindowTextU(GetDlgItem(hDlg, IDC_GRNODLL_GETDLL),    langDlgGameReaderGetDll());
+        SetWindowTextU(GetDlgItem(hDlg, IDC_GRNODLL_WEBDUMPER), langDlgGameReaderWebDumper());
+        SetWindowTextU(GetDlgItem(hDlg, IDCANCEL),              langDlgCancel());
+
+        {
+            /* A static control wants \r\n, and the language tables carry \n. */
+            wchar_t raw[1024];
+            int     r = 0;
+            int     w = 0;
+            raw[0] = 0;
+            Utf8ToWide(langInfoGameReaderNoDll(), raw, _countof(raw));
+            raw[_countof(raw) - 1] = 0;
+            while (raw[r] != 0 && w < _countof(wtext) - 2) {
+                if (raw[r] == L'\n') {
+                    wtext[w++] = L'\r';
+                }
+                wtext[w++] = raw[r++];
+            }
+            wtext[w] = 0;
+        }
+        SetWindowTextW(hStatic, wtext);
+
+        btnHwnds[0] = GetDlgItem(hDlg, IDC_GRNODLL_GETDLL);
+        btnHwnds[1] = GetDlgItem(hDlg, IDC_GRNODLL_WEBDUMPER);
+        btnHwnds[2] = GetDlgItem(hDlg, IDCANCEL);
+
+        const int iconSize = 48;
+        HICON hIcon = (HICON)LoadImageW(NULL, (LPCWSTR)IDI_INFORMATION, IMAGE_ICON,
+                                        iconSize, iconSize, LR_SHARED);
+        if (hIcon) {
+            SendMessageW(hIconCtl, STM_SETICON, (WPARAM)hIcon, 0);
+        }
+
+        /* Measured per caption, so a long translation widens its button. */
+        HFONT font    = (HFONT)SendMessageW(hStatic, WM_GETFONT, 0, 0);
+        HDC   hdc     = GetDC(hStatic);
+        HFONT oldFont = (HFONT)SelectObject(hdc, font);
+
+        RECT btnRect;
+        GetWindowRect(btnHwnds[0], &btnRect);
+        int btnH     = btnRect.bottom - btnRect.top;
+        int buttonsW = 0;
+        int btnGap   = 10;
+
+        for (i = 0; i < 3; i++) {
+            wchar_t wcap[256];
+            RECT capRect = { 0, 0, 0, 0 };
+            GetWindowTextW(btnHwnds[i], wcap, _countof(wcap));
+            DrawTextW(hdc, wcap, -1, &capRect, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
+            btnW[i] = (capRect.right - capRect.left) + 24;
+            if (btnW[i] < 70) btnW[i] = 70;
+            buttonsW += btnW[i];
+        }
+        buttonsW += btnGap * 2;
+
+        int padX    = 20;
+        int padTop  = 14;
+        int padMid  = 18;
+        int padBot  = 14;
+        int iconGap = 16;
+
+        /* The button row settles the width, so the wrap follows from it. */
+        int textW = 460;
+        if (buttonsW > iconSize + iconGap + textW) {
+            textW = buttonsW - iconSize - iconGap;
+        }
+
+        RECT wrapRect = { 0, 0, textW, 10000 };
+        DrawTextW(hdc, wtext, -1, &wrapRect,
+                  DT_CALCRECT | DT_LEFT | DT_NOPREFIX | DT_WORDBREAK);
+        int textH = wrapRect.bottom - wrapRect.top;
+        if (wrapRect.right - wrapRect.left < textW) {
+            textW = wrapRect.right - wrapRect.left;
+        }
+
+        SelectObject(hdc, oldFont);
+        ReleaseDC(hStatic, hdc);
+
+        int rowW    = iconSize + iconGap + textW;
+        int clientW = (rowW > buttonsW ? rowW : buttonsW) + padX * 2;
+        int rowH    = textH > iconSize ? textH : iconSize;
+        int clientH = padTop + rowH + padMid + btnH + padBot;
+
+        int rowX  = padX;
+        int textY = padTop + (rowH - textH) / 2;
+        int btnY  = padTop + rowH + padMid;
+        int btnX  = clientW - padX - buttonsW;
+
+        SetWindowPos(hIconCtl, NULL, rowX, padTop + (rowH - iconSize) / 2,
+                     iconSize, iconSize, SWP_NOZORDER);
+        SetWindowPos(hStatic, NULL, rowX + iconSize + iconGap, textY,
+                     textW, textH, SWP_NOZORDER);
+        for (i = 0; i < 3; i++) {
+            SetWindowPos(btnHwnds[i], NULL, btnX, btnY, btnW[i], btnH, SWP_NOZORDER);
+            btnX += btnW[i] + btnGap;
+        }
+
+        RECT wr, cr;
+        GetWindowRect(hDlg, &wr);
+        GetClientRect(hDlg, &cr);
+        SetWindowPos(hDlg, NULL, 0, 0,
+                     clientW + (wr.right - wr.left) - (cr.right - cr.left),
+                     clientH + (wr.bottom - wr.top) - (cr.bottom - cr.top),
+                     SWP_NOMOVE | SWP_NOZORDER);
+        win32CommonCenterOnOwner(hDlg);
+
+        win32CommonApplyDark(hDlg);
+        return TRUE;
+    }
+    case WM_COMMAND: {
+        int id = LOWORD(wParam);
+        if (id == IDC_GRNODLL_GETDLL || id == IDC_GRNODLL_WEBDUMPER || id == IDCANCEL) {
+            EndDialog(hDlg, id);
+            return TRUE;
+        }
+        break;
+    }
+    case WM_CLOSE:
+        EndDialog(hDlg, IDCANCEL);
+        return TRUE;
+    }
+    return FALSE;
+}
+
+void archShowGameReaderUnavailableDialog(int reason, int cartSlot)
+{
+    INT_PTR choice;
+    const char* url;
+    /* An owned popup of a window that is not up yet gets no taskbar button. */
+    HWND owner = IsWindowVisible(st.hwnd) ? getMainHwnd() : NULL;
+
+    if (reason != GAMEREADER_NO_DLL) {
+        char body[512];
+        _snprintf(body, sizeof(body) - 1, langInfoGameReaderNoDevice(), cartSlot + 1);
+        body[sizeof(body) - 1] = 0;
+
+        if (st.hidden) {
+            commandLineReport(body);
+            return;
+        }
+        enterDialogShow();
+        MessageBoxU(owner, body, langInfoTitle(), MB_OK | MB_ICONWARNING);
+        exitDialogShow();
+        return;
+    }
+
+    /* A hidden run has no one to click a dialog away. */
+    if (st.hidden) {
+        commandLineReport(langInfoGameReaderNoDll());
+        return;
+    }
+
+    enterDialogShow();
+    choice = DialogBoxW(GetModuleHandle(NULL),
+                        MAKEINTRESOURCEW(IDD_GAMEREADER_NODLL),
+                        owner, gameReaderNoDllProc);
+    exitDialogShow();
+
+    if (choice == -1 || choice == 0) {
+        enterDialogShow();
+        MessageBoxU(owner, langInfoGameReaderNoDll(), langInfoTitle(),
+                    MB_OK | MB_ICONINFORMATION);
+        exitDialogShow();
+        return;
+    }
+
+    if (choice == IDC_GRNODLL_GETDLL) {
+        url = "https://github.com/Sebbeug/MSXGr-WinUSB/releases";
+    }
+    else if (choice == IDC_GRNODLL_WEBDUMPER) {
+        url = pProperties->language == EMU_LANG_JAPANESE
+              ? "https://kunichiko.github.io/MSX-GameReader-web/?lang=ja"
+              : "https://kunichiko.github.io/MSX-GameReader-web/?lang=en";
+    }
+    else {
+        return;
+    }
+
+    /* Launched after the modal closes, or the browser comes up behind it. */
+    ShellExecuteA(owner, "open", url, NULL, NULL, SW_SHOWNORMAL);
 }
 
 /* Common start-failed dialog: appends boardRun's missing-files list. */
@@ -6415,37 +6789,28 @@ void archSetCurrentDirectory(const char* pathname)
     SetCurrentDirectoryU(pathname);
 }
 
-char* archDirnameGetOpenDisk(Properties* properties, int drive)
+char* archDirnameGetOpenDirDisk(Properties* properties, int drive, int* outMsxFormat)
 {
-    char* title = drive == 1 ? langDlgInsertDiskB() : langDlgInsertDiskA();
+    char* title = drive == 0 ? langDlgInsertDiskA() : drive == 1 ? langDlgInsertDiskB() : langMenuDiskDirInsert();
     char* defaultDir = properties->media.disks[drive].directory;
     char* filename;
-
-    enterDialogShow();
-    filename = openDir(getMainHwnd(), title, defaultDir);
-    exitDialogShow();
-    SetCurrentDirectoryU(st.pCurDir);
-
-    return filename;
-}
-
-char* archDirnameGetOpenDiskWithFormat(Properties* properties, int drive,
-                                        int* outMsxFormat)
-{
-    char* title = drive == 1 ? langDlgInsertDiskB() : langDlgInsertDiskA();
-    char* defaultDir = properties->media.disks[drive].directory;
-    char* filename;
-    static int lastFormat = (int)DiskFormatMsxDos2;
-    int fmt = lastFormat;
+    /* The format last chosen, for a diskette and for a hard disk. */
+    static int lastFormats[2] = { (int)DiskFormatMsxDos2, (int)DiskFormatNextor };
+    int* lastFormat = &lastFormats[drive > 1];
+    int fmt = *lastFormat;
 
     enterDialogShow();
     filename = openDirWithFormat(getMainHwnd(), title, defaultDir, &fmt);
     exitDialogShow();
     SetCurrentDirectoryU(st.pCurDir);
 
+    if (filename != NULL && strlen(filename) >= PROP_MAXPATH) {
+        archShowDirUnreadable(filename);
+        return NULL;
+    }
     if (filename != NULL) {
-        lastFormat = fmt;
-        if (outMsxFormat) *outMsxFormat = fmt;
+        *lastFormat = fmt;
+        *outMsxFormat = fmt;
     }
     return filename;
 }
@@ -6721,11 +7086,12 @@ void archVideoOutputChange()
 }
 
 void archUpdateMenu(int show) {
+    physicalDiskSync();
     updateMenu(show);
 }
 
 void archQuit() {
-    DestroyWindow(getMainHwnd());
+    PostMessage(getMainHwnd(), WM_CLOSE, 0, 0);
 }
 
 char* archFilenameGetOpenAnyZip(Properties* properties, const char* fname, const char* fileList, int count, int* autostart, int* romType)
@@ -7122,6 +7488,9 @@ void archWindowEndMove() {
 void archVideoCaptureSave()
 {
     actionEmuStop();
+    if (emulatorGetState() != EMU_STOPPED) {
+        return;
+    }
 
     st.renderVideo = 1;
     recorderStartRender(getMainHwnd(), propGetGlobalProperties(), st.pVideo);

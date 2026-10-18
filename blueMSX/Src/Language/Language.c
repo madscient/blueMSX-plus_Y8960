@@ -301,7 +301,21 @@ char* langErrorNoDskInZip() { return ls->errorNoDskInZip; }
 char* langErrorCreateDiskImage() { return ls->errorCreateDiskImage; }
 char* langErrorCreateTapeImage() { return ls->errorCreateTapeImage; }
 char* langErrorNoCasInZip() { return ls->errorNoCasInZip; }
-char* langErrorDirAsDskOverflow() { return ls->errorDirAsDskOverflow; }
+char* langErrorUnknownFileType() { return ls->errorUnknownFileType; }
+char* langErrorDirDiskTooLarge() { return ls->errorDirDiskTooLarge; }
+char* langErrorDirDiskOnline() { return ls->errorDirDiskOnline; }
+char* langErrorDirDiskSubdirs() { return ls->errorDirDiskSubdirs; }
+char* langErrorDirDiskUnreadable() { return ls->errorDirDiskUnreadable; }
+char* langDlgDirWriteSummary() { return ls->dlgDirWriteSummary; }
+char* langDlgDirWriteMass() { return ls->dlgDirWriteMass; }
+char* langDlgDirWriteApply() { return ls->dlgDirWriteApply; }
+char* langDlgDirWriteDiscard() { return ls->dlgDirWriteDiscard; }
+char* langDlgDirWriteDiscardSure() { return ls->dlgDirWriteDiscardSure; }
+char* langErrorDirWriteInvalid() { return ls->errorDirWriteInvalid; }
+char* langErrorDirWriteFailed() { return ls->errorDirWriteFailed; }
+char* langErrorDirWriteHost() { return ls->errorDirWriteHost; }
+char* langInfoDirWriteState() { return ls->infoDirWriteState; }
+char* langInfoDirMemory() { return ls->infoDirMemory; }
 char* langErrorNoHelp() { return ls->errorNoHelp; }
 char* langErrorStartEmu() { return ls->errorStartEmu; }
 char* langErrorStartEmuNoMachine()          { return ls->errorStartEmuNoMachine; }
@@ -313,7 +327,10 @@ char* langErrorPortableReadonly()  {return ls->errorPortableReadonly; }
 char* langErrorMidiOpenFailed()    { return ls->errorMidiOpenFailed; }
 char* langInfoColorDepth()                 { return ls->infoColorDepth; }
 char* langInfoTitle()                      { return ls->infoTitle; }
-char* langInfoGameReaderRedirect()         { return ls->infoGameReaderRedirect; }
+char* langInfoGameReaderNoDll()            { return ls->infoGameReaderNoDll; }
+char* langInfoGameReaderNoDevice()         { return ls->infoGameReaderNoDevice; }
+char* langDlgGameReaderGetDll()            { return ls->dlgGameReaderGetDll; }
+char* langDlgGameReaderWebDumper()         { return ls->dlgGameReaderWebDumper; }
 char* langErrorKeyboardThemeMissing()      { return ls->errorKeyboardThemeMissing; }
 char* langErrorMixerThemeMissing()         { return ls->errorMixerThemeMissing; }
 char* langErrorRecorderTitle()             { return ls->errorRecorderTitle; }
@@ -398,6 +415,7 @@ char* langMenuCartMegaFlashRom() { return ls->menuCartMegaFlashRom; }
 char* langMenuCartFlashCart() { return ls->menuCartFlashCart; }
 
 char* langMenuDiskInsertNew() { return ls->menuDiskInsertNew; }
+char* langMenuDiskInsertPhysical() { return ls->menuDiskInsertPhysical; }
 char* langMenuDiskDirInsertCdrom() { return ls->menuDiskInsertCdrom; }
 char* langMenuDiskDirInsert() { return ls->menuDiskDirInsert; }
 char* langMenuDiskAutoStart() { return ls->menuDiskAutoStart; }
@@ -548,6 +566,16 @@ char* langDlgTabPosition() { return ls->dlgTabPosition; }
 char* langDlgTabType() { return ls->dlgTabType; }
 char* langDlgTabFilename() { return ls->dlgTabFilename; }
 char* langDlgZipReset() { return ls->dlgZipReset; }
+
+char* langDlgPhysDriveTitle() { return ls->dlgPhysDriveTitle; }
+char* langDlgPhysDriveChoose() { return ls->dlgPhysDriveChoose; }
+char* langDlgPhysDriveNone() { return ls->dlgPhysDriveNone; }
+char* langDlgPhysDriveWarning() { return ls->dlgPhysDriveWarning; }
+char* langDlgPhysDriveNoWarning() { return ls->dlgPhysDriveNoWarning; }
+char* langDlgPhysDriveContinue() { return ls->dlgPhysDriveContinue; }
+char* langDlgPhysDriveInUse() { return ls->dlgPhysDriveInUse; }
+char* langDlgPhysDriveFailed() { return ls->dlgPhysDriveFailed; }
+char* langInfoRewindNoMedium() { return ls->infoRewindNoMedium; }
 
 char* langDlgAboutTitle() { return ls->dlgAboutTitle; }
 

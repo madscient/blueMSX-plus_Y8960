@@ -84,7 +84,21 @@ void langInitCatalan(LanguageStrings* ls)
     ls->errorCreateDiskImage    = "No s'ha pogut crear el fitxer d'imatge de disc.";
     ls->errorCreateTapeImage    = "No s'ha pogut crear el fitxer d'imatge de cinta.";
     ls->errorNoCasInZip         = "No s'ha pogut trobar un fitxer .cas dins de l'arxiu zip.";
-    ls->errorDirAsDskOverflow   = "%d fitxer(s) (%d KB en total) no caben a la imatge de disc de 720 KB i s'han ignorat.";
+    ls->errorUnknownFileType    = "No es pot obrir el fitxer: el tipus de fitxer és desconegut.";
+    ls->errorDirDiskTooLarge    = "%d fitxer(s) no han cabut al disc i s'han omès.";
+    ls->errorDirDiskOnline      = "S'han omès %d fitxer(s) disponibles només en línia. Feu-los disponibles en aquest dispositiu per incloure'ls.";
+    ls->errorDirDiskSubdirs     = "S'han omès %d directoris perquè el format triat no els admet.";
+    ls->errorDirDiskUnreadable  = "No s'ha pogut inserir el directori perquè no s'ha pogut llegir:\n%s";
+    ls->dlgDirWriteSummary      = "L'MSX ha modificat el contingut d'aquest directori:\n%s\n\nFitxers nous: %d\nFitxers modificats: %d\nFitxers esborrats (moguts a .blueMSX-trash): %d\nOmesos: %d\n\nVoleu escriure els canvis al directori?";
+    ls->dlgDirWriteMass         = "S'han esborrat la majoria dels fitxers. Pot ser que l'MSX hagi formatat el volum.";
+    ls->dlgDirWriteApply        = "Escriu";
+    ls->dlgDirWriteDiscard      = "Descarta";
+    ls->dlgDirWriteDiscardSure  = "Segur que voleu descartar els canvis que ha fet l'MSX? No es podran recuperar.";
+    ls->errorDirWriteInvalid    = "Els canvis que l'MSX ha fet en aquest directori no es poden escriure, perquè el sistema de fitxers del disc (la FAT i els directoris) està escrit a mitges o malmès:\n%s\n\nSi és possible que l'MSX encara estigués escrivint al disc, trieu No, espereu que acabi (l'indicador de l'MSX-DOS o l'Ok del BASIC) i torneu-ho a provar. Si l'MSX ha formatat o ha tornat a particionar el disc, els canvis no es poden escriure.\n\nVoleu descartar els canvis?";
+    ls->errorDirWriteFailed     = "%d element(s) no s'han pogut escriure. El fitxer log.txt d'aquest directori els enumera:\n%s";
+    ls->errorDirWriteHost       = "Els canvis fets per l'MSX no s'han pogut escriure en aquest directori:\n%s\n\nPot ser que el directori sigui només de lectura o que el disc sigui ple.\n\nVoleu descartar els canvis?";
+    ls->infoDirWriteState       = "L'MSX funciona a partir d'un estat desat. Els canvis d'aquest directori no s'hi escriuran fins que l'MSX s'hagi apagat i tornat a engegar.";
+    ls->infoDirMemory           = "La memòria necessària per conservar els canvis al directori ja supera els %d MB.";
     ls->errorNoHelp             = "No s'ha pogut trobar el fitxer d'ajuda de blueMSX+.";
     ls->errorStartEmu           = "No s'ha pogut iniciar l'emulador MSX.";
     ls->errorStartEmuNoMachine           = "No hi ha cap màquina MSX configurada per a l'emulació. Trieu-ne una a Opcions -> Emulació -> Màquina MSX.";
@@ -95,7 +109,10 @@ void langInitCatalan(LanguageStrings* ls)
     ls->errorPortableReadonly   = "El dispositiu portàtil és de només lectura";
     ls->errorMidiOpenFailed     = "No s'ha pogut obrir el dispositiu MIDI '%s'. Potser l'usa una altra aplicació.";
     ls->infoTitle               = "blueMSX+ Informació";
-    ls->infoGameReaderRedirect  = "blueMSX+ no admet directament el MSX Game Reader (el controlador original d'ASCII de l'era XP ja no funciona a Windows modern).\n\nVoleu obrir el MSX Game Reader - Web Dumper (per Kunihiko Ohnaka) al vostre navegador?";
+    ls->infoGameReaderNoDll     = "Cal MSXGr.dll per utilitzar el MSX Game Reader.\nLa DLL original d'ASCII no funciona al Windows actual, així que instal·leu MSXGr-WinUSB (per Sebbeug) o feu servir el MSX Game Reader - Web Dumper (per Kunihiko Ohnaka).";
+    ls->infoGameReaderNoDevice  = "No s'ha trobat cap MSX Game Reader per a la ranura de cartutx %d. Comproveu que estigui ben connectat.";
+    ls->dlgGameReaderGetDll     = "Obre la baixada de MSXGr-WinUSB";
+    ls->dlgGameReaderWebDumper  = "Obre el Web Dumper";
     ls->infoColorDepth          = "blueMSX+ funciona millor amb 16 o 32 bits de profunditat de color.";
     ls->errorKeyboardThemeMissing = "No s'ha pogut trobar el tema de l'editor de teclat.";
     ls->errorMixerThemeMissing    = "No s'ha pogut trobar el tema del mesclador.";
@@ -181,6 +198,7 @@ void langInitCatalan(LanguageStrings* ls)
     ls->menuCartFlashCart       = "Cartutxos Flash";
 
     ls->menuDiskInsertNew       = "Insereix una nova imatge de disc";
+    ls->menuDiskInsertPhysical  = "Insereix una unitat física";
     ls->menuDiskInsertCdrom     = "Insereix un CD-Rom";       // New in 2.7
     ls->menuDiskDirInsert       = "Insereix directori";
     ls->menuDiskAutoStart       = "Reinicia després de la inserció";
@@ -332,6 +350,18 @@ void langInitCatalan(LanguageStrings* ls)
     ls->dlgTabType              = "Tipus";
     ls->dlgTabFilename          = "Nom del fitxer:";
     ls->dlgZipReset             = "Reinicia en inserir-lo";
+
+    ls->dlgPhysDriveTitle       = "blueMSX+ - Unitat física";
+    ls->dlgPhysDriveChoose      = "Trieu la unitat extraïble que voleu inserir:";
+    ls->dlgPhysDriveNone        = "No s'ha trobat cap unitat extraïble.";
+    ls->dlgPhysDriveWarning     = "Calen drets d'administrador per accedir directament a una unitat física.\n\n"
+                                  "Windows no pot accedir a la unitat mentre està inserida a blueMSX+. Les operacions des de l'MSX, així com un error de l'emulador o un tancament inesperat durant l'escriptura, poden malmetre o esborrar el sistema de fitxers i les dades de la unitat. Feu abans una còpia de seguretat de les dades importants.\n\n"
+                                  "No desconnecteu la unitat abans d'expulsar-la.";
+    ls->dlgPhysDriveNoWarning   = "No tornis a mostrar aquest avís";
+    ls->dlgPhysDriveContinue    = "Continua";
+    ls->dlgPhysDriveInUse       = "Windows o un altre programa està fent servir la unitat. Tanqueu els fitxers i les finestres que la fan servir i torneu-ho a provar.";
+    ls->dlgPhysDriveFailed      = "No s'ha pogut obrir la unitat.";
+    ls->infoRewindNoMedium      = "No es pot rebobinar mentre hi ha inserida una unitat física o mentre els canvis que l'MSX ha fet en un directori encara no s'hi han escrit.";
 
     ls->dlgAboutTitle           = "blueMSX+ - Al voltant de";
 

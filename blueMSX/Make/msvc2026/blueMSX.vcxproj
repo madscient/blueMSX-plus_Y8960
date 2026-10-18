@@ -674,6 +674,7 @@
     <ClCompile Include="..\..\Src\Win32\Win32Eth.c" />
     <ClCompile Include="..\..\Src\Win32\Win32Event.c" />
     <ClCompile Include="..\..\Src\Win32\Win32file.c" />
+    <ClCompile Include="..\..\Src\Win32\Win32PhysicalDisk.c" />
     <ClCompile Include="..\..\Src\Win32\Win32FileDialog.cpp" />
     <ClCompile Include="..\..\Src\Win32\Win32FileTypes.c" />
     <ClCompile Include="..\..\Src\Win32\Win32Glob.c" />
@@ -750,6 +751,7 @@
     <ClCompile Include="..\..\Src\Memory\romMapperForteII.c" />
     <ClCompile Include="..\..\Src\Memory\romMapperGameMaster2.c" />
     <ClCompile Include="..\..\Src\Memory\romMapperGameReader.c" />
+    <ClCompile Include="..\..\Src\Memory\romMapperGfx9000.c" />
     <ClCompile Include="..\..\Src\Memory\romMapperGIDE.c" />
     <ClCompile Include="..\..\Src\Memory\romMapperGoudaSCSI.c" />
     <ClCompile Include="..\..\Src\Memory\romMapperHalnote.c" />
@@ -799,6 +801,7 @@
     <ClCompile Include="..\..\Src\Memory\romMapperPhilipsFdc.c" />
     <ClCompile Include="..\..\Src\Memory\romMapperPlain.c" />
     <ClCompile Include="..\..\Src\Memory\romMapperPlayBall.c" />
+    <ClCompile Include="..\..\Src\Memory\romMapperRookieDrive.c" />
     <ClCompile Include="..\..\Src\Memory\romMapperRType.c" />
     <ClCompile Include="..\..\Src\Memory\romMapperS1990.c" />
     <ClCompile Include="..\..\Src\Memory\romMapperSCCplus.c" />
@@ -831,7 +834,12 @@
     <ClCompile Include="..\..\Src\VideoChips\CRTC6845.c" />
     <ClCompile Include="..\..\Src\VideoChips\FrameBuffer.c" />
     <ClCompile Include="..\..\Src\VideoChips\V9938.c" />
+    <ClCompile Include="..\..\Src\VideoChips\V9990.c" />
+    <ClCompile Include="..\..\Src\VideoChips\V9990Cmd.c" />
+    <ClCompile Include="..\..\Src\VideoChips\V9990Render.c" />
+    <ClCompile Include="..\..\Src\VideoChips\V9990RenderPattern.c" />
     <ClCompile Include="..\..\Src\VideoChips\VDP.c" />
+    <ClCompile Include="..\..\Src\VideoChips\Video9000.c" />
     <ClCompile Include="..\..\Src\VideoChips\VideoManager.c" />
     <ClCompile Include="..\..\Src\VideoRender\hq2x.c" />
     <ClCompile Include="..\..\Src\VideoRender\hq3x.c" />
@@ -842,13 +850,15 @@
     <ClCompile Include="..\..\Src\Z80\R800Debug.c" />
     <ClCompile Include="..\..\Src\Z80\R800SaveState.c" />
     <ClCompile Include="..\..\Src\IoDevice\Casette.c" />
+    <ClCompile Include="..\..\Src\IoDevice\CH376.c" />
     <ClCompile Include="..\..\Src\IoDevice\CasToWave.c" />
     <ClCompile Include="..\..\Src\IoDevice\TapeSignal.c" />
     <ClCompile Include="..\..\Src\IoDevice\TsxParser.c" />
     <ClCompile Include="..\..\Src\IoDevice\WavParser.c" />
-    <ClCompile Include="..\..\Src\IoDevice\DirAsDisk.c" />
     <ClCompile Include="..\..\Src\IoDevice\Disk.c" />
     <ClCompile Include="..\..\Src\IoDevice\DiskFormat.c" />
+    <ClCompile Include="..\..\Src\IoDevice\DirDisk.c" />
+    <ClCompile Include="..\..\Src\IoDevice\DirWriteBack.c" />
     <ClCompile Include="..\..\Src\IoDevice\FdcAudio.c" />
     <ClCompile Include="..\..\Src\IoDevice\ft245.c" />
     <ClCompile Include="..\..\Src\IoDevice\GameReader.cpp" />
@@ -1029,6 +1039,7 @@
     <ClInclude Include="..\..\Src\Win32\Win32directXSound.h" />
     <ClInclude Include="..\..\Src\Win32\Win32Eth.h" />
     <ClInclude Include="..\..\Src\Win32\Win32file.h" />
+    <ClInclude Include="..\..\Src\Win32\Win32PhysicalDisk.h" />
     <ClInclude Include="..\..\Src\Win32\Win32FileDialog.h" />
     <ClInclude Include="..\..\Src\Win32\Win32FileTypes.h" />
     <ClInclude Include="..\..\Src\Win32\Win32Help.h" />
@@ -1112,6 +1123,7 @@
     <ClInclude Include="..\..\Src\Memory\romMapperFMPAK.h" />
     <ClInclude Include="..\..\Src\Memory\romMapperGameMaster2.h" />
     <ClInclude Include="..\..\Src\Memory\romMapperGameReader.h" />
+    <ClInclude Include="..\..\Src\Memory\romMapperGfx9000.h" />
     <ClInclude Include="..\..\Src\Memory\romMapperGIDE.h" />
     <ClInclude Include="..\..\Src\Memory\romMapperGoudaSCSI.h" />
     <ClInclude Include="..\..\Src\Memory\romMapperHalnote.h" />
@@ -1150,6 +1162,7 @@
     <ClInclude Include="..\..\Src\Memory\romMapperPhilipsFdc.h" />
     <ClInclude Include="..\..\Src\Memory\romMapperPlain.h" />
     <ClInclude Include="..\..\Src\Memory\romMapperPlayBall.h" />
+    <ClInclude Include="..\..\Src\Memory\romMapperRookieDrive.h" />
     <ClInclude Include="..\..\Src\Memory\romMapperRType.h" />
     <ClInclude Include="..\..\Src\Memory\romMapperS1990.h" />
     <ClInclude Include="..\..\Src\Memory\romMapperSCCplus.h" />
@@ -1184,7 +1197,11 @@
     <ClInclude Include="..\..\Src\VideoChips\FrameBuffer.h" />
     <ClInclude Include="..\..\Src\VideoChips\SpriteLine.h" />
     <ClInclude Include="..\..\Src\VideoChips\V9938.h" />
+    <ClInclude Include="..\..\Src\VideoChips\V9990.h" />
+    <ClInclude Include="..\..\Src\VideoChips\V9990Cmd.h" />
+    <ClInclude Include="..\..\Src\VideoChips\V9990Render.h" />
     <ClInclude Include="..\..\Src\VideoChips\VDP.h" />
+    <ClInclude Include="..\..\Src\VideoChips\Video9000.h" />
     <ClInclude Include="..\..\Src\VideoChips\VideoManager.h" />
     <ClInclude Include="..\..\Src\VideoRender\hq2x.h" />
     <ClInclude Include="..\..\Src\VideoRender\hq3x.h" />
@@ -1196,13 +1213,16 @@
     <ClInclude Include="..\..\Src\Z80\R800Dasm.h" />
     <ClInclude Include="..\..\Src\Z80\R800Debug.h" />
     <ClInclude Include="..\..\Src\IoDevice\Casette.h" />
+    <ClInclude Include="..\..\Src\IoDevice\CH376.h" />
     <ClInclude Include="..\..\Src\IoDevice\CasToWave.h" />
     <ClInclude Include="..\..\Src\IoDevice\TapeSignal.h" />
     <ClInclude Include="..\..\Src\IoDevice\TsxParser.h" />
     <ClInclude Include="..\..\Src\IoDevice\WavParser.h" />
-    <ClInclude Include="..\..\Src\IoDevice\DirAsDisk.h" />
     <ClInclude Include="..\..\Src\IoDevice\Disk.h" />
     <ClInclude Include="..\..\Src\IoDevice\DiskFormat.h" />
+    <ClInclude Include="..\..\Src\IoDevice\DirDisk.h" />
+    <ClInclude Include="..\..\Src\IoDevice\DirDiskPrivate.h" />
+    <ClInclude Include="..\..\Src\IoDevice\DirWriteBack.h" />
     <ClInclude Include="..\..\Src\IoDevice\FdcAudio.h" />
     <ClInclude Include="..\..\Src\IoDevice\ft245.h" />
     <ClInclude Include="..\..\Src\IoDevice\GameReader.h" />
@@ -1494,6 +1514,21 @@ buildnumber.exe
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
+  <!-- The About dialog shows the branch and commit from git. stderr is dropped so that
+       an error message can never become the label. -->
+  <Target Name="GitBuildLabel" BeforeTargets="PrepareForBuild">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)..\..\Src\BuildInfo\git_label.ps1&quot; 2&gt;nul" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardOutputImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="BlueMsxGitLabel" />
+    </Exec>
+    <PropertyGroup>
+      <BlueMsxGitLabel Condition="'$(BlueMsxGitLabel)'==''">unknown</BlueMsxGitLabel>
+    </PropertyGroup>
+    <ItemGroup>
+      <ClCompile Condition="'%(Filename)%(Extension)'=='Win32Help.c'">
+        <PreprocessorDefinitions>BUILD_GIT_LABEL="$(BlueMsxGitLabel)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      </ClCompile>
+    </ItemGroup>
+  </Target>
   <!-- Touch Win32Help.c every build so BUILD_DATE (= __DATE__ " " __TIME__)
        expands to the current build time. Win32Help.c is the only TU that
        references BUILD_DATE, so forcing just this ~180-line file to

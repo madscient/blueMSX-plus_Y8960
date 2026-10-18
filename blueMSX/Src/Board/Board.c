@@ -1060,9 +1060,14 @@ static void onMixerSync(void* ref, UInt32 time)
 }
 
 static void onStateSync(void* ref, UInt32 time)
-{    
-    if (enableSnapshots) {
+{
+    /* A medium that cannot be taken back with the MSX leaves nothing to rewind to. */
+    if (enableSnapshots && diskHasHostMedium()) {
+        ramStateCount = 0;
+    }
+    else if (enableSnapshots) {
         char memFilename[16];
+
         ramStateCur = (ramStateCur + 1) % ramMaxStates;
         if (ramStateCount < ramMaxStates) {
             ramStateCount++;
@@ -1152,7 +1157,7 @@ static int boardRewindDrop()
 int boardRewindOne() {
     UInt32 rewindTime;
     int skip;
-    if (stateFrequency <= 0) {
+    if (stateFrequency <= 0 || diskHasHostMedium()) {
         return 0;
     }
     rewindTime = boardInfo.getTimeTrace(1);
@@ -1203,6 +1208,9 @@ static int boardRewindLoad(int drop)
     char stateFile[16];
 
     sprintf(stateFile, "mem%d", ramStateCur);
+    if (diskHasHostMedium()) {
+        return 0;
+    }
     if (drop ? !boardRewindDrop() : ramStateCount < 1) {
         return 0;
     }
@@ -1230,6 +1238,8 @@ static int boardRewindLoad(int drop)
         /* boardLoadState is not called here, so this field is taken by hand. */
         pendingInt = (int)snapInt;
         boardInfo.loadState();
+        videoManagerLoadState();
+        videoManagerApplyLoadedState();
         if (stashedTime != 0) boardSysTime64 = stashedTime;
     }
     /* The tape clock is anchored to boardSysTime64, which just went backwards.
@@ -1402,6 +1412,7 @@ int boardRun(Machine* machine,
 
     if (success && loadState) {
         boardInfo.loadState();
+        videoManagerApplyLoadedState();
         /* Re-apply the stashed boardSysTime64 (boardInit clobbered it). The
         ** tape clock is anchored to it, so it has to be re-anchored too. */
         if (stashedSysTime64 != 0) boardSysTime64 = stashedSysTime64;
@@ -1616,6 +1627,12 @@ static BoardType boardLoadState(void)
         saveStateGetBuffer(state, tag, di->disks[i].name, sizeof(di->disks[i].name));
         sprintf(tag, "diskInZip%.2d", i);
         saveStateGetBuffer(state, tag, di->disks[i].inZipName, sizeof(di->disks[i].inZipName));
+        /* A state never brings a host medium back. */
+        if (diskIsHostMediumName(di->disks[i].name)) {
+            di->disks[i].inserted = 0;
+            di->disks[i].name[0] = 0;
+            di->disks[i].inZipName[0] = 0;
+        }
     }
 #endif
 
@@ -1892,6 +1909,7 @@ void boardChangeCartridge(int cartNo, RomType romType, char* cart, char* cartZip
         if (currentRomType[cartNo] == SRAM_WAVESCSI1MB) hdType[cartNo] = HD_WAVESCSI;
         if (currentRomType[cartNo] == ROM_GOUDASCSI)    hdType[cartNo] = HD_GOUDASCSI;
         if (currentRomType[cartNo] == ROM_MEGAFLSHSCCPLUS_SD) hdType[cartNo] = HD_MFRSD;
+        if (currentRomType[cartNo] == ROM_ROOKIEDRIVE)  hdType[cartNo] = HD_ROOKIEDRIVE;
     }
 
     if (boardRunning && cartNo < boardInfo.cartridgeCount) {
