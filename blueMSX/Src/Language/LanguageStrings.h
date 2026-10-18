@@ -281,6 +281,15 @@ typedef struct {
     char* menuToolsKeyboard;
     char* menuToolsCtrlEditor;
     char* menuToolsMixer;
+    char* menuToolsMixerDevices;
+    char* mixerDevicesTitle;
+    char* mixerDevicesNone;
+    char* mixerDevicesEnable;
+    char* mixerDevicesVolume;
+    char* mixerDevicesPan;
+    char* mixerDevicesLevel;
+    char* mixerDevicesSlot;
+    char* mixerDevicesBoard;
     char* menuToolsLoadMemory;
     char* menuToolsDebugger;
     char* menuToolsTrainer;
@@ -795,6 +804,7 @@ typedef struct {
     char* shortcutShowShortcuts;
     char* shortcutShowKeyboard;
     char* shortcutShowMixer;
+    char* shortcutShowMixerDevices;
     char* shortcutShowDebugger;
     char* shortcutShowTrainer;
     char* shortcutShowHelp;

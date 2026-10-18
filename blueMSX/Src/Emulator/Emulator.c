@@ -239,14 +239,24 @@ void emuEnableSynchronousUpdate(int enable)
     enableSynchronousUpdate = enable;
 }
 
+static void emulatorMixerChannelSettings(void* ref, Int32 mixerType, const char* id,
+                                         Int32* enable, Int32* volume, Int32* pan)
+{
+    propGetMixerInstance((Properties*)ref, mixerType, id, enable, volume, pan);
+}
+
 void emulatorInit(Properties* theProperties, Mixer* theMixer)
 {
     properties = theProperties;
     mixer      = theMixer;
+    mixerSetChannelSettingsCallback(mixer, emulatorMixerChannelSettings, properties);
 }
 
 void emulatorExit()
 {
+    if (mixer != NULL) {
+        mixerSetChannelSettingsCallback(mixer, NULL, NULL);
+    }
     properties = NULL;
     mixer      = NULL;
 }

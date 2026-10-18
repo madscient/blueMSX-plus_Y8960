@@ -83,6 +83,7 @@
 #include "Win32Menu.h"
 #include "Win32FileDialog.h"
 #include "Win32TextUtf8.h"
+#include "Win32MixerDevices.h"
 #include "ArchMenu.h"
 #include "StrcmpNoCase.h"
 #include "Win32Eth.h"
@@ -1923,6 +1924,7 @@ static void checkKeyUp(Shortcuts* s, ShotcutHotkey key)
     if (hotkeyEq(key, s->toolsShowShorcutEditor))       actionToolsShowShorcutEditor();
     if (hotkeyEq(key, s->toolsShowKeyboardEditor))      actionToolsShowKeyboardEditor();
     if (hotkeyEq(key, s->toolsShowMixer))               actionToolsShowMixer();
+    if (hotkeyEq(key, s->toolsShowMixerDevices))        actionToolsShowMixerDevices();
     if (hotkeyEq(key, s->toolsShowDebugger))            actionToolsShowDebugger();
     if (hotkeyEq(key, s->toolsShowTrainer))             actionToolsShowTrainer();
     if (hotkeyEq(key, s->helpShowHelp))                 actionHelpShowHelp();
@@ -6590,6 +6592,11 @@ void archShowKeyboardEditor()
             kbdConflictTipUpdate(hTheme);
         }
     }
+}
+
+void archShowMixerDevices()
+{
+    mixerDevicesShow(st.hwnd);
 }
 
 void archShowMixer()

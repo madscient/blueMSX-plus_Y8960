@@ -52,8 +52,6 @@ typedef enum {
     MIXER_CHANNEL_PCM,
     MIXER_CHANNEL_IO,
     MIXER_CHANNEL_MIDI,
-    /* Keep after MIDI: mixerRecalculateType indexes the channel array with
-    ** the MIDI type value, so anything inserted before it breaks that. */
     MIXER_CHANNEL_CASSETTE,
     /* Every Y8960 block shares this one type, so the cartridge can be
     ** balanced against the machine with a single control. */
@@ -65,8 +63,6 @@ typedef enum {
     MIXER_CHANNEL_LEFT = 0,
     MIXER_CHANNEL_RIGHT
 } MixerChannelPan;
-
-#define MAX_CHANNELS 16
 
 typedef Int32* (*MixerUpdateCallback)(void*, UInt32);
 typedef void (*MixerSetSampleRateCallback)(void*, UInt32);
@@ -110,11 +106,90 @@ void mixerStopLog(Mixer* mixer);
 void mixerReset(Mixer* mixer);
 void mixerSync(Mixer* mixer);
 
-Int32 mixerRegisterChannel(Mixer* mixer, Int32 audioType, Int32 stereo, 
+Int32 mixerRegisterChannel(Mixer* mixer, Int32 audioType, Int32 stereo,
                            MixerUpdateCallback callback, MixerSetSampleRateCallback rateCallback,
                            void*param);
+/* As mixerRegisterChannel, for a device that registers several channels of
+** one type and wants them told apart by name rather than by order. The name
+** becomes part of the channel's id and of the keys its settings are saved
+** under, so keep it short and stable: lowercase letters and digits, not
+** "n" followed by a digit (that is the order suffix), and not beginning with
+** "enable", "pan" or "volume" (the settings reader matches keys by prefix). */
+Int32 mixerRegisterChannelNamed(Mixer* mixer, Int32 audioType, Int32 stereo,
+                                MixerUpdateCallback callback, MixerSetSampleRateCallback rateCallback,
+                                void* param, const char* name);
 void mixerSetEnable(Mixer* mixer, int enable);
 void mixerUnregisterChannel(Mixer* mixer, Int32 handle);
+
+/* Instances
+**
+** A channel belongs to the device instance that registered it, and each
+** instance can be set on its own on top of its type: the volumes multiply,
+** the instance pan shifts the type pan (50 leaves it), and both must be
+** enabled. An instance at volume 100, pan 50, enabled, plays as before.
+**
+** Whoever creates a device that may sit in a slot brackets the creation
+** with mixerBeginDevice and mixerEndDevice, passing the slot manager's
+** registration count for the device's slot both times. Channels registered
+** in between belong to that slot if the count moved (the device mapped
+** memory), and to the board if it did not (the device only uses I/O
+** ports). Beginning a device while another is open puts the open one's
+** channels on the board. Channels registered outside a bracket belong to
+** the board.
+**
+** A channel's id names its instance: "slot1-0" or "board", then "-c0" if the
+** device gave its first I/O port (board only), then ".<name>" if it
+** registered by name, then ".n2", ".n3"... for the second and later channels
+** of one type with the same place and name. */
+void mixerBeginDevice(Mixer* mixer, int slot, int sslot, UInt32 slotRegistrations);
+/* For a device on I/O ports only, whose instances differ by port. */
+void mixerSetDevicePort(Mixer* mixer, int port);
+void mixerEndDevice(Mixer* mixer, UInt32 slotRegistrations);
+
+typedef enum {
+    MIXER_LOCATION_BOARD = 0,
+    MIXER_LOCATION_SLOT
+} MixerLocation;
+
+#define MIXER_CHANNEL_NAME_LENGTH 16
+#define MIXER_CHANNEL_ID_LENGTH   48
+
+typedef struct {
+    Int32 handle;
+    Int32 type;
+    Int32 stereo;
+    Int32 location;     /* MixerLocation */
+    Int32 slot;         /* MIXER_LOCATION_SLOT only */
+    Int32 sslot;
+    Int32 port;         /* -1 if the device gave none */
+    Int32 ordinal;      /* 1 for the first channel of its type at its place */
+    char  name[MIXER_CHANNEL_NAME_LENGTH];
+    char  id[MIXER_CHANNEL_ID_LENGTH];
+    Int32 enable;       /* the instance's own settings */
+    Int32 volume;
+    Int32 pan;
+} MixerChannelInfo;
+
+/* Fills up to maxCount entries in registration order and returns the number
+** of channels, which may be more than maxCount. Channels still inside an
+** open device bracket are left out. */
+int    mixerGetChannelInfo(Mixer* mixer, MixerChannelInfo* info, int maxCount);
+/* Changes whenever a channel comes or goes, so a view can tell when to
+** rebuild its list. */
+UInt32 mixerGetChannelGeneration(Mixer* mixer);
+
+void  mixerSetChannelVolume(Mixer* mixer, Int32 handle, Int32 volume);
+void  mixerSetChannelPan(Mixer* mixer, Int32 handle, Int32 pan);
+void  mixerEnableChannel(Mixer* mixer, Int32 handle, Int32 enable);
+Int32 mixerGetChannelVolume(Mixer* mixer, Int32 handle, int leftRight);
+
+/* Asked for an instance's saved settings when its id is first known. The
+** values come in at their defaults (enabled, 100, 50) and are kept as the
+** callback leaves them. Called with the mixer's lock held, so it must not
+** call back into the mixer. */
+typedef void (*MixerChannelSettingsCallback)(void* ref, Int32 audioType, const char* id,
+                                             Int32* enable, Int32* volume, Int32* pan);
+void mixerSetChannelSettingsCallback(Mixer* mixer, MixerChannelSettingsCallback callback, void* ref);
 
 void mixerSetBoardFrequency(int CPUFrequency);
 void mixerSetBoardFrequencyFixed(int CPUFrequency);

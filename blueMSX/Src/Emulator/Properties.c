@@ -442,7 +442,9 @@ void propInitDefaults(Properties* properties, int langType, PropKeyboardLanguage
     properties->sound.mixerChannel[MIXER_CHANNEL_KEYBOARD].enable = 1;
     properties->sound.mixerChannel[MIXER_CHANNEL_KEYBOARD].pan = 55;
     properties->sound.mixerChannel[MIXER_CHANNEL_KEYBOARD].volume = 65;
-    
+
+    properties->sound.mixerInstanceCount = 0;
+
     properties->sound.YkIn.type               = P_MIDI_NONE;
     properties->sound.YkIn.name[0]            = 0;
     strcpy(properties->sound.YkIn.fileName, "midiin.dat");
@@ -635,8 +637,175 @@ void propInitDefaults(Properties* properties, int langType, PropKeyboardLanguage
 #define SET_ENUM_VALUE_2i(ini,v1, v2, i, p)      { char s[64]; sprintf(s, "%s.%s.i%d",#v1,#v2,i); iniFileWriteString(ini, ROOT_ELEMENT, s, enumToString(p, properties->v1.v2[i])); }
 #define SET_ENUM_VALUE_2i1(ini,v1, v2, i, a1, p) { char s[64]; sprintf(s, "%s.%s.i%d.%s",#v1,#v2,i,#a1); iniFileWriteString(ini, ROOT_ELEMENT, s, enumToString(p, properties->v1.v2[i].a1)); }
 
+#define MIXER_INSTANCE_PREFIX "sound.mix."
 
-static void propLoad(Properties* properties) 
+const char* propGetMixerTypeName(int mixerType)
+{
+    switch (mixerType) {
+    case MIXER_CHANNEL_PSG:        return "psg";
+    case MIXER_CHANNEL_SCC:        return "scc";
+    case MIXER_CHANNEL_MSXMUSIC:   return "msxmusic";
+    case MIXER_CHANNEL_MSXAUDIO:   return "msxaudio";
+    case MIXER_CHANNEL_MOONSOUND:  return "moonsound";
+    case MIXER_CHANNEL_YAMAHA_SFG: return "sfg";
+    case MIXER_CHANNEL_KEYBOARD:   return "keyboard";
+    case MIXER_CHANNEL_PCM:        return "pcm";
+    case MIXER_CHANNEL_IO:         return "io";
+    case MIXER_CHANNEL_CASSETTE:   return "cassette";
+    }
+    /* MIDI is played outside the mixer and has no channels. */
+    return NULL;
+}
+
+static int clampPercent(int value)
+{
+    return value < 0 ? 0 : value > 100 ? 100 : value;
+}
+
+static MixerInstance* findMixerInstance(Properties* properties, const char* key, int create)
+{
+    MixerInstance* instance;
+    int i;
+
+    for (i = 0; i < properties->sound.mixerInstanceCount; i++) {
+        if (strcmp(properties->sound.mixerInstance[i].key, key) == 0) {
+            return properties->sound.mixerInstance + i;
+        }
+    }
+    if (!create || properties->sound.mixerInstanceCount == PROP_MAX_MIXER_INSTANCES ||
+        strlen(key) >= sizeof(instance->key))
+    {
+        return NULL;
+    }
+    instance = properties->sound.mixerInstance + properties->sound.mixerInstanceCount;
+    strcpy(instance->key, key);
+    instance->enable = 1;
+    instance->volume = 100;
+    instance->pan    = 50;
+    properties->sound.mixerInstanceCount++;
+    return instance;
+}
+
+static int mixerInstanceKey(char* key, int keySize, int mixerType, const char* id)
+{
+    const char* name = propGetMixerTypeName(mixerType);
+    if (name == NULL || strlen(name) + 1 + strlen(id) >= (size_t)keySize) {
+        return 0;
+    }
+    sprintf(key, "%s.%s", name, id);
+    return 1;
+}
+
+void propGetMixerInstance(Properties* properties, int mixerType, const char* id,
+                          int* enable, int* volume, int* pan)
+{
+    char key[64];
+    MixerInstance* instance;
+
+    if (!mixerInstanceKey(key, sizeof(key), mixerType, id)) {
+        return;
+    }
+    instance = findMixerInstance(properties, key, 0);
+    if (instance != NULL) {
+        *enable = instance->enable;
+        *volume = instance->volume;
+        *pan    = instance->pan;
+    }
+}
+
+void propSetMixerInstance(Properties* properties, int mixerType, const char* id,
+                          int enable, int volume, int pan)
+{
+    char key[64];
+    MixerInstance* instance;
+
+    if (!mixerInstanceKey(key, sizeof(key), mixerType, id)) {
+        return;
+    }
+    instance = findMixerInstance(properties, key, 1);
+    if (instance != NULL) {
+        instance->enable = enable;
+        instance->volume = volume;
+        instance->pan    = pan;
+    }
+}
+
+/* The keys are not known in advance, so the instances are found by reading
+** the whole section. Lines are "sound.mix.<type>.<id>.<attribute>=<value>". */
+static void loadMixerInstances(Properties* properties, IniFile* iniFile)
+{
+    const int prefixLength = (int)strlen(MIXER_INSTANCE_PREFIX);
+    const int size = 256 * 1024;
+    char* buffer = malloc(size);
+    char* line;
+
+    properties->sound.mixerInstanceCount = 0;
+    if (buffer == NULL) {
+        return;
+    }
+    iniFileGetSection(iniFile, ROOT_ELEMENT, buffer, size);
+
+    for (line = buffer; *line; line += strlen(line) + 1) {
+        char key[64];
+        char* value = strchr(line, '=');
+        char* attribute;
+        MixerInstance* instance;
+        int keyLength;
+
+        if (strncmp(line, MIXER_INSTANCE_PREFIX, prefixLength) != 0 || value == NULL) {
+            continue;
+        }
+        for (attribute = value; attribute > line + prefixLength && *attribute != '.'; attribute--);
+        keyLength = (int)(attribute - (line + prefixLength));
+        if (keyLength <= 0 || keyLength >= (int)sizeof(key)) {
+            continue;
+        }
+        memcpy(key, line + prefixLength, keyLength);
+        key[keyLength] = 0;
+        attribute++;
+        value++;
+
+        instance = findMixerInstance(properties, key, 1);
+        if (instance == NULL) {
+            continue;
+        }
+        if (strncmp(attribute, "enable=", 7) == 0) {
+            int v = stringToEnum(BoolPair, value);
+            if (v >= 0) instance->enable = v;
+        }
+        else if (strncmp(attribute, "volume=", 7) == 0) {
+            instance->volume = clampPercent(atoi(value));
+        }
+        else if (strncmp(attribute, "pan=", 4) == 0) {
+            instance->pan = clampPercent(atoi(value));
+        }
+    }
+
+    free(buffer);
+}
+
+static void saveMixerInstances(Properties* properties, IniFile* iniFile)
+{
+    int i;
+
+    for (i = 0; i < properties->sound.mixerInstanceCount; i++) {
+        MixerInstance* instance = properties->sound.mixerInstance + i;
+        char entry[128];
+        char value[16];
+
+        sprintf(entry, MIXER_INSTANCE_PREFIX "%s.enable", instance->key);
+        iniFileWriteString(iniFile, ROOT_ELEMENT, entry, enumToString(YesNoPair, instance->enable));
+        sprintf(entry, MIXER_INSTANCE_PREFIX "%s.volume", instance->key);
+        sprintf(value, "%d", instance->volume);
+        iniFileWriteString(iniFile, ROOT_ELEMENT, entry, value);
+        sprintf(entry, MIXER_INSTANCE_PREFIX "%s.pan", instance->key);
+        sprintf(value, "%d", instance->pan);
+        iniFileWriteString(iniFile, ROOT_ELEMENT, entry, value);
+    }
+}
+
+
+static void propLoad(Properties* properties)
 {
 #ifndef NO_FILE_HISTORY
     IniFile *histFile;
@@ -828,6 +997,7 @@ static void propLoad(Properties* properties)
     GET_ENUM_VALUE_2s1(propFile, sound, mixerChannel, MIXER_CHANNEL_Y8960, enable, BoolPair);
     GET_INT_VALUE_2s1(propFile, sound, mixerChannel, MIXER_CHANNEL_Y8960, pan);
     GET_INT_VALUE_2s1(propFile, sound, mixerChannel, MIXER_CHANNEL_Y8960, volume);
+    loadMixerInstances(properties, propFile);
     
     GET_ENUM_VALUE_2(propFile, joystick, disablePOV0Dpad, BoolPair);
     
@@ -1186,6 +1356,7 @@ void propSave(Properties* properties)
     SET_ENUM_VALUE_2s1(propFile, sound, mixerChannel, MIXER_CHANNEL_Y8960, enable, YesNoPair);
     SET_INT_VALUE_2s1(propFile, sound, mixerChannel, MIXER_CHANNEL_Y8960, pan);
     SET_INT_VALUE_2s1(propFile, sound, mixerChannel, MIXER_CHANNEL_Y8960, volume);
+    saveMixerInstances(properties, propFile);
     
     SET_ENUM_VALUE_2(propFile, joystick, disablePOV0Dpad, YesNoPair);
     

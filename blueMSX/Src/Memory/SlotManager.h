@@ -54,6 +54,10 @@ UInt8 slotPeek(void* ref, UInt16 address);
 void slotRegister(int slot, int sslot, int startpage, int pages,
                   SlotRead readCb, SlotRead peekCb, SlotWrite writeCb, SlotEject ejectCb, void* ref);
 void slotUnregister(int slot, int sslot, int startpage);
+/* Counts slotRegister and slotMapPage calls into one slot and subslot, so
+** that a caller can tell whether a device it just created there mapped any
+** memory (see mixerBeginDevice). */
+UInt32 slotGetRegistrationCount(int slot, int sslot);
 
 void slotRemove(int slot, int sslot);
 

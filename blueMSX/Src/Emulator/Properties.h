@@ -356,6 +356,19 @@ typedef struct {
     int pan;
 } MixerChannel;
 
+/* The saved settings of one mixer channel instance, kept only once the user
+** has changed it. Saved as sound.mix.<key>.enable / .volume / .pan, where key
+** is the type's short name and the channel id, e.g. "scc.slot1-0". A fixed
+** array, because Properties is copied as a whole. */
+#define PROP_MAX_MIXER_INSTANCES 128
+
+typedef struct {
+    char key[64];
+    int  enable;
+    int  volume;
+    int  pan;
+} MixerInstance;
+
 /* YM2413 backend slot indices, matching Ym2413MultiBackend.cpp.  The
 ** openmsx (initial) slot is dead-coded unless YM2413_BUILD_OPENMSX_INITIAL
 ** is defined. */
@@ -421,6 +434,8 @@ typedef struct {
     int  masterVolume;
     int  masterEnable;
     MixerChannel mixerChannel[MIXER_CHANNEL_TYPE_COUNT];
+    int  mixerInstanceCount;
+    MixerInstance mixerInstance[PROP_MAX_MIXER_INSTANCES];
     int  log[PROP_MAXPATH];
     struct {
         int  type;
@@ -644,5 +659,17 @@ void propertiesGetOpllFilterHz(int mode, const SoundChip* chip,
 /* True when `name` is a CARTNAME_* Special-Cart marker rather than a
 ** real ROM file path. */
 int propertiesIsSpecialCartName(const char* name);
+
+/* The short name a mixer channel type is saved under ("psg", "scc"...), the
+** same the mixer theme uses. NULL for a type whose instances are not saved. */
+const char* propGetMixerTypeName(int mixerType);
+
+/* The saved settings of a mixer channel instance, by type and channel id
+** (see mixerGetChannelInfo). Get leaves the values alone if none are saved;
+** set keeps them, and does nothing once PROP_MAX_MIXER_INSTANCES are kept. */
+void propGetMixerInstance(Properties* properties, int mixerType, const char* id,
+                          int* enable, int* volume, int* pan);
+void propSetMixerInstance(Properties* properties, int mixerType, const char* id,
+                          int enable, int volume, int pan);
 
 #endif

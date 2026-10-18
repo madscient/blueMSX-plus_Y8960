@@ -285,6 +285,15 @@ void langInitEnglish(LanguageStrings* ls)
     ls->menuToolsShortcuts      = "Shortcuts Editor";
     ls->menuToolsCtrlEditor     = "Input Editor"; 
     ls->menuToolsMixer          = "Sound Mixer";
+    ls->menuToolsMixerDevices   = "Sound Mixer (Devices)";
+    ls->mixerDevicesTitle       = "blueMSX - Sound Mixer (Devices)";
+    ls->mixerDevicesNone        = "No sound devices.";
+    ls->mixerDevicesEnable      = "On";
+    ls->mixerDevicesVolume      = "Volume";
+    ls->mixerDevicesPan         = "Pan";
+    ls->mixerDevicesLevel       = "Level";
+    ls->mixerDevicesSlot        = "Slot";
+    ls->mixerDevicesBoard       = "Board";
     ls->menuToolsLoadMemory     = "Load Memory";
     ls->menuToolsDebugger       = "Debugger";               
     ls->menuToolsTrainer        = "Trainer";                
@@ -821,6 +830,7 @@ void langInitEnglish(LanguageStrings* ls)
     ls->shortcutShowShortcuts   = "Show Shortcuts Editor";
     ls->shortcutShowKeyboard    = "Show Input Editor";
     ls->shortcutShowMixer       = "Show Sound Mixer";
+    ls->shortcutShowMixerDevices = "Show Sound Mixer (Devices)";
     ls->shortcutShowDebugger    = "Show Debugger";
     ls->shortcutShowTrainer     = "Show Trainer";
     ls->shortcutShowHelp        = "Show Help Dialog";

@@ -32,7 +32,9 @@
 #include "Board.h"
 #include "ArchTimer.h"
 #include "ArchMidi.h"
+#include "ArchEvent.h"
 #include <stdlib.h>
+#include <string.h>
 #include <stdio.h>
 #include <math.h>
 
@@ -111,6 +113,18 @@ typedef struct {
     Int32 volCntLeft;
     Int32 volCntRight;
     UInt32 active;
+    // Instance
+    Int32 instEnable;
+    Int32 instVolume;
+    Int32 instPan;
+    Int32 pending;      // registered inside a device bracket not yet ended
+    Int32 location;
+    Int32 slot;
+    Int32 sslot;
+    Int32 port;
+    Int32 ordinal;
+    char  name[MIXER_CHANNEL_NAME_LENGTH];
+    char  id[MIXER_CHANNEL_ID_LENGTH];
 } MixerChannel;
 
 struct Mixer
@@ -129,10 +143,25 @@ struct Mixer
     UInt32 index;
     UInt32 volIndex;
     Int16   buffer[AUDIO_STEREO_BUFFER_SIZE];
+    Int32   mixBuffer[AUDIO_STEREO_BUFFER_SIZE];
     AudioTypeInfo audioTypeInfo[MIXER_CHANNEL_TYPE_COUNT];
-    MixerChannel channels[MAX_CHANNELS];
+    /* Grows as devices register, and growing frees the old array. The UI
+    ** thread reads meters and changes volumes while the emulator thread
+    ** mixes, so every walk of the array holds lock (see mixerLock). */
+    MixerChannel* channels;
+    Int32** chBuff;
+    Int32   channelCapacity;
+    void*   lock;
     MixerChannel midi; // This channel is only used for meter output
     Int32   channelCount;
+    UInt32  generation;
+    Int32   deviceOpen;
+    Int32   deviceSlot;
+    Int32   deviceSslot;
+    Int32   devicePort;
+    UInt32  deviceSlotRegistrations;
+    MixerChannelSettingsCallback settingsCallback;
+    void*   settingsRef;
     Int32   handleCount;
     UInt32  oldTick;
     Int32   logging;
@@ -152,6 +181,20 @@ struct Mixer
 static void recalculateChannelVolume(Mixer* mixer, MixerChannel* channel);
 static void updateVolumes(Mixer* mixer);
 
+/* Public functions that touch the channel array take the lock; the static
+** helpers below them do not, so a public function never calls another
+** public one while holding it. The lock is never held across the audio
+** driver's write callback. */
+static void mixerLock(Mixer* mixer)
+{
+    archSemaphoreWait(mixer->lock, -1);
+}
+
+static void mixerUnlock(Mixer* mixer)
+{
+    archSemaphoreSignal(mixer->lock);
+}
+
 
 ///////////////////////////////////////////////////////
 
@@ -161,7 +204,7 @@ static void mixerRecalculateType(Mixer* mixer, int audioType)
     int i;
 
     if (audioType == MIXER_CHANNEL_MIDI) {
-        MixerChannel* channel = mixer->channels + MIXER_CHANNEL_MIDI;
+        MixerChannel* channel = &mixer->midi;
         channel->enable         = type->enable;
         channel->volume         = type->volume;
         channel->pan            = type->pan;
@@ -192,51 +235,63 @@ void mixerSetStereo(Mixer* mixer, Int32 stereo)
     int i;
 
     /* Output is always 2ch; toggle just retunes per-channel volume. */
+    mixerLock(mixer);
     mixer->stereo = stereo;
 
     for (i = 0; i < MIXER_CHANNEL_TYPE_COUNT; i++) {
         mixerRecalculateType(mixer, i);
     }
+    mixerUnlock(mixer);
 }
 
 void mixerSetMasterVolume(Mixer* mixer, Int32 volume)
 {
     int i;
 
+    mixerLock(mixer);
     mixer->masterVolume = pow(10.0, (volume - 100) / 60.0) - pow(10.0, -100 / 60.0);
-    
+
     for (i = 0; i < MIXER_CHANNEL_TYPE_COUNT; i++) {
         mixerRecalculateType(mixer, i);
     }
+    mixerUnlock(mixer);
 }
 
 void mixerEnableMaster(Mixer* mixer, Int32 enable)
 {
     int i;
 
+    mixerLock(mixer);
     mixer->masterEnable = enable ? 1 : 0;
 
     for (i = 0; i < MIXER_CHANNEL_TYPE_COUNT; i++) {
         mixerRecalculateType(mixer, i);
     }
+    mixerUnlock(mixer);
 }
 
 void mixerSetChannelTypeVolume(Mixer* mixer, Int32 type, Int32 volume)
 {
+    mixerLock(mixer);
     mixer->audioTypeInfo[type].volume = volume;
     mixerRecalculateType(mixer, type);
+    mixerUnlock(mixer);
 }
 
 void mixerSetChannelTypePan(Mixer* mixer, Int32 type, Int32 pan)
 {
+    mixerLock(mixer);
     mixer->audioTypeInfo[type].pan = pan;
     mixerRecalculateType(mixer, type);
+    mixerUnlock(mixer);
 }
 
-void mixerEnableChannelType(Mixer* mixer, Int32 type, Int32 enable) 
+void mixerEnableChannelType(Mixer* mixer, Int32 type, Int32 enable)
 {
+    mixerLock(mixer);
     mixer->audioTypeInfo[type].enable = enable;
     mixerRecalculateType(mixer, type);
+    mixerUnlock(mixer);
 }
 
 Int32 mixerGetChannelTypeVolume(Mixer* mixer, Int32 type, int leftRight)
@@ -244,15 +299,18 @@ Int32 mixerGetChannelTypeVolume(Mixer* mixer, Int32 type, int leftRight)
     int i;
     Int32 volume = 0;
 
+    mixerLock(mixer);
     updateVolumes(mixer);
 
     if (type == MIXER_CHANNEL_MIDI) {
-        return leftRight ? mixer->midi.volIntRight : mixer->midi.volIntLeft;
+        volume = leftRight ? mixer->midi.volIntRight : mixer->midi.volIntLeft;
+        mixerUnlock(mixer);
+        return volume;
     }
 
     for (i = 0; i < mixer->channelCount; i++) {
         if (mixer->channels[i].type == type) {
-            Int32 channelVol = leftRight ? 
+            Int32 channelVol = leftRight ?
                                mixer->channels[i].volIntRight :
                                mixer->channels[i].volIntLeft;
             if (channelVol > volume) {
@@ -260,6 +318,7 @@ Int32 mixerGetChannelTypeVolume(Mixer* mixer, Int32 type, int leftRight)
             }
         }
     }
+    mixerUnlock(mixer);
 
     return volume;
 }
@@ -269,6 +328,7 @@ Int32 mixerIsChannelTypeActive(Mixer* mixer, Int32 type, Int32 reset)
     int i;
     Int32 active = 0;
 
+    mixerLock(mixer);
     updateVolumes(mixer);
 
     for (i = 0; i < mixer->channelCount; i++) {
@@ -281,20 +341,30 @@ Int32 mixerIsChannelTypeActive(Mixer* mixer, Int32 type, Int32 reset)
             }
         }
     }
+    mixerUnlock(mixer);
 
     return active;
 }
 
 ///////////////////////////////////////////////////////
 
+static DoubleT volumeCurve(Int32 volume)
+{
+    return pow(10.0, (volume - 100) / 60.0) - pow(10.0, -100 / 60.0);
+}
+
 static void recalculateChannelVolume(Mixer* mixer, MixerChannel* channel)
 {
-    DoubleT volume        = pow(10.0, (channel->volume - 100) / 60.0) - pow(10.0, -100 / 60.0);
-    DoubleT panLeft       = pow(10.0, (MIN(100 - channel->pan, 50) - 50) / 30.0) - pow(10.0, -50 / 30.0);
-    DoubleT panRight      = pow(10.0, (MIN(channel->pan, 50) - 50) / 30.0) - pow(10.0, -50 / 30.0);
+    /* The instance factor is normalised to 1 at volume 100, so an instance
+    ** left at its defaults gives bit for bit the type's own gain. */
+    DoubleT volume        = volumeCurve(channel->volume) * (volumeCurve(channel->instVolume) / volumeCurve(100));
+    Int32   pan           = MAX(0, MIN(100, channel->pan + channel->instPan - 50));
+    Int32   enable        = channel->enable && channel->instEnable;
+    DoubleT panLeft       = pow(10.0, (MIN(100 - pan, 50) - 50) / 30.0) - pow(10.0, -50 / 30.0);
+    DoubleT panRight      = pow(10.0, (MIN(pan, 50) - 50) / 30.0) - pow(10.0, -50 / 30.0);
 
-    channel->volumeLeft  = channel->enable * mixer->masterEnable * (Int32)(1024 * mixer->masterVolume * volume * panLeft);
-    channel->volumeRight = channel->enable * mixer->masterEnable * (Int32)(1024 * mixer->masterVolume * volume * panRight);
+    channel->volumeLeft  = enable * mixer->masterEnable * (Int32)(1024 * mixer->masterVolume * volume * panLeft);
+    channel->volumeRight = enable * mixer->masterEnable * (Int32)(1024 * mixer->masterVolume * volume * panRight);
 
     if (!mixer->stereo) {
         Int32 tmp = (channel->volumeLeft + channel->volumeRight) / 2;
@@ -328,8 +398,8 @@ static void updateVolumes(Mixer* mixer)
         }
         
         if (archMidiGetNoteOn()) {
-            mixer->midi.volIntLeft  = MIN(100, mixer->channels[MIXER_CHANNEL_MIDI].volumeLeft / 7);
-            mixer->midi.volIntRight = MIN(100, mixer->channels[MIXER_CHANNEL_MIDI].volumeRight/ 7);
+            mixer->midi.volIntLeft  = MIN(100, mixer->midi.volumeLeft / 7);
+            mixer->midi.volIntRight = MIN(100, mixer->midi.volumeRight/ 7);
         }
         {
             int newVol = mixer->midi.volIntLeft - diff;
@@ -359,6 +429,10 @@ Mixer* mixerCreate()
     mixer->fragmentSize = 512;
     mixer->enable = 1;
     mixer->rate = AUDIO_SAMPLERATE;
+    mixer->lock = archSemaphoreCreate(1);
+    mixer->midi.instEnable = 1;
+    mixer->midi.instVolume = 100;
+    mixer->midi.instPan    = 50;
 
     if (globalMixer == NULL) globalMixer = mixer;
 
@@ -369,6 +443,9 @@ void mixerDestroy(Mixer* mixer)
 {
     mixerStopLog(mixer);
     globalMixer = NULL;
+    archSemaphoreDestroy(mixer->lock);
+    free(mixer->channels);
+    free(mixer->chBuff);
     free(mixer);
 }
 
@@ -380,12 +457,14 @@ UInt32 mixerGetSampleRate(Mixer* mixer)
 void mixerSetSampleRate(Mixer* mixer, UInt32 rate)
 {
     int i;
+    mixerLock(mixer);
     mixer->rate = rate;
     for(i = 0; i < mixer->channelCount; i++) {
         if (mixer->channels[i].rateCallback != NULL) {
             mixer->channels[i].rateCallback(mixer->channels[i].ref, rate);
         }
     }
+    mixerUnlock(mixer);
 }
 
 void mixerSetWriteCallback(Mixer* mixer, MixerWriteCallback callback, void* ref, int fragmentSize)
@@ -405,15 +484,249 @@ void mixerSetTapCallback(Mixer* mixer, MixerWriteCallback callback, void* ref)
     mixer->tapRef = ref;
 }
 
-Int32 mixerRegisterChannel(Mixer* mixer, Int32 audioType, Int32 stereo, MixerUpdateCallback callback, MixerSetSampleRateCallback rateCallback, void* ref)
+static void resolveChannel(Mixer* mixer, MixerChannel* channel, Int32 location, Int32 slot, Int32 sslot, Int32 port)
 {
-    MixerChannel*  channel = mixer->channels + mixer->channelCount;
-    AudioTypeInfo* type    = mixer->audioTypeInfo + audioType;
+    char* id = channel->id;
+    int i;
 
-    if (mixer->channelCount == MAX_CHANNELS - 1) {
-        return 0;
+    channel->location = location;
+    channel->slot     = location == MIXER_LOCATION_SLOT ? slot  : 0;
+    channel->sslot    = location == MIXER_LOCATION_SLOT ? sslot : 0;
+    channel->port     = location == MIXER_LOCATION_BOARD ? port : -1;
+    channel->ordinal  = 1;
+
+    for (i = 0; i < mixer->channelCount; i++) {
+        MixerChannel* other = mixer->channels + i;
+        if (other != channel && !other->pending &&
+            other->type     == channel->type     &&
+            other->location == channel->location &&
+            other->slot     == channel->slot     &&
+            other->sslot    == channel->sslot    &&
+            other->port     == channel->port     &&
+            strcmp(other->name, channel->name) == 0 &&
+            other->ordinal  >= channel->ordinal)
+        {
+            channel->ordinal = other->ordinal + 1;
+        }
     }
 
+    if (location == MIXER_LOCATION_SLOT) {
+        id += sprintf(id, "slot%d-%d", channel->slot, channel->sslot);
+    }
+    else {
+        id += sprintf(id, "board");
+        if (channel->port >= 0) {
+            id += sprintf(id, "-%02x", channel->port & 0xff);
+        }
+    }
+    if (channel->name[0]) {
+        id += sprintf(id, ".%s", channel->name);
+    }
+    if (channel->ordinal > 1) {
+        sprintf(id, ".n%d", channel->ordinal);
+    }
+
+    channel->pending = 0;
+
+    if (mixer->settingsCallback != NULL) {
+        mixer->settingsCallback(mixer->settingsRef, channel->type, channel->id,
+                                &channel->instEnable, &channel->instVolume, &channel->instPan);
+    }
+    recalculateChannelVolume(mixer, channel);
+}
+
+static void endDevice(Mixer* mixer, UInt32 slotRegistrations)
+{
+    Int32 location;
+    int i;
+
+    if (!mixer->deviceOpen) {
+        return;
+    }
+
+    location = slotRegistrations != mixer->deviceSlotRegistrations ? MIXER_LOCATION_SLOT : MIXER_LOCATION_BOARD;
+
+    for (i = 0; i < mixer->channelCount; i++) {
+        if (mixer->channels[i].pending) {
+            resolveChannel(mixer, mixer->channels + i, location,
+                           mixer->deviceSlot, mixer->deviceSslot, mixer->devicePort);
+        }
+    }
+
+    mixer->deviceOpen = 0;
+    mixer->generation++;
+}
+
+void mixerBeginDevice(Mixer* mixer, int slot, int sslot, UInt32 slotRegistrations)
+{
+    mixerLock(mixer);
+    /* An open device's count belongs to its own slot, which the caller did
+    ** not pass, so its channels go to the board rather than stay unlisted. */
+    endDevice(mixer, mixer->deviceSlotRegistrations);
+    mixer->deviceOpen              = 1;
+    mixer->deviceSlot              = slot;
+    mixer->deviceSslot             = sslot;
+    mixer->devicePort              = -1;
+    mixer->deviceSlotRegistrations = slotRegistrations;
+    mixerUnlock(mixer);
+}
+
+void mixerSetDevicePort(Mixer* mixer, int port)
+{
+    mixerLock(mixer);
+    if (mixer->deviceOpen) {
+        mixer->devicePort = port;
+    }
+    mixerUnlock(mixer);
+}
+
+void mixerEndDevice(Mixer* mixer, UInt32 slotRegistrations)
+{
+    mixerLock(mixer);
+    endDevice(mixer, slotRegistrations);
+    mixerUnlock(mixer);
+}
+
+void mixerSetChannelSettingsCallback(Mixer* mixer, MixerChannelSettingsCallback callback, void* ref)
+{
+    mixerLock(mixer);
+    mixer->settingsCallback = callback;
+    mixer->settingsRef      = ref;
+    mixerUnlock(mixer);
+}
+
+UInt32 mixerGetChannelGeneration(Mixer* mixer)
+{
+    return mixer->generation;
+}
+
+int mixerGetChannelInfo(Mixer* mixer, MixerChannelInfo* info, int maxCount)
+{
+    int count = 0;
+    int i;
+
+    mixerLock(mixer);
+    for (i = 0; i < mixer->channelCount; i++) {
+        MixerChannel* channel = mixer->channels + i;
+        if (channel->pending) {
+            continue;
+        }
+        if (count < maxCount) {
+            MixerChannelInfo* entry = info + count;
+            entry->handle   = channel->handle;
+            entry->type     = channel->type;
+            entry->stereo   = channel->stereo;
+            entry->location = channel->location;
+            entry->slot     = channel->slot;
+            entry->sslot    = channel->sslot;
+            entry->port     = channel->port;
+            entry->ordinal  = channel->ordinal;
+            entry->enable   = channel->instEnable;
+            entry->volume   = channel->instVolume;
+            entry->pan      = channel->instPan;
+            strcpy(entry->name, channel->name);
+            strcpy(entry->id, channel->id);
+        }
+        count++;
+    }
+    mixerUnlock(mixer);
+
+    return count;
+}
+
+static MixerChannel* findChannel(Mixer* mixer, Int32 handle)
+{
+    int i;
+    for (i = 0; i < mixer->channelCount; i++) {
+        if (mixer->channels[i].handle == handle) {
+            return mixer->channels + i;
+        }
+    }
+    return NULL;
+}
+
+void mixerSetChannelVolume(Mixer* mixer, Int32 handle, Int32 volume)
+{
+    MixerChannel* channel;
+    mixerLock(mixer);
+    channel = findChannel(mixer, handle);
+    if (channel != NULL) {
+        channel->instVolume = volume;
+        recalculateChannelVolume(mixer, channel);
+    }
+    mixerUnlock(mixer);
+}
+
+void mixerSetChannelPan(Mixer* mixer, Int32 handle, Int32 pan)
+{
+    MixerChannel* channel;
+    mixerLock(mixer);
+    channel = findChannel(mixer, handle);
+    if (channel != NULL) {
+        channel->instPan = pan;
+        recalculateChannelVolume(mixer, channel);
+    }
+    mixerUnlock(mixer);
+}
+
+void mixerEnableChannel(Mixer* mixer, Int32 handle, Int32 enable)
+{
+    MixerChannel* channel;
+    mixerLock(mixer);
+    channel = findChannel(mixer, handle);
+    if (channel != NULL) {
+        channel->instEnable = enable ? 1 : 0;
+        recalculateChannelVolume(mixer, channel);
+    }
+    mixerUnlock(mixer);
+}
+
+Int32 mixerGetChannelVolume(Mixer* mixer, Int32 handle, int leftRight)
+{
+    MixerChannel* channel;
+    Int32 volume = 0;
+    mixerLock(mixer);
+    updateVolumes(mixer);
+    channel = findChannel(mixer, handle);
+    if (channel != NULL) {
+        volume = leftRight ? channel->volIntRight : channel->volIntLeft;
+    }
+    mixerUnlock(mixer);
+    return volume;
+}
+
+Int32 mixerRegisterChannel(Mixer* mixer, Int32 audioType, Int32 stereo, MixerUpdateCallback callback, MixerSetSampleRateCallback rateCallback, void* ref)
+{
+    return mixerRegisterChannelNamed(mixer, audioType, stereo, callback, rateCallback, ref, NULL);
+}
+
+Int32 mixerRegisterChannelNamed(Mixer* mixer, Int32 audioType, Int32 stereo, MixerUpdateCallback callback, MixerSetSampleRateCallback rateCallback, void* ref, const char* name)
+{
+    MixerChannel*  channel;
+    AudioTypeInfo* type    = mixer->audioTypeInfo + audioType;
+    Int32          handle;
+
+    mixerLock(mixer);
+
+    if (mixer->channelCount == mixer->channelCapacity) {
+        Int32 capacity = mixer->channelCapacity ? 2 * mixer->channelCapacity : 16;
+        MixerChannel* channels = (MixerChannel*)realloc(mixer->channels, capacity * sizeof(MixerChannel));
+        Int32** chBuff = (Int32**)realloc(mixer->chBuff, capacity * sizeof(Int32*));
+        if (channels != NULL) {
+            mixer->channels = channels;
+        }
+        if (chBuff != NULL) {
+            mixer->chBuff = chBuff;
+        }
+        if (channels == NULL || chBuff == NULL) {
+            mixerUnlock(mixer);
+            return 0;
+        }
+        mixer->channelCapacity = capacity;
+    }
+
+    channel = mixer->channels + mixer->channelCount;
+    memset(channel, 0, sizeof(MixerChannel));
     mixer->channelCount++;
 
     channel->updateCallback = callback;
@@ -425,19 +738,33 @@ Int32 mixerRegisterChannel(Mixer* mixer, Int32 audioType, Int32 stereo, MixerUpd
     channel->volume         = type->volume;
     channel->pan            = type->pan;
     channel->handle         = ++mixer->handleCount;
+    channel->instEnable     = 1;
+    channel->instVolume     = 100;
+    channel->instPan        = 50;
+    if (name != NULL) {
+        strncpy(channel->name, name, MIXER_CHANNEL_NAME_LENGTH - 1);
+    }
 
-    recalculateChannelVolume(mixer, channel);
+    if (mixer->deviceOpen) {
+        channel->pending = 1;
+        recalculateChannelVolume(mixer, channel);
+    }
+    else {
+        resolveChannel(mixer, channel, MIXER_LOCATION_BOARD, 0, 0, -1);
+    }
+    mixer->generation++;
 
-    return channel->handle;
+    handle = channel->handle;
+    mixerUnlock(mixer);
+
+    return handle;
 }
 
-void mixerUnregisterChannel(Mixer* mixer, Int32 handle) 
+void mixerUnregisterChannel(Mixer* mixer, Int32 handle)
 {
     int i;
 
-    if (mixer->channelCount == 0) {
-        return;
-    }
+    mixerLock(mixer);
 
     for (i = 0; i < mixer->channelCount; i++) {
         if (mixer->channels[i].handle == handle) {
@@ -445,21 +772,28 @@ void mixerUnregisterChannel(Mixer* mixer, Int32 handle)
         }
     }
 
-    if (i == mixer->channelCount) {
-        return;
+    if (i < mixer->channelCount) {
+        mixer->channelCount--;
+        while (i < mixer->channelCount) {
+            mixer->channels[i] = mixer->channels[i + 1];
+            i++;
+        }
+        mixer->generation++;
     }
 
-    mixer->channelCount--;
-    while (i < mixer->channelCount) {
-        mixer->channels[i] = mixer->channels[i + 1];
-        i++;
-    }
+    mixerUnlock(mixer);
 }
 
 Int32 mixerGetMasterVolume(Mixer* mixer, int leftRight)
 {
+    Int32 volume;
+
+    mixerLock(mixer);
     updateVolumes(mixer);
-    return leftRight ? mixer->volIntRight : mixer->volIntLeft;
+    volume = leftRight ? mixer->volIntRight : mixer->volIntLeft;
+    mixerUnlock(mixer);
+
+    return volume;
 }
 
 void mixerReset(Mixer* mixer)
@@ -472,8 +806,10 @@ void mixerSync(Mixer* mixer)
 {
     UInt32 systemTime = boardSystemTime();
     Int16* buffer   = mixer->buffer;
-    Int32* chBuff[MAX_CHANNELS];
+    Int32** chBuff;
+    Int32* mix;
     UInt32 count;
+    UInt32 frames;
     UInt64 elapsed;
     int i;
 
@@ -508,7 +844,15 @@ void mixerSync(Mixer* mixer)
         }
         return;
     }
-    
+
+    /* Mix under the lock into mixBuffer, then hand the result to the audio
+    ** driver without it: the driver may block, and the UI thread would wait
+    ** on the lock for as long. */
+    mixerLock(mixer);
+    chBuff = mixer->chBuff;
+    frames = count;
+    mix    = mixer->mixBuffer;
+
     for (i = 0; i < mixer->channelCount; i++) {
         if (mixer->channels[i].updateCallback != NULL) {
             chBuff[i] = mixer->channels[i].updateCallback(mixer->channels[i].ref, count);
@@ -558,21 +902,8 @@ void mixerSync(Mixer* mixer)
         if (right >  32767) { right = 32767; }
         if (right < -32767) { right = -32767; }
 
-        buffer[mixer->index++] = (Int16)left;
-        buffer[mixer->index++] = (Int16)right;
-
-        if (mixer->index == mixer->fragmentSize) {
-            if (mixer->writeCallback != NULL) {
-                mixer->writeCallback(mixer->writeRef, buffer, mixer->fragmentSize);
-            }
-            if (mixer->tapCallback != NULL) {
-                mixer->tapCallback(mixer->tapRef, buffer, mixer->fragmentSize);
-            }
-            if (mixer->logging) {
-                fwrite(buffer, 2 * mixer->fragmentSize, 1, mixer->file);
-            }
-            mixer->index = 0;
-        }
+        *mix++ = left;
+        *mix++ = right;
 
         mixer->volIndex++;
     }
@@ -624,6 +955,27 @@ void mixerSync(Mixer* mixer)
             }
         }
         mixer->volIndex = 0;
+    }
+
+    mixerUnlock(mixer);
+
+    mix = mixer->mixBuffer;
+    while (frames--) {
+        buffer[mixer->index++] = (Int16)*mix++;
+        buffer[mixer->index++] = (Int16)*mix++;
+
+        if (mixer->index == mixer->fragmentSize) {
+            if (mixer->writeCallback != NULL) {
+                mixer->writeCallback(mixer->writeRef, buffer, mixer->fragmentSize);
+            }
+            if (mixer->tapCallback != NULL) {
+                mixer->tapCallback(mixer->tapRef, buffer, mixer->fragmentSize);
+            }
+            if (mixer->logging) {
+                fwrite(buffer, 2 * mixer->fragmentSize, 1, mixer->file);
+            }
+            mixer->index = 0;
+        }
     }
 }
 

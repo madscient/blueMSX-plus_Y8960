@@ -139,6 +139,7 @@ void actionToolsShowMachineEditor();
 void actionToolsShowShorcutEditor();
 void actionToolsShowKeyboardEditor();
 void actionToolsShowMixer();
+void actionToolsShowMixerDevices();
 void actionToolsShowDebugger();
 void actionToolsShowTrainer();
 void actionHelpShowHelp();
