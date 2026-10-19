@@ -20,6 +20,9 @@
 ** IKASCC was built from the SCC die, so the real chip's quirks hold for it
 ** too: behaviour fixes to SCC.c are ported here unless the hardware is
 ** found to differ.
+** What the cartridge adds on top of the chip: the mixer block's volume, and
+** a pan per channel, which makes this a stereo device. The pan is applied to
+** each channel before the sum, so the output filter runs once per side.
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -83,11 +86,15 @@ struct Y8960SccChip
     UInt32 deformRef;
     UInt32 deformTicks;
 
+    UInt8 pan[5];
+    Int32 panGain[5][2];   /* from pan, Y8960_GAIN_ONE units */
+
     Int32 in[95];
+    Int32 inR[95];         /* filter4's history for the right side; in[] is the left */
     Int32 inHp[3];
     Int32 outHp[3];
 
-    Int32  buffer[AUDIO_MONO_BUFFER_SIZE];
+    Int32  buffer[AUDIO_STEREO_BUFFER_SIZE];
 };
 
 #define SCC_TICK (boardFrequency() / 3579545)
@@ -128,6 +135,12 @@ static void sccRestartDeformTicks(Y8960SccChip* scc)
 {
     scc->deformTicks = 0;
     scc->deformRef   = boardSystemTime();
+}
+
+static void sccSetPan(Y8960SccChip* scc, int channel, UInt8 value)
+{
+    scc->pan[channel] = value;
+    y8960PanGain(value, scc->panGain[channel]);
 }
 
 void y8960SccLoadState(Y8960SccChip* scc)
@@ -175,6 +188,9 @@ void y8960SccLoadState(Y8960SccChip* scc)
         curWave = scc->oldSample[i] >= 0 && scc->oldSample[i] < 32 ? (UInt8)scc->wave[i][scc->oldSample[i]] : 0;
         sprintf(tag, "curWave%d", i);
         scc->curWave[i] = (Int8)saveStateGet(state, tag, curWave);
+
+        sprintf(tag, "pan%d", i);
+        sccSetPan(scc, i, (UInt8)saveStateGet(state, tag, Y8960_PAN_CENTER));
     }
 
     scc->enable = (UInt8)saveStateGet(state, "enable", 0xff);
@@ -230,6 +246,9 @@ void y8960SccSaveState(Y8960SccChip* scc)
 
         sprintf(tag, "curWave%d", i);
         saveStateSet(state, tag, (UInt8)scc->curWave[i]);
+
+        sprintf(tag, "pan%d", i);
+        saveStateSet(state, tag, scc->pan[i]);
     }
 
     saveStateSet(state, "enable", scc->enable);
@@ -383,6 +402,7 @@ void y8960SccReset(Y8960SccChip* scc) {
     for (channel = 0; channel < 5; channel++) {
         scc->rotate[channel]     = ROTATE_OFF;
         scc->readOnly[channel]   = 0;
+        sccSetPan(scc, channel, Y8960_PAN_CENTER);
     }
 
     scc->deformReg = 0;
@@ -425,7 +445,7 @@ Y8960SccChip* y8960SccCreate(Mixer* mixer)
 
 //    scc->debugHandle = debugDeviceRegister(DBGTYPE_AUDIO, langDbgDevScc(), &dbgCallbacks, scc);
 
-    scc->handle = mixerRegisterChannelNamed(mixer, MIXER_CHANNEL_Y8960, 0, sccSync, NULL, scc, "scc");
+    scc->handle = mixerRegisterChannelNamed(mixer, MIXER_CHANNEL_Y8960, 1, sccSync, NULL, scc, "scc");
 
     sccRestartDeformTicks(scc);
     y8960SccReset(scc);
@@ -614,6 +634,15 @@ void y8960SccWrite(Y8960SccChip* scc, UInt8 address, UInt8 value)
     }
 }
 
+void y8960SccWritePan(Y8960SccChip* scc, UInt8 channel, UInt8 value)
+{
+    if (channel >= 5) {
+        return;
+    }
+    mixerSync(scc->mixer);
+    sccSetPan(scc, channel, value);
+}
+
 void y8960SccGetDebugInfo(Y8960SccChip* scc, DbgDevice* dbgDevice)
 {
 }
@@ -642,67 +671,67 @@ static Int32 filter(Y8960SccChip* scc, Int32 input) {
 // Transition band: 250.0 Hz
 // Stopband attenuation: 50.0 dB
 //
-static Int32 filter4(Y8960SccChip* scc, Int32 in1, Int32 in2, Int32 in3, Int32 in4)
+static Int32 filter4(Int32* in, Int32 in1, Int32 in2, Int32 in3, Int32 in4)
 {
     int i;
     DoubleT res;
 
     for (i = 0; i < 91; ++i) {
-        scc->in[i] = scc->in[i + 4];
+        in[i] = in[i + 4];
     }
-    scc->in[91] = in1;
-    scc->in[92] = in2;
-    scc->in[93] = in3;
-    scc->in[94] = in4;
+    in[91] = in1;
+    in[92] = in2;
+    in[93] = in3;
+    in[94] = in4;
 
-    res =  2.8536195E-4 * (scc->in[ 0] + scc->in[94]) +
-           9.052306E-5  * (scc->in[ 1] + scc->in[93]) +
-          -2.6902245E-4 * (scc->in[ 2] + scc->in[92]) +
-          -6.375284E-4  * (scc->in[ 3] + scc->in[91]) +
-          -7.87536E-4   * (scc->in[ 4] + scc->in[90]) +
-          -5.3910224E-4 * (scc->in[ 5] + scc->in[89]) +
-           1.1107049E-4 * (scc->in[ 6] + scc->in[88]) +
-           9.2801993E-4 * (scc->in[ 7] + scc->in[87]) +
-           0.0015018889 * (scc->in[ 8] + scc->in[86]) +
-           0.0014338732 * (scc->in[ 9] + scc->in[85]) +
-           5.688559E-4  * (scc->in[10] + scc->in[84]) +
-          -8.479743E-4  * (scc->in[11] + scc->in[83]) +
-          -0.0021999443 * (scc->in[12] + scc->in[82]) +
-          -0.0027432537 * (scc->in[13] + scc->in[81]) +
-          -0.0019824558 * (scc->in[14] + scc->in[80]) +
-           2.018935E-9  * (scc->in[15] + scc->in[79]) +
-           0.0024515253 * (scc->in[16] + scc->in[78]) +
-           0.00419754   * (scc->in[17] + scc->in[77]) +
-           0.0041703423 * (scc->in[18] + scc->in[76]) +
-           0.0019952168 * (scc->in[19] + scc->in[75]) +
-          -0.0016656333 * (scc->in[20] + scc->in[74]) +
-          -0.005242034  * (scc->in[21] + scc->in[73]) +
-          -0.0068841926 * (scc->in[22] + scc->in[72]) +
-          -0.005360789  * (scc->in[23] + scc->in[71]) +
-          -8.1365916E-4 * (scc->in[24] + scc->in[70]) +
-           0.0050464263 * (scc->in[25] + scc->in[69]) +
-           0.00950725   * (scc->in[26] + scc->in[68]) +
-           0.010038091  * (scc->in[27] + scc->in[67]) +
-           0.005602208  * (scc->in[28] + scc->in[66]) +
-          -0.00253724   * (scc->in[29] + scc->in[65]) +
-          -0.011011368  * (scc->in[30] + scc->in[64]) +
-          -0.015622435  * (scc->in[31] + scc->in[63]) +
-          -0.013267951  * (scc->in[32] + scc->in[62]) +
-          -0.0036876823 * (scc->in[33] + scc->in[61]) +
-           0.009843254  * (scc->in[34] + scc->in[60]) +
-           0.021394625  * (scc->in[35] + scc->in[59]) +
-           0.02469893   * (scc->in[36] + scc->in[58]) +
-           0.01608393   * (scc->in[37] + scc->in[57]) +
-          -0.0032088074 * (scc->in[38] + scc->in[56]) +
-          -0.026453404  * (scc->in[39] + scc->in[55]) +
-          -0.043139543  * (scc->in[40] + scc->in[54]) +
-          -0.042553578  * (scc->in[41] + scc->in[53]) +
-          -0.018007802  * (scc->in[42] + scc->in[52]) +
-           0.029919287  * (scc->in[43] + scc->in[51]) +
-           0.09252273   * (scc->in[44] + scc->in[50]) +
-           0.15504532   * (scc->in[45] + scc->in[49]) +
-           0.20112106   * (scc->in[46] + scc->in[48]) +
-           0.2180678    *  scc->in[47];
+    res =  2.8536195E-4 * (in[ 0] + in[94]) +
+           9.052306E-5  * (in[ 1] + in[93]) +
+          -2.6902245E-4 * (in[ 2] + in[92]) +
+          -6.375284E-4  * (in[ 3] + in[91]) +
+          -7.87536E-4   * (in[ 4] + in[90]) +
+          -5.3910224E-4 * (in[ 5] + in[89]) +
+           1.1107049E-4 * (in[ 6] + in[88]) +
+           9.2801993E-4 * (in[ 7] + in[87]) +
+           0.0015018889 * (in[ 8] + in[86]) +
+           0.0014338732 * (in[ 9] + in[85]) +
+           5.688559E-4  * (in[10] + in[84]) +
+          -8.479743E-4  * (in[11] + in[83]) +
+          -0.0021999443 * (in[12] + in[82]) +
+          -0.0027432537 * (in[13] + in[81]) +
+          -0.0019824558 * (in[14] + in[80]) +
+           2.018935E-9  * (in[15] + in[79]) +
+           0.0024515253 * (in[16] + in[78]) +
+           0.00419754   * (in[17] + in[77]) +
+           0.0041703423 * (in[18] + in[76]) +
+           0.0019952168 * (in[19] + in[75]) +
+          -0.0016656333 * (in[20] + in[74]) +
+          -0.005242034  * (in[21] + in[73]) +
+          -0.0068841926 * (in[22] + in[72]) +
+          -0.005360789  * (in[23] + in[71]) +
+          -8.1365916E-4 * (in[24] + in[70]) +
+           0.0050464263 * (in[25] + in[69]) +
+           0.00950725   * (in[26] + in[68]) +
+           0.010038091  * (in[27] + in[67]) +
+           0.005602208  * (in[28] + in[66]) +
+          -0.00253724   * (in[29] + in[65]) +
+          -0.011011368  * (in[30] + in[64]) +
+          -0.015622435  * (in[31] + in[63]) +
+          -0.013267951  * (in[32] + in[62]) +
+          -0.0036876823 * (in[33] + in[61]) +
+           0.009843254  * (in[34] + in[60]) +
+           0.021394625  * (in[35] + in[59]) +
+           0.02469893   * (in[36] + in[58]) +
+           0.01608393   * (in[37] + in[57]) +
+          -0.0032088074 * (in[38] + in[56]) +
+          -0.026453404  * (in[39] + in[55]) +
+          -0.043139543  * (in[40] + in[54]) +
+          -0.042553578  * (in[41] + in[53]) +
+          -0.018007802  * (in[42] + in[52]) +
+           0.029919287  * (in[43] + in[51]) +
+           0.09252273   * (in[44] + in[50]) +
+           0.15504532   * (in[45] + in[49]) +
+           0.20112106   * (in[46] + in[48]) +
+           0.2180678    *  in[47];
 
     return (Int32)res;
 }
@@ -717,6 +746,7 @@ static Int32* sccSync(Y8960SccChip* scc, UInt32 count)
 
     for (index = 0; index < count; index++) {
         Int32 masterVolume[4] = {0, 0, 0, 0};
+        Int32 masterVolumeR[4] = {0, 0, 0, 0};
         int i;
         for (i = 0; i < 4; i++) {
             for (channel = 0; channel < 5; channel++) {
@@ -752,11 +782,17 @@ static Int32* sccSync(Y8960SccChip* scc, UInt32 count)
 
                 /* The chip drops the low 4 bits of each product before the sum;
                 ** 400 = 25 * 16 keeps the output level the mixer is balanced for. */
-                masterVolume[i] += 400 * ((scc->curWave[channel] * scc->volume[channel]) >> 4);
+                {
+                    Int32 out = 400 * ((scc->curWave[channel] * scc->volume[channel]) >> 4);
+                    masterVolume[i]  += out * scc->panGain[channel][0] / Y8960_GAIN_ONE;
+                    masterVolumeR[i] += out * scc->panGain[channel][1] / Y8960_GAIN_ONE;
+                }
             }
         }
-        buffer[index] = (Int32)((Int64)filter4(scc, masterVolume[0], masterVolume[1], masterVolume[2], masterVolume[3])
-                                * blockGain / Y8960_GAIN_ONE);
+        buffer[2 * index + 0] = (Int32)((Int64)filter4(scc->in, masterVolume[0], masterVolume[1], masterVolume[2], masterVolume[3])
+                                        * blockGain / Y8960_GAIN_ONE);
+        buffer[2 * index + 1] = (Int32)((Int64)filter4(scc->inR, masterVolumeR[0], masterVolumeR[1], masterVolumeR[2], masterVolumeR[3])
+                                        * blockGain / Y8960_GAIN_ONE);
         scc->bus = 0xFFFF;
 
 //        buffer[index] = (masterVolume[0] + masterVolume[1] + masterVolume[2] + masterVolume[3]);

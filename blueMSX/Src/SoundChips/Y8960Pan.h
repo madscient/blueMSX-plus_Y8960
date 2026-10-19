@@ -32,8 +32,8 @@
 #define Y8960_PAN_CENTER 128
 
 /* The pan law of the Y8960's per-channel pan registers (OPLL 50h-58h, OPL2
-** F6h-FFh, SSGS 28h-2Eh): 1 is hard left, 128 the centre, 255 hard right,
-** and 0 counts as the centre.
+** F6h-FFh, SSGS 28h-2Eh, SCC 9900h-9904h): 1 is hard left, 128 the centre,
+** 255 hard right, and 0 counts as the centre.
 **
 ** The specification gives only those anchors. Between them this is power
 ** panning, L = cos(t), R = sin(t) with t running from 0 to pi/2, so the

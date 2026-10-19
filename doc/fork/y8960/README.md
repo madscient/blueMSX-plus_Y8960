@@ -30,7 +30,7 @@ Y8960 対応は upstream には存在しない、このフォーク固有の機�
 | ファイル | 役割 |
 |---|---|
 | `tests/banktest.asm` + `make-banktest.py` | MSX 側で走る回帰テスト。バンクマッパー・窓・ミラー・タイマ・OPLLEX・OPL2EX・SSGS。128KB に展開 |
-| `tests/sndtest.asm` + `make-sndtest.py` + `analyze-sndtest.py` | SCC の音と、ミキサーの SCC 音量（128 / 64 / 0 / FFh）。録音した WAV を音程とレベル比で判定する。16KB |
+| `tests/sndtest.asm` + `make-sndtest.py` + `analyze-sndtest.py` + `run-sndtest.ps1` | SCC の音と定位、ミキサーの SCC 音量とマスター。録音した WAV を音程・レベル比・左右で判定する。16KB |
 | `tests/adpcmtest.asm` + `make-adpcmtest.py` | OPL2EX の ADPCM がサンプルを時刻どおりに終えるか。`C0h`/`C1h` を叩くので、本体の MSX-AUDIO にも使える。16KB |
 | `tests/opllex-bank-probe.c` | OPLLEX のコア単体試験（ヘッドレス）。バンクとパン |
 | `tests/opl2ex-probe.cpp` + `opl2ex-host-stub.c` | OPL2EX のコア単体試験（ヘッドレス） |
@@ -89,10 +89,12 @@ py "doc/fork/y8960/tests/make-banktest.py" <pasmo.exe> "$DEST/MSX2+ - C-BIOS + Y
 `sndtest` はカートリッジ構成に挿して起動し、その間の音を WAV に書き出して判定する。
 書き出しの開始と停止はウィンドウへの `WM_COMMAND`（`doc/fork/build/README.md` §5.2）。
 
+`run-sndtest.ps1` が `/hidden` で起動して録音し、WAV を指定の場所に置く。ウィンドウも音も出ない。
+
 ```sh
 py "doc/fork/y8960/tests/make-sndtest.py" <pasmo.exe> <dir>/sndtest.rom
-blueMSX+.exe /machine "MSX2+ - C-BIOS + Y8960 (cartridge)" /rom1 <dir>/sndtest.rom /romtype1 Y8960SCC
-py "doc/fork/y8960/tests/analyze-sndtest.py" "<ビルド出力>/Audio Capture/sndtest_NN.wav"
+powershell -File doc/fork/y8960/tests/run-sndtest.ps1 -Exe <ビルド出力>/blueMSX+.exe -Rom <dir>/sndtest.rom -Wav <dir>/sndtest.wav
+py "doc/fork/y8960/tests/analyze-sndtest.py" <dir>/sndtest.wav
 ```
 
 カード一式をカートリッジとして挿す経路は、同じ `banktest.rom` を 2 通りに挿して

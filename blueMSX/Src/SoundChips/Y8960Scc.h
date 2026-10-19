@@ -56,6 +56,11 @@ UInt8 y8960SccRead(Y8960SccChip* scc, UInt8 address);
 UInt8 y8960SccPeek(Y8960SccChip* scc, UInt8 address);
 void y8960SccWrite(Y8960SccChip* scc, UInt8 address, UInt8 value);
 
+/* The per-channel pan (channels 0-4 are A-E; others are ignored). Its
+** registers lie outside the 256 bytes the SCC decodes, so the mapper takes
+** them and hands them in here. The law is y8960PanGain(). */
+void y8960SccWritePan(Y8960SccChip* scc, UInt8 channel, UInt8 value);
+
 void y8960SccGetDebugInfo(Y8960SccChip* scc, DbgDevice* dbgDevice);
 
 void y8960SccLoadState(Y8960SccChip* scc);
