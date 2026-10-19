@@ -152,8 +152,9 @@ static int sccVisible(RomMapperY8960Scc* rm, int region)
 /* The pan registers are 9900h-9904h (channels A-E), decoded on the whole
 ** address and for writes only: 7900h in BANK1, the rest of 99xxh and every
 ** read go to the SCC, which decodes the low 8 bits and sees its own
-** registers there. While RAM mode is on, writes to 9900h-9904h are swallowed,
-** reaching neither the pan nor the SCC. This is the cartridge's RTL (scc.v). */
+** registers there, as in the cartridge's RTL (scc.v). The RTL of 2026-10-19
+** also swallows these writes in RAM mode; that is taken as a hardware bug,
+** since the firmware runs in RAM mode, so here they reach the pan in both. */
 static int sccPanAddress(int region, UInt16 address)
 {
     return region == 2 && (address & 0x1FF8) == 0x1900 && (address & 0x07) <= 4;
@@ -331,9 +332,7 @@ static void write(RomMapperY8960Scc* rm, UInt16 address, UInt8 value)
 
     if ((address & 0x1800) == 0x1800 && sccVisible(rm, region)) {
         if (sccPanAddress(region, address)) {
-            if (!rm->ramMode) {
-                y8960SccWritePan(rm->scc, (UInt8)(address & 0x07), value);
-            }
+            y8960SccWritePan(rm->scc, (UInt8)(address & 0x07), value);
         }
         else {
             y8960SccWrite(rm->scc, (UInt8)(address & 0xFF), value);

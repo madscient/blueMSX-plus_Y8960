@@ -4,7 +4,7 @@ Splits the recording into bursts of sound separated by silence, estimates the
 pitch, the level and the balance of each burst, and compares the list with
 the steps of sndtest.asm that must sound: the same pitch at full, half, full,
 half and quarter level in the centre, the two muted steps leaving no burst,
-then four steps that move the SCC's pan and two writes that must not move
+then five steps that move the SCC's pan and two writes that must not move
 it. Anything else that sounds shows up as an extra burst.
 
 Usage:  py analyze-sndtest.py <recording.wav>
@@ -14,8 +14,8 @@ import array
 import sys
 import wave
 
-# A, B, D, E, F, H, I, J, K, L, M; C and G are muted
-EXPECTED = [990] * 11
+# A, B, D, E, F, H, I, J, K, L, M, N; C and G are muted
+EXPECTED = [990] * 12
 LEVELS = [1.0, 0.5, 1.0, 0.5, 0.25]    # A-F, relative to the first burst
 LEVEL_TOLERANCE = 0.1
 
@@ -24,7 +24,7 @@ LEVEL_TOLERANCE = 0.1
 # 40h cos/sin of (40h - 1) / 254 of a right angle. Step H and I also give the
 # loud side against the first burst's: a channel at the centre is 1/sqrt(2)
 # on each side, so moved to one end it is sqrt(2) as loud there.
-SIDES = ["centre"] * 5 + ["left", "right", 0.411, "right", 0.411, 0.411]
+SIDES = ["centre"] * 5 + ["left", "right", 0.411, "right", 0.411, "left", "left"]
 SIDE_TOLERANCE = 0.05
 END_GAIN = {5: (0, 2 ** 0.5), 6: (1, 2 ** 0.5)}   # burst: (side, against A)
 STEP_NAMES = {990: "SCC"}

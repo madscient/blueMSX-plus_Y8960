@@ -4,7 +4,7 @@ param(
     [Parameter(Mandatory = $true)][string]$Wav,     # where the recording goes
     [string]$Machine = "MSX2+ - C-BIOS + Y8960 (cartridge)",
     [string]$Root = (Join-Path ([IO.Path]::GetTempPath()) "bluemsx-sndtest"),
-    [int]$Seconds = 24                              # boot plus the 13 steps
+    [int]$Seconds = 25                              # boot plus the 14 steps
 )
 
 # Runs sndtest.rom in a hidden blueMSX+ with the WAV capture on, and leaves

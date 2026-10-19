@@ -16,10 +16,10 @@
 ; window is there; the SCC is then shown in BANK1 (RAM mode), which hides
 ; the window while it plays.
 ;
-; The pan registers are 9900h-9904h with BANK2 showing the SCC, and take
-; writes only in compatibility mode. In RAM mode the same writes are lost,
-; and 7900h in BANK1 is the SCC's own register, not a pan: steps L and M
-; write a pan there and expect it not to move.
+; The pan registers are 9900h-9904h with BANK2 showing the SCC, in both
+; modes. 7900h in BANK1 is the SCC's own register, not a pan, and 9900h with
+; a RAM bank in BANK2 is memory: steps L and N write a pan there and expect
+; it not to move.
 ;
 ; The steps in BANK2 hand page 2 to the cartridge by writing A8h directly,
 ; taking the slot from page 1. That holds only while the cartridge sits in a
@@ -117,6 +117,7 @@ init:
         ld      b, 0
         ld      c, 001h
         ld      e, 0
+        ld      h, 03fh
         call    bank2pan
 
 ; --- I. channel 1 pan FFh: the right side only
@@ -125,6 +126,7 @@ init:
         ld      b, 0
         ld      c, 0ffh
         ld      e, 0
+        ld      h, 03fh
         call    bank2pan
 
 ; --- J. channel 1 pan 40h: both sides, the right at 0.41 of the left
@@ -133,6 +135,7 @@ init:
         ld      b, 0
         ld      c, 040h
         ld      e, 0
+        ld      h, 03fh
         call    bank2pan
 
 ; --- K. channel 5 pan FFh at 9904h, the last pan register: the right side
@@ -142,6 +145,7 @@ init:
         ld      b, 0
         ld      c, 0ffh
         ld      e, 4
+        ld      h, 03fh
         call    bank2pan
 
 ; --- L. RAM mode, BANK1: 01h written to 7900h, then channel 1. 7900h is the
@@ -152,13 +156,23 @@ init:
         ld      e, 0
         call    bank1poke
 
-; --- M. RAM mode, BANK2: 01h written to 9900h is lost, so channel 1 still
-;     plays at 40h
+; --- M. RAM mode, BANK2: 01h at 9900h moves channel 1 to the left
         ld      hl, msg_m
         call    print
         ld      b, 1
         ld      c, 001h
         ld      e, 0
+        ld      h, 03fh
+        call    bank2pan
+
+; --- N. RAM mode, BANK2 holding RAM bank #16 while FFh is written to 9900h,
+;     which lands in the RAM; then the SCC plays channel 1, still on the left
+        ld      hl, msg_n
+        call    print
+        ld      b, 1
+        ld      c, 0ffh
+        ld      e, 0
+        ld      h, 010h
         call    bank2pan
 
         ld      hl, msg_done
@@ -192,10 +206,12 @@ sccoff:
         ld      (REG_MOD), a            ; compatibility mode again
         jp      gap
 
-; One channel for a while with the SCC in BANK2, after writing its pan at
-; 9900h + channel. Page 2 belongs to the cartridge only in between, with
-; interrupts off; the init entry leaves it on RAM.
-; In:  B = the mode, 0 compatibility or 1 RAM, C = the pan, E = the channel
+; One channel for a while with the SCC in BANK2, after writing C at 9900h +
+; channel while BANK2 holds H: 3Fh makes that the pan, a RAM bank memory.
+; Page 2 belongs to the cartridge only in between, with interrupts off; the
+; init entry leaves it on RAM.
+; In:  B = the mode, 0 compatibility or 1 RAM, C = the value, E = the
+;      channel, H = BANK2 while C is written
 ; Destroys AF, BC, DE, HL
 bank2pan:
         ld      a, b
@@ -212,11 +228,13 @@ bank2pan:
         and     0cfh
         or      d
         out     (0a8h), a
-        ld      a, 03fh
+        ld      a, h
         call    setbank2
         ld      h, PAN
         ld      l, e
         ld      (hl), c
+        ld      a, 03fh
+        call    setbank2
         ld      h, SCC2
         push    bc
         call    sound
@@ -344,6 +362,8 @@ msg_k:
 msg_l:
         db      "L RAM MODE 7900H 01H: AS J", 13, 10, 0
 msg_m:
-        db      "M RAM MODE 9900H 01H: AS J", 13, 10, 0
+        db      "M RAM MODE 9900H 01H: LEFT", 13, 10, 0
+msg_n:
+        db      "N RAM BANK 9900H FFH: LEFT", 13, 10, 0
 msg_done:
         db      "DONE", 13, 10, 0
