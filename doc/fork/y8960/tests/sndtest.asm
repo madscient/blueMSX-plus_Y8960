@@ -14,12 +14,16 @@
 ;
 ; The volume is written while BANK1 shows a ROM bank, which is when the
 ; window is there; the SCC is then shown in BANK1 (RAM mode), which hides
-; the window while it plays. The pan registers sit 100h above the SCC's in
-; the same window: 7900h-7904h in BANK1, 9900h-9904h in BANK2.
+; the window while it plays.
 ;
-; Step L hands page 2 to the cartridge by writing A8h directly, taking the
-; slot from page 1. That holds only while the cartridge sits in a primary
-; slot that is not expanded, as in the test machine.
+; The pan registers are 9900h-9904h with BANK2 showing the SCC, and take
+; writes only in compatibility mode. In RAM mode the same writes are lost,
+; and 7900h in BANK1 is the SCC's own register, not a pan: steps L and M
+; write a pan there and expect it not to move.
+;
+; The steps in BANK2 hand page 2 to the cartridge by writing A8h directly,
+; taking the slot from page 1. That holds only while the cartridge sits in a
+; primary slot that is not expanded, as in the test machine.
 ;
 ; The chip is write only. Nothing here is read back.
 
@@ -27,14 +31,15 @@ CHPUT   equ     000a2h
 
 REG_MOD equ     04ffbh          ; RAM mode register, visible in both modes
 REG_B1R equ     04ffdh          ; BANK1 register, RAM mode
+REG_B2R equ     04ffeh          ; BANK2 register, RAM mode
 REG_B2C equ     09000h          ; BANK2 register, compatibility mode
 VOLSCC  equ     07ffah          ; the mixer's SCC volume, in the window
 VOLMST  equ     07ffeh          ; the mixer's master volume, in the window
 
 SCC1    equ     078h            ; page of the SCC window, BANK1 at 3Fh
 SCC2    equ     098h            ; page of the SCC window, BANK2 at 3Fh
-PAN1    equ     07900h          ; channel 1 pan, BANK1 at 3Fh
-PAN2    equ     09900h          ; channel 1 pan, BANK2 at 3Fh
+NOPAN1  equ     07900h          ; where a pan would be in BANK1: the SCC's 00h
+PAN     equ     099h            ; page of the pan registers, BANK2 at 3Fh
 
         org     04000h
 
@@ -105,68 +110,56 @@ init:
         ld      a, 080h
         ld      (VOLMST), a
 
-; --- H. channel 1 pan 01h: the left side only
+; --- H. channel 1 pan 01h at 9900h, BANK2 in compatibility mode: the left
+;     side only
         ld      hl, msg_h
         call    print
+        ld      b, 0
         ld      c, 001h
         ld      e, 0
-        call    playpan
+        call    bank2pan
 
 ; --- I. channel 1 pan FFh: the right side only
         ld      hl, msg_i
         call    print
+        ld      b, 0
         ld      c, 0ffh
         ld      e, 0
-        call    playpan
+        call    bank2pan
 
 ; --- J. channel 1 pan 40h: both sides, the right at 0.41 of the left
         ld      hl, msg_j
         call    print
+        ld      b, 0
         ld      c, 040h
         ld      e, 0
-        call    playpan
+        call    bank2pan
 
-; --- K. channel 5 pan FFh, the last pan register: the right side only.
-;     Channel 1 keeps 40h and is silent.
+; --- K. channel 5 pan FFh at 9904h, the last pan register: the right side
+;     only. Channel 1 keeps 40h and is silent.
         ld      hl, msg_k
         call    print
+        ld      b, 0
         ld      c, 0ffh
         ld      e, 4
-        call    playpan
+        call    bank2pan
 
-; --- L. channel 1 in BANK2, compatibility mode, pan 01h at 9900h: the left
-;     side only. Channel 1 still holds 40h from J, so a pan that does not
-;     reach the chip here leaves the right side sounding.
-;
-; The init entry leaves page 2 on RAM, where the writes would land unseen,
-; so page 2 belongs to the cartridge while this plays, with interrupts off.
+; --- L. RAM mode, BANK1: 01h written to 7900h, then channel 1. 7900h is the
+;     SCC's own register, so channel 1 keeps 40h from J
         ld      hl, msg_l
         call    print
-        di
-        in      a, (0a8h)
-        push    af                      ; the slot selection to put back
-        and     00ch                    ; page 1's slot: this cartridge
-        add     a, a
-        add     a, a                    ; moved up to page 2
-        ld      b, a
-        pop     af
-        push    af
-        and     0cfh
-        or      b
-        out     (0a8h), a
-        ld      a, 03fh
-        ld      (REG_B2C), a
-        ld      a, 001h
-        ld      (PAN2), a
-        ld      h, SCC2
+        ld      c, 001h
         ld      e, 0
-        call    sound
-        ld      a, 2
-        ld      (REG_B2C), a
-        pop     af
-        out     (0a8h), a
-        ei
-        call    gap
+        call    bank1poke
+
+; --- M. RAM mode, BANK2: 01h written to 9900h is lost, so channel 1 still
+;     plays at 40h
+        ld      hl, msg_m
+        call    print
+        ld      b, 1
+        ld      c, 001h
+        ld      e, 0
+        call    bank2pan
 
         ld      hl, msg_done
         call    print
@@ -181,12 +174,13 @@ play:
         call    sound
         jr      sccoff
 
-; One channel for a while after setting its pan, the SCC shown in BANK1.
-; In:  C = the pan, E = the channel, 0 or 4
+; One channel for a while after writing C where its pan would be in BANK1
+; (7900h + channel), the SCC shown in BANK1.
+; In:  C = the value, E = the channel, 0 or 4
 ; Destroys AF, B, DE, HL
-playpan:
+bank1poke:
         call    sccon
-        ld      hl, PAN1
+        ld      hl, NOPAN1
         ld      l, e
         ld      (hl), c
         ld      h, SCC1
@@ -197,6 +191,55 @@ sccoff:
         xor     a
         ld      (REG_MOD), a            ; compatibility mode again
         jp      gap
+
+; One channel for a while with the SCC in BANK2, after writing its pan at
+; 9900h + channel. Page 2 belongs to the cartridge only in between, with
+; interrupts off; the init entry leaves it on RAM.
+; In:  B = the mode, 0 compatibility or 1 RAM, C = the pan, E = the channel
+; Destroys AF, BC, DE, HL
+bank2pan:
+        ld      a, b
+        ld      (REG_MOD), a
+        di
+        in      a, (0a8h)
+        push    af                      ; the slot selection to put back
+        and     00ch                    ; page 1's slot: this cartridge
+        add     a, a
+        add     a, a                    ; moved up to page 2
+        ld      d, a
+        pop     af
+        push    af
+        and     0cfh
+        or      d
+        out     (0a8h), a
+        ld      a, 03fh
+        call    setbank2
+        ld      h, PAN
+        ld      l, e
+        ld      (hl), c
+        ld      h, SCC2
+        push    bc
+        call    sound
+        pop     bc
+        ld      a, 2
+        call    setbank2
+        pop     af
+        out     (0a8h), a
+        ei
+        xor     a
+        ld      (REG_MOD), a            ; compatibility mode again
+        jp      gap
+
+; BANK2's register for the mode. In: A = the bank, B = the mode
+setbank2:
+        inc     b
+        dec     b
+        jr      nz, sb_ram
+        ld      (REG_B2C), a
+        ret
+sb_ram:
+        ld      (REG_B2R), a
+        ret
 
 sccon:
         ld      a, 1
@@ -291,14 +334,16 @@ msg_f:
 msg_g:
         db      "G MASTER 00H: SILENCE", 13, 10, 0
 msg_h:
-        db      "H CH1 PAN 01H: LEFT", 13, 10, 0
+        db      "H 9900H 01H: LEFT", 13, 10, 0
 msg_i:
-        db      "I CH1 PAN FFH: RIGHT", 13, 10, 0
+        db      "I 9900H FFH: RIGHT", 13, 10, 0
 msg_j:
-        db      "J CH1 PAN 40H: LEFT OF CENTRE", 13, 10, 0
+        db      "J 9900H 40H: LEFT OF CENTRE", 13, 10, 0
 msg_k:
-        db      "K CH5 PAN FFH: RIGHT", 13, 10, 0
+        db      "K 9904H FFH, CH5: RIGHT", 13, 10, 0
 msg_l:
-        db      "L BANK2 9900H PAN 01H: LEFT", 13, 10, 0
+        db      "L RAM MODE 7900H 01H: AS J", 13, 10, 0
+msg_m:
+        db      "M RAM MODE 9900H 01H: AS J", 13, 10, 0
 msg_done:
         db      "DONE", 13, 10, 0

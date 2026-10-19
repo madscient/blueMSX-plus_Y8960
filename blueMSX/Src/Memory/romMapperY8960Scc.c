@@ -149,15 +149,14 @@ static int sccVisible(RomMapperY8960Scc* rm, int region)
     }
 }
 
-/* The SCC window is 1800-1FFF of the region, and the SCC decodes only the low
-** 8 bits of the address, except that 1900-19FF of the window is taken by the
-** pan registers: 1900-1904 (9900h-9904h in BANK2) are channels A-E, write
-** only, and the rest of that page answers neither, dropping writes and
-** reading FFh. The specification gives only 9900h-9904h; the rest of the
-** page follows openMSX_Y8960. */
-static int sccPanAddress(UInt16 address)
+/* The pan registers are 9900h-9904h (channels A-E), decoded on the whole
+** address and for writes only: 7900h in BANK1, the rest of 99xxh and every
+** read go to the SCC, which decodes the low 8 bits and sees its own
+** registers there. While RAM mode is on, writes to 9900h-9904h are swallowed,
+** reaching neither the pan nor the SCC. This is the cartridge's RTL (scc.v). */
+static int sccPanAddress(int region, UInt16 address)
 {
-    return (address & 0x0700) == 0x0100;
+    return region == 2 && (address & 0x1FF8) == 0x1900 && (address & 0x07) <= 4;
 }
 
 /* The window at 7FE0-7FFF lies inside the SCC window at 7800-7FFF, so the two
@@ -308,9 +307,6 @@ static UInt8 read(RomMapperY8960Scc* rm, UInt16 address)
     int region = address >> 13;
 
     if ((address & 0x1800) == 0x1800 && sccVisible(rm, region)) {
-        if (sccPanAddress(address)) {
-            return 0xFF;
-        }
         return y8960SccRead(rm->scc, (UInt8)(address & 0xFF));
     }
 
@@ -322,9 +318,6 @@ static UInt8 peek(RomMapperY8960Scc* rm, UInt16 address)
     int region = address >> 13;
 
     if ((address & 0x1800) == 0x1800 && sccVisible(rm, region)) {
-        if (sccPanAddress(address)) {
-            return 0xFF;
-        }
         return y8960SccPeek(rm->scc, (UInt8)(address & 0xFF));
     }
 
@@ -337,8 +330,10 @@ static void write(RomMapperY8960Scc* rm, UInt16 address, UInt8 value)
     int bank;
 
     if ((address & 0x1800) == 0x1800 && sccVisible(rm, region)) {
-        if (sccPanAddress(address)) {
-            y8960SccWritePan(rm->scc, (UInt8)(address & 0xFF), value);
+        if (sccPanAddress(region, address)) {
+            if (!rm->ramMode) {
+                y8960SccWritePan(rm->scc, (UInt8)(address & 0x07), value);
+            }
         }
         else {
             y8960SccWrite(rm->scc, (UInt8)(address & 0xFF), value);
