@@ -34,8 +34,8 @@
 #include <stdio.h>
 #include <string.h>
 
-/* The mixer has no I/O ports: its four volumes and the master are written
-** through the memory mapped window (7FF7h-7FFAh, 7FFEh), which the SCC block
+/* The mixer has no I/O ports: its five volumes and the master are written
+** through the memory mapped window (7FF7h-7FFAh, 7FFDh, 7FFEh), which the SCC block
 ** decodes and hands here. blueMSX's own mixer has no per-device gain, so
 ** every sound block asks this one for its gain while rendering, and
 ** multiplies it in itself. A machine without this block gets unity
@@ -68,7 +68,7 @@ void y8960MixerWriteMaster(UInt8 value)
     theMixer->master = value;
 }
 
-/* The master covers the cartridge's four blocks only. The MSX's own sound
+/* The master covers the cartridge's own blocks only. The MSX's own sound
 ** never passes through the card, so blueMSX's other channels stay as they
 ** are. */
 Int32 y8960MixerGain(Y8960Volume channel)
@@ -81,9 +81,10 @@ Int32 y8960MixerGain(Y8960Volume channel)
 }
 
 /* The sheet names 128 as the maximum and the hardware side confirmed it as
-** the reset value of the four volumes (2026-10-17). The sheet gives none for
+** the reset value of the volumes (2026-10-17). The sheet gives none for
 ** the master; it starts at the maximum too, as anything lower would leave
-** every block quieter than its own volume says. */
+** every block quieter than its own volume says. A state saved before the
+** OPM's volume existed holds four bytes and leaves it at the maximum. */
 static void reset(RomMapperY8960Mixer* rm)
 {
     memset(rm->volume, 0x80, sizeof(rm->volume));
@@ -115,7 +116,7 @@ static void loadState(RomMapperY8960Mixer* rm)
 static void getDebugInfo(RomMapperY8960Mixer* rm, DbgDevice* dbgDevice)
 {
     static const char* const names[Y8960_VOL_COUNT] = {
-        "SSG", "OPLL", "OPL2", "SCC"
+        "SSG", "OPLL", "OPL2", "SCC", "OPM"
     };
     DbgRegisterBank* regBank;
     int ch;

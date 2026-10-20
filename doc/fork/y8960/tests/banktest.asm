@@ -24,7 +24,7 @@ REG_B1R equ     04ffdh          ; BANK1 register, RAM mode
 SCC_B1  equ     07800h          ; SCC window inside BANK1
 
 ENA1    equ     07ff6h          ; I/O enabler 1: b0 = OPLL
-ENA2    equ     07fffh          ; I/O enabler 2: b0 = OPL2, b1 = SSGS, b7 = TIMER
+ENA2    equ     07fffh          ; I/O enabler 2: b0 = OPL2, b1 = SSGS, b2 = OPM, b7 = TIMER
 TUN0A   equ     07ff4h          ; tunnel to the OPLL, address
 TUN0D   equ     07ff5h          ; tunnel to the OPLL, data
 TUNC0A  equ     07ff2h          ; tunnel to the OPL2, address
@@ -37,6 +37,11 @@ TUNGA   equ     07ff0h          ; tunnel to the SSGS, register
 TUNGD   equ     07ff1h          ; tunnel to the SSGS, value
 SSGSA   equ     0a0h            ; SSGS register select; the machine's PSG too
 SSGSD   equ     0a1h            ; SSGS data; likewise
+
+OPMA    equ     07eh            ; OPM: address
+OPMD    equ     07fh            ; OPM: data / status
+TUNMA   equ     07ffbh          ; tunnel to the OPM, address
+TUNMD   equ     07ffch          ; tunnel to the OPM, data
 
         org     04000h
 
@@ -287,14 +292,9 @@ t7_fail:
         call    print
         jr      t9
 
-; The memory mapped window is not tested here.
-;
-; Whether it is present cannot be told apart from the outside. When BANK1
-; holds a RAM bank the window is gone and the page is writable, so writes go
-; straight to RAM without the mapper ever being asked; when it holds a ROM
-; bank the window is there but the write would be refused anyway, for being
-; ROM. Both readings look identical. Confirming the window needs a block that
-; reacts to its enabler being opened.
+; Whether the memory mapped window is present cannot be read back: it is write
+; only, and what lies behind it is ROM, RAM or the SCC. Checks 13, 20 and 21
+; tell it by the timer, which answers only once its enabler is opened.
 
 ; --- 9. OPLLEX: five tones, judged by ear
 ;
@@ -774,13 +774,210 @@ t19:
 
         ld      hl, msg_t19ok
         call    print
-        jr      done
+        jr      t20
 
 t19_fail:
         ld      hl, msg_t19ng
         call    print
 
+; --- 20. the window over the SCC in BANK1
+;
+; RAM mode with 3Fh in BANK1 shows the SCC at 7800-7FFF, and the window takes
+; 7FF0-7FFF from it. The timer is shut through the window over a ROM bank,
+; opened over the SCC, and read with a ROM bank back.
+t20:
+        ld      a, 1
+        ld      (REG_B1C), a
+        xor     a
+        ld      (ENA2), a               ; timer shut
+        ld      a, 1
+        ld      (REG_MOD), a
+        ld      a, 03fh
+        ld      (REG_B1R), a            ; the SCC in BANK1
+        ld      a, 080h
+        ld      (ENA2), a               ; open the timer, if the window is here
+        call    rombank1
+        in      a, (0b2h)
+        cp      0ffh
+        ld      hl, msg_t20ok
+        jr      nz, t20_print
+        ld      hl, msg_t20ng
+t20_print:
+        call    print
+
+; --- 21. no window over a RAM bank in RAM mode
+;
+; With bank 16 in BANK1, 80h written at 7FFFh must land in the RAM and leave
+; the timer shut.
+t21:
+        xor     a
+        ld      (ENA2), a               ; timer shut
+        ld      a, 1
+        ld      (REG_MOD), a
+        ld      a, 16
+        ld      (REG_B1R), a
+        ld      a, 080h
+        ld      (ENA2), a
+        ld      a, (ENA2)
+        ld      c, a
+        call    rombank1
+        ld      a, c
+        cp      080h
+        jr      nz, t21_fail            ; the RAM did not take it
+        in      a, (0b2h)
+        cp      0ffh
+        jr      nz, t21_fail            ; the window did
+        ld      hl, msg_t21ok
+        jr      t21_print
+t21_fail:
+        ld      hl, msg_t21ng
+t21_print:
+        call    print
+
+; --- 22. OPM: the gate, the timer A flag, and the tunnel
+;
+; With the gate shut 7Fh must not answer. Opened, it reads the status; timer A
+; at its shortest raises bit 0, and resetting it through the tunnel at
+; 7FFBh-7FFCh drops it. Interrupts stay off throughout, as the flag also
+; raises the OPM's interrupt.
+t22:
+        xor     a
+        ld      (ENA2), a
+        in      a, (OPMD)
+        cp      0ffh
+        jr      nz, t22_fail            ; closed: the port must not answer
+        ld      a, 004h
+        ld      (ENA2), a               ; enabler 2, bit 2 = OPM
+        in      a, (OPMD)
+        cp      0ffh
+        jr      z, t22_fail             ; open: the status, all clear
+
+        di
+        ld      de, 010ffh              ; timer A, top 8 bits
+        call    opmout
+        ld      de, 01103h              ; and the low 2: 1023, one sample
+        call    opmout
+        ld      de, 01415h              ; load A, its interrupt on, flag reset
+        call    opmout
+        ld      b, 0
+t22_wait:
+        djnz    t22_wait
+        in      a, (OPMD)
+        ld      c, a
+        ld      a, 014h
+        ld      (TUNMA), a
+        ld      a, 030h                 ; both stopped, both flags reset
+        ld      (TUNMD), a
+        in      a, (OPMD)
+        ld      b, a
+        ld      de, 01430h              ; the same through the port, in case
+        call    opmout
+        ei
+
+        ld      a, c
+        and     001h
+        jr      z, t22_fail             ; the flag did not rise
+        ld      a, b
+        and     003h
+        jr      nz, t22_fail            ; the tunnel did not reach the OPM
+        ld      hl, msg_t22ok
+        jr      t22_print
+t22_fail:
+        ld      hl, msg_t22ng
+t22_print:
+        call    print
+
+; --- 23. the OPM's interrupt reaches the processor
+;
+; As check 19, with timer A at its longest (about 55 a second) and the timer
+; block shut, so the OPM is the only source.
+t23:
+        ld      a, 004h
+        ld      (ENA2), a
+
+        di
+        ld      hl, (HKEYI)
+        push    hl
+        ld      hl, (HKEYI + 2)
+        push    hl
+        ld      a, (HKEYI + 4)
+        push    af
+        ld      a, 0c3h
+        ld      (HKEYI), a
+        ld      hl, topm
+        ld      (HKEYI + 1), hl
+        xor     a
+        ld      (TCOUNT), a
+        ld      a, (RG1SAV)
+        and     0dfh                    ; frame interrupt off
+        out     (099h), a
+        ld      a, 081h
+        out     (099h), a
+
+        ld      de, 01000h
+        call    opmout
+        ld      de, 01100h              ; timer A 0: 1024 samples
+        call    opmout
+        ld      de, 01415h
+        call    opmout
+        ei
+
+        call    delay
+
+        di
+        ld      de, 01430h
+        call    opmout
+        ld      a, (RG1SAV)
+        out     (099h), a
+        ld      a, 081h
+        out     (099h), a
+        ld      a, (TCOUNT)
+        ld      c, a
+        pop     af
+        ld      (HKEYI + 4), a
+        pop     hl
+        ld      (HKEYI + 2), hl
+        pop     hl
+        ld      (HKEYI), hl
+        ei
+
+        ld      a, c
+        cp      2
+        ld      hl, msg_t23ok
+        jr      nc, t23_print
+        ld      hl, msg_t23ng
+t23_print:
+        call    print
+
 done:
+        ret
+
+; Back to compatibility mode with ROM bank 1 in BANK1. Destroys A
+rombank1:
+        ld      a, 1
+        ld      (REG_B1R), a
+        xor     a
+        ld      (REG_MOD), a
+        ret
+
+; Writes E to OPM register D through the ports. Destroys A
+opmout:
+        ld      a, d
+        out     (OPMA), a
+        ld      a, e
+        out     (OPMD), a
+        ret
+
+; Hooked into H.KEYI by check 23. Counts timer A's interrupts in TCOUNT and
+; resets its flag, leaving the timer running.
+topm:
+        in      a, (OPMD)
+        and     001h
+        ret     z
+        ld      de, 01415h
+        call    opmout
+        ld      hl, TCOUNT
+        inc     (hl)
         ret
 
 ; Shows the SCC in one region of page 2 and checks it answers, then puts the
@@ -1106,3 +1303,19 @@ msg_t19ok:
         db      "19 TIMER INTERRUPT: OK", 13, 10, 0
 msg_t19ng:
         db      "19 TIMER INTERRUPT: NG", 13, 10, 0
+msg_t20ok:
+        db      "20 WINDOW OVER SCC: OK", 13, 10, 0
+msg_t20ng:
+        db      "20 WINDOW OVER SCC: NG", 13, 10, 0
+msg_t21ok:
+        db      "21 NO WINDOW OVER RAM: OK", 13, 10, 0
+msg_t21ng:
+        db      "21 NO WINDOW OVER RAM: NG", 13, 10, 0
+msg_t22ok:
+        db      "22 OPM GATE TIMER TUNNEL: OK", 13, 10, 0
+msg_t22ng:
+        db      "22 OPM GATE TIMER TUNNEL: NG", 13, 10, 0
+msg_t23ok:
+        db      "23 OPM INTERRUPT: OK", 13, 10, 0
+msg_t23ng:
+        db      "23 OPM INTERRUPT: NG", 13, 10, 0

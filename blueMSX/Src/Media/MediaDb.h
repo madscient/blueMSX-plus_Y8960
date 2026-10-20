@@ -223,8 +223,8 @@ enum  {
     ROM_Y8960TIMER  = 203,           /* Y8960 MSX-TIMER */
     ROM_Y8960MIXER  = 204,           /* Y8960 MSX-MIXER */
     ROM_Y8960SCC    = 205,           /* Y8960 SCC + mapper */
-    /* 206 was Y8960 DCSG, which the hardware dropped (2026-10-16); the
-    ** number stays unused so that configurations carrying it still load. */
+    /* 206 was Y8960 DCSG until the hardware dropped it (2026-10-16). */
+    ROM_Y8960OPM    = 206,           /* Y8960 OPM     */
     ROM_Y8960       = 207,           /* the whole cartridge: every block at once */
     ROM_MAXROMID    = 207
 };

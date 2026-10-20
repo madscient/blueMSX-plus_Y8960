@@ -282,6 +282,7 @@ SOURCE_FILES += romMapperY8960Opl2ex.c
 SOURCE_FILES += romMapperY8960Ssgs.c
 SOURCE_FILES += romMapperY8960Timer.c
 SOURCE_FILES += romMapperY8960Mixer.c
+SOURCE_FILES += romMapperY8960Opm.c
 SOURCE_FILES += romMapperY8960Scc.c
 SOURCE_FILES += SlotManager.c
 SOURCE_FILES += sramMapperMatsuchita.c
@@ -399,6 +400,8 @@ SOURCE_FILES += SCC.c
 SOURCE_FILES += Y8960Scc.c
 SOURCE_FILES += Y8960OpllCore.c
 SOURCE_FILES += Y8960Opllex.c
+SOURCE_FILES += Y8960Opm.c
+SOURCE_FILES += Y8960OpmCore.c
 SOURCE_FILES += Y8960Ssgs.c
 # These three need C++20; the msvc projects set it per file, and there is no
 # per-file mechanism here.

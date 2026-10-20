@@ -40,7 +40,8 @@ typedef enum {
     Y8960_IO_OPLL,      /* 7CH-7DH, enabler 1 bit 0 */
     Y8960_IO_OPL2,      /* C0H-C1H, enabler 2 bit 0 */
     Y8960_IO_SSGS,      /* A0H-A1H, enabler 2 bit 1 */
-    Y8960_IO_TIMER      /* B0H-B3H, enabler 2 bit 7 */
+    Y8960_IO_OPM,       /* 7EH-7FH, enabler 2 bit 2 */
+    Y8960_IO_TIMER     /* B0H-B3H, enabler 2 bit 7 */
 } Y8960IoBlock;
 
 /* True when the SCC block is absent, which leaves the enablers unreachable. */
@@ -54,6 +55,7 @@ typedef enum {
     Y8960_TUN_SSGS,     /* 7FF0h register, 7FF1h value */
     Y8960_TUN_OPL2,     /* 7FF2h address,  7FF3h data  */
     Y8960_TUN_OPLL,     /* 7FF4h address,  7FF5h data  */
+    Y8960_TUN_OPM,      /* 7FFBh address,  7FFCh data  */
     Y8960_TUN_COUNT
 } Y8960TunnelBlock;
 
@@ -66,7 +68,8 @@ void y8960RegisterTunnel(Y8960TunnelBlock block, Y8960TunnelWrite write, void* r
 void y8960UnregisterTunnel(Y8960TunnelBlock block, void* ref);
 
 /* The MSX-MIXER block's volumes, one per sound block, written through the
-** window at 7FF7h + channel, and a master volume at 7FFEh over all four. The
+** window at 7FF7h-7FFAh and 7FFDh, and a master volume at 7FFEh over all
+** five. The
 ** ADPCM has no volume of its own here: it is mixed into the OPL2 and follows
 ** the OPL2's. The SCC block hands the writes over; the sound blocks ask for
 ** their gain while rendering. Without the mixer block every gain is unity. */
@@ -75,6 +78,7 @@ typedef enum {
     Y8960_VOL_OPLL,
     Y8960_VOL_OPL2,
     Y8960_VOL_SCC,
+    Y8960_VOL_OPM,
     Y8960_VOL_COUNT
 } Y8960Volume;
 
@@ -102,12 +106,14 @@ int  romMapperY8960TimerCreate(void);
 void romMapperY8960TimerDestroy(void);
 int  romMapperY8960MixerCreate(void);
 void romMapperY8960MixerDestroy(void);
+int  romMapperY8960OpmCreate(void);
+void romMapperY8960OpmDestroy(void);
 /* The SCC block carries the cartridge ROM and the bank mapper, so unlike the
 ** others it is created from the slot entry. */
 int  romMapperY8960SccCreate(const char* filename, UInt8* romData,
                              int size, int slot, int sslot, int startPage);
 
-/* The whole card: the SCC block plus the five other blocks, as a cartridge.
+/* The whole card: the SCC block plus the six other blocks, as a cartridge.
 ** romData may be NULL, which is the card with no firmware in it. */
 int  romMapperY8960CartCreate(const char* filename, UInt8* romData,
                               int size, int slot, int sslot);

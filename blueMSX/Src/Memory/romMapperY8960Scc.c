@@ -43,20 +43,23 @@
 #define Y8960_REGIONS    4
 #define Y8960_START_PAGE 2
 
-/* The memory mapped window, 7FE0h-7FFFh: the offsets of what it holds, and
-** the bits of the two enablers. The specification of 2026-10-16 struck the
-** second OPLL and OPL2 circuits and the DCSG out of it, and may yet move what
-** remains, so these sit together rather than in the decoder. */
-#define Y8960_WIN_SSGS      0x10    /* 7FF0h register, 7FF1h value */
-#define Y8960_WIN_OPL2      0x12    /* 7FF2h address,  7FF3h data  */
-#define Y8960_WIN_OPLL      0x14    /* 7FF4h address,  7FF5h data  */
-#define Y8960_WIN_ENABLE1   0x16    /* 7FF6h */
-#define Y8960_WIN_VOLUME    0x17    /* 7FF7h-7FFAh: SSG, OPLL, OPL2, SCC */
-#define Y8960_WIN_MASTER    0x1E    /* 7FFEh */
-#define Y8960_WIN_ENABLE2   0x1F    /* 7FFFh */
+/* The memory mapped window, 7FF0h-7FFFh: the offsets of what it holds, and
+** the bits of the two enablers. The layout has moved with each revision of
+** the specification, so these sit together rather than in the decoder. */
+#define Y8960_WIN_BASE      0x1FF0
+#define Y8960_WIN_SSGS      0x0     /* 7FF0h register, 7FF1h value */
+#define Y8960_WIN_OPL2      0x2     /* 7FF2h address,  7FF3h data  */
+#define Y8960_WIN_OPLL      0x4     /* 7FF4h address,  7FF5h data  */
+#define Y8960_WIN_ENABLE1   0x6     /* 7FF6h */
+#define Y8960_WIN_VOLUME    0x7     /* 7FF7h-7FFAh: SSG, OPLL, OPL2, SCC */
+#define Y8960_WIN_OPM       0xB     /* 7FFBh address,  7FFCh data  */
+#define Y8960_WIN_OPM_VOL   0xD     /* 7FFDh */
+#define Y8960_WIN_MASTER    0xE     /* 7FFEh */
+#define Y8960_WIN_ENABLE2   0xF     /* 7FFFh */
 #define Y8960_ENABLE1_OPLL  0x01
 #define Y8960_ENABLE2_OPL2  0x01
 #define Y8960_ENABLE2_SSGS  0x02
+#define Y8960_ENABLE2_OPM   0x04
 #define Y8960_ENABLE2_TIMER 0x80
 
 typedef struct {
@@ -125,6 +128,7 @@ int y8960IoEnabled(Y8960IoBlock block)
     case Y8960_IO_OPLL:  return (rm->ioEnable1 & Y8960_ENABLE1_OPLL)  != 0;
     case Y8960_IO_OPL2:  return (rm->ioEnable2 & Y8960_ENABLE2_OPL2)  != 0;
     case Y8960_IO_SSGS:  return (rm->ioEnable2 & Y8960_ENABLE2_SSGS)  != 0;
+    case Y8960_IO_OPM:   return (rm->ioEnable2 & Y8960_ENABLE2_OPM)   != 0;
     case Y8960_IO_TIMER: return (rm->ioEnable2 & Y8960_ENABLE2_TIMER) != 0;
     }
 
@@ -149,32 +153,28 @@ static int sccVisible(RomMapperY8960Scc* rm, int region)
     }
 }
 
-/* The pan registers are 9900h-9904h (channels A-E), decoded on the whole
-** address and for writes only: 7900h in BANK1, the rest of 99xxh and every
-** read go to the SCC, which decodes the low 8 bits and sees its own
-** registers there, as in the cartridge's RTL (scc.v). The RTL of 2026-10-19
-** also swallows these writes in RAM mode; that is taken as a hardware bug,
-** since the firmware runs in RAM mode, so here they reach the pan in both. */
-static int sccPanAddress(int region, UInt16 address)
+/* The pan registers are x900h-x904h of the SCC window (channels A-E): 9900h
+** in BANK2, 7900h in BANK1. They are decoded on the whole address and for
+** writes only; the rest of x9xxh and every read go to the SCC, which decodes
+** the low 8 bits and sees its own registers there, as in the cartridge's RTL
+** (scc.v). The caller has already found the window open. */
+static int sccPanAddress(UInt16 address)
 {
-    return region == 2 && (address & 0x1FF8) == 0x1900 && (address & 0x07) <= 4;
+    return (address & 0x1FF8) == 0x1900 && (address & 0x07) <= 4;
 }
 
-/* The window at 7FE0-7FFF lies inside the SCC window at 7800-7FFF, so the two
-** never overlap partially: either BANK1 shows a ROM bank and the window is
-** there, or it does not and the window is gone along with the enablers. In
-** compatibility mode BANK1 shows neither SCC nor writable RAM, so the window
-** is always there; this is the specification's "RAM Mode=0, or BANK1 holds a
-** ROM bank". */
+/* The window is everywhere but over a RAM bank: software that maps RAM into
+** BANK1 must be able to use all of it. Over the SCC window it takes 7FF0-7FFF
+** from the SCC, as the RTL does. In compatibility mode a bank number from 16
+** up cannot be written and is not RAM here, as openMSX_Y8960 has it. The RTL
+** of 2026-10-20 shows the window over RAM too, which its author counts as a
+** bug to be fixed. */
 static int mmioVisible(RomMapperY8960Scc* rm)
 {
     if (sccVisible(rm, 1)) {
-        return 0;
+        return 1;
     }
 
-    /* A bank number from 16 up hides the window only while RAM mode is on.
-    ** In compatibility mode those banks cannot be written, and the window
-    ** stays, as openMSX_Y8960 has it. */
     return !(rm->ramMode && (rm->bankReg[1] & 0x1F) >= Y8960_ROM_BANKS);
 }
 
@@ -330,21 +330,12 @@ static void write(RomMapperY8960Scc* rm, UInt16 address, UInt8 value)
     int region = address >> 13;
     int bank;
 
-    if ((address & 0x1800) == 0x1800 && sccVisible(rm, region)) {
-        if (sccPanAddress(region, address)) {
-            y8960SccWritePan(rm->scc, (UInt8)(address & 0x07), value);
-        }
-        else {
-            y8960SccWrite(rm->scc, (UInt8)(address & 0xFF), value);
-        }
-        return;
-    }
-
-    /* 7FE0-7FFF: the enablers, the tunnels to the other blocks, and the
-    ** mixer's volumes and master. */
-    if (region == 1 && (address & 0x1FE0) == 0x1FE0 && mmioVisible(rm)) {
-        int offset = address & 0x1F;
-        if (offset >= Y8960_WIN_VOLUME && offset < Y8960_WIN_VOLUME + Y8960_VOL_COUNT) {
+    /* 7FF0-7FFF: the enablers, the tunnels to the other blocks, and the
+    ** mixer's volumes and master. Every write here stays in the window,
+    ** whatever it shows behind. */
+    if (region == 1 && (address & 0x1FF0) == Y8960_WIN_BASE && mmioVisible(rm)) {
+        int offset = address & 0x0F;
+        if (offset >= Y8960_WIN_VOLUME && offset < Y8960_WIN_VOLUME + Y8960_VOL_OPM) {
             y8960MixerWrite((Y8960Volume)(offset - Y8960_WIN_VOLUME), value);
             return;
         }
@@ -355,6 +346,9 @@ static void write(RomMapperY8960Scc* rm, UInt16 address, UInt8 value)
         case Y8960_WIN_ENABLE2:
             rm->ioEnable2 = value;
             break;
+        case Y8960_WIN_OPM_VOL:
+            y8960MixerWrite(Y8960_VOL_OPM, value);
+            break;
         case Y8960_WIN_MASTER:
             y8960MixerWriteMaster(value);
             break;
@@ -364,9 +358,18 @@ static void write(RomMapperY8960Scc* rm, UInt16 address, UInt8 value)
         case Y8960_WIN_OPL2 + 1: tunnelWrite(Y8960_TUN_OPL2, 1, value); break;
         case Y8960_WIN_OPLL:     tunnelWrite(Y8960_TUN_OPLL, 0, value); break;
         case Y8960_WIN_OPLL + 1: tunnelWrite(Y8960_TUN_OPLL, 1, value); break;
-        default:
-            /* The rest carries nothing, the struck-out tunnels included. */
-            break;
+        case Y8960_WIN_OPM:      tunnelWrite(Y8960_TUN_OPM,  0, value); break;
+        case Y8960_WIN_OPM + 1:  tunnelWrite(Y8960_TUN_OPM,  1, value); break;
+        }
+        return;
+    }
+
+    if ((address & 0x1800) == 0x1800 && sccVisible(rm, region)) {
+        if (sccPanAddress(address)) {
+            y8960SccWritePan(rm->scc, (UInt8)(address & 0x07), value);
+        }
+        else {
+            y8960SccWrite(rm->scc, (UInt8)(address & 0xFF), value);
         }
         return;
     }
@@ -457,6 +460,7 @@ int romMapperY8960SccCreate(const char* filename, UInt8* romData,
 static void ejectCart(RomMapperY8960Scc* rm)
 {
     romMapperY8960MixerDestroy();
+    romMapperY8960OpmDestroy();
     romMapperY8960TimerDestroy();
     romMapperY8960SsgsDestroy();
     romMapperY8960Opl2exDestroy();
@@ -475,6 +479,7 @@ int romMapperY8960CartCreate(const char* filename, UInt8* romData,
     success &= romMapperY8960Opl2exCreate();
     success &= romMapperY8960SsgsCreate();
     success &= romMapperY8960TimerCreate();
+    success &= romMapperY8960OpmCreate();
     success &= romMapperY8960MixerCreate();
 
     return success;

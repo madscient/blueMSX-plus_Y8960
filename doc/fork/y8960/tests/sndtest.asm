@@ -1,5 +1,6 @@
 ; Y8960 sound test cartridge: the SCC, its pan, the mixer's SCC volume and
-; its master volume, by pitch, level and side.
+; its master volume, then the OPM, its volume and its sides, by pitch, level
+; and side.
 ;
 ; Runs from the init entry of a Y8960 SCC cartridge (a plain 16kB image at
 ; 4000h; build it with make-sndtest.py). Every step that sounds plays the
@@ -12,14 +13,17 @@
 ;
 ; The same steps can be judged by ear; each line says what should be heard.
 ;
-; The volume is written while BANK1 shows a ROM bank, which is when the
-; window is there; the SCC is then shown in BANK1 (RAM mode), which hides
-; the window while it plays.
+; The volumes are written while BANK1 shows a ROM bank; the SCC is then
+; shown in BANK1 (RAM mode) while it plays.
 ;
-; The pan registers are 9900h-9904h with BANK2 showing the SCC, in both
-; modes. 7900h in BANK1 is the SCC's own register, not a pan, and 9900h with
-; a RAM bank in BANK2 is memory: steps L and N write a pan there and expect
-; it not to move.
+; The pan registers are x900h-x904h of the SCC window: 9900h with BANK2
+; showing the SCC, in both modes, and 7900h with BANK1 showing it in RAM
+; mode. 9900h with a RAM bank in BANK2 is memory: step N writes a pan there
+; and expects it not to move.
+;
+; The OPM plays a sine on channel 1 at 440 Hz, a pitch of its own so the
+; analysis tells it from the SCC. Its sides are the chip's own RL bits, which
+; switch rather than pan: one side alone is as loud there as both together.
 ;
 ; The steps in BANK2 hand page 2 to the cartridge by writing A8h directly,
 ; taking the slot from page 1. That holds only while the cartridge sits in a
@@ -34,11 +38,17 @@ REG_B1R equ     04ffdh          ; BANK1 register, RAM mode
 REG_B2R equ     04ffeh          ; BANK2 register, RAM mode
 REG_B2C equ     09000h          ; BANK2 register, compatibility mode
 VOLSCC  equ     07ffah          ; the mixer's SCC volume, in the window
+VOLOPM  equ     07ffdh          ; the mixer's OPM volume, in the window
 VOLMST  equ     07ffeh          ; the mixer's master volume, in the window
+ENA2    equ     07fffh          ; I/O enabler 2: b2 = OPM
+TUNMA   equ     07ffbh          ; tunnel to the OPM, address
+TUNMD   equ     07ffch          ; tunnel to the OPM, data
+OPMA    equ     07eh            ; OPM: address
+OPMD    equ     07fh            ; OPM: data
 
 SCC1    equ     078h            ; page of the SCC window, BANK1 at 3Fh
 SCC2    equ     098h            ; page of the SCC window, BANK2 at 3Fh
-NOPAN1  equ     07900h          ; where a pan would be in BANK1: the SCC's 00h
+PAN1    equ     07900h          ; the pan registers, BANK1 at 3Fh
 PAN     equ     099h            ; page of the pan registers, BANK2 at 3Fh
 
         org     04000h
@@ -148,13 +158,12 @@ init:
         ld      h, 03fh
         call    bank2pan
 
-; --- L. RAM mode, BANK1: 01h written to 7900h, then channel 1. 7900h is the
-;     SCC's own register, so channel 1 keeps 40h from J
+; --- L. RAM mode, BANK1: channel 1 pan FFh at 7900h, the right side only
         ld      hl, msg_l
         call    print
-        ld      c, 001h
+        ld      c, 0ffh
         ld      e, 0
-        call    bank1poke
+        call    bank1pan
 
 ; --- M. RAM mode, BANK2: 01h at 9900h moves channel 1 to the left
         ld      hl, msg_m
@@ -175,9 +184,87 @@ init:
         ld      h, 010h
         call    bank2pan
 
+; --- O. OPM channel 1 through 7Eh-7Fh once its enabler is opened, both
+;     sides: 440 Hz in the centre
+        ld      hl, msg_o
+        call    print
+        ld      a, 004h
+        ld      (ENA2), a
+        ld      hl, opm_tone
+        call    opmlist
+        call    opmplay
+
+; --- P. OPM volume 40h: 440 Hz at half the level
+        ld      hl, msg_p
+        call    print
+        ld      a, 040h
+        ld      (VOLOPM), a
+        call    opmplay
+        ld      a, 080h
+        ld      (VOLOPM), a
+
+; --- Q. RL = left only, written through the tunnel at 7FFBh-7FFCh with the
+;     port shut: the left side only, as loud there as in O
+        ld      hl, msg_q
+        call    print
+        xor     a
+        ld      (ENA2), a
+        ld      a, 020h
+        ld      (TUNMA), a
+        ld      a, 047h
+        ld      (TUNMD), a
+        ld      a, 004h
+        ld      (ENA2), a
+        call    opmplay
+
         ld      hl, msg_done
         call    print
         ret
+
+; OPM channel 1 keyed on for as long as hold lasts. Destroys AF, B, DE
+opmplay:
+        ld      de, 00878h              ; key on, all four operators
+        call    opmout
+        call    hold
+        ld      de, 00800h
+        call    opmout
+        jp      gap
+
+; Writes the (register, value) pairs at HL through the ports, up to FFh.
+; Destroys AF, DE, HL
+opmlist:
+        ld      a, (hl)
+        cp      0ffh
+        ret     z
+        ld      d, a
+        inc     hl
+        ld      e, (hl)
+        inc     hl
+        call    opmout
+        jr      opmlist
+
+; Writes E to OPM register D. Destroys A
+opmout:
+        ld      a, d
+        out     (OPMA), a
+        ld      a, e
+        out     (OPMD), a
+        ret
+
+; Channel 1 as a sine: connection 7 sounds every operator, and three of them
+; are silenced, leaving C2 alone at 440 Hz (note A4).
+opm_tone:
+        db      020h, 0c7h              ; both sides, no feedback, connection 7
+        db      028h, 04ah              ; key code: octave 4, A
+        db      030h, 000h
+        db      038h, 000h
+        db      040h, 001h, 048h, 001h, 050h, 001h, 058h, 001h ; multiple 1
+        db      060h, 07fh, 068h, 07fh, 070h, 07fh, 078h, 010h ; total level
+        db      080h, 01fh, 088h, 01fh, 090h, 01fh, 098h, 01fh ; attack 31
+        db      0a0h, 000h, 0a8h, 000h, 0b0h, 000h, 0b8h, 000h
+        db      0c0h, 000h, 0c8h, 000h, 0d0h, 000h, 0d8h, 000h
+        db      0e0h, 00fh, 0e8h, 00fh, 0f0h, 00fh, 0f8h, 00fh ; release 15
+        db      0ffh
 
 ; Channel 1 for a while, the SCC shown in BANK1 only while it plays. BANK1
 ; shows the SCC only in RAM mode. Destroys AF, B, DE, HL
@@ -188,13 +275,13 @@ play:
         call    sound
         jr      sccoff
 
-; One channel for a while after writing C where its pan would be in BANK1
-; (7900h + channel), the SCC shown in BANK1.
+; One channel for a while after writing C to its pan at 7900h + channel, the
+; SCC shown in BANK1.
 ; In:  C = the value, E = the channel, 0 or 4
 ; Destroys AF, B, DE, HL
-bank1poke:
+bank1pan:
         call    sccon
-        ld      hl, NOPAN1
+        ld      hl, PAN1
         ld      l, e
         ld      (hl), c
         ld      h, SCC1
@@ -360,10 +447,16 @@ msg_j:
 msg_k:
         db      "K 9904H FFH, CH5: RIGHT", 13, 10, 0
 msg_l:
-        db      "L RAM MODE 7900H 01H: AS J", 13, 10, 0
+        db      "L RAM MODE 7900H FFH: RIGHT", 13, 10, 0
 msg_m:
         db      "M RAM MODE 9900H 01H: LEFT", 13, 10, 0
 msg_n:
         db      "N RAM BANK 9900H FFH: LEFT", 13, 10, 0
+msg_o:
+        db      "O OPM CH1: 440HZ", 13, 10, 0
+msg_p:
+        db      "P OPM VOLUME 40H: HALF", 13, 10, 0
+msg_q:
+        db      "Q OPM TUNNEL RL=L: LEFT", 13, 10, 0
 msg_done:
         db      "DONE", 13, 10, 0
