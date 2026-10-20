@@ -29,25 +29,25 @@ Y8960 対応は upstream には存在しない、このフォーク固有の機�
 
 | ファイル | 役割 |
 |---|---|
-| `tests/banktest.asm` + `make-banktest.py` | MSX 側で走る回帰テスト。バンクマッパー・窓・ミラー・タイマ・OPLLEX・OPL2EX・SSGS。128KB に展開 |
-| `tests/sndtest.asm` + `make-sndtest.py` + `analyze-sndtest.py` + `run-sndtest.ps1` | SCC の音と定位、ミキサーの SCC 音量とマスター。録音した WAV を音程・レベル比・左右で判定する。16KB |
+| `tests/banktest.asm` + `make-banktest.py` | MSX 側で走る回帰テスト。バンクマッパー・窓・ミラー・タイマ・OPLLEX・OPL2EX・SSGS・OPM。128KB に展開 |
+| `tests/sndtest.asm` + `make-sndtest.py` + `analyze-sndtest.py` + `run-sndtest.ps1` | SCC の音と定位、ミキサーの SCC 音量とマスター、OPM の音と音量と左右。録音した WAV を音程・レベル比・左右で判定する。16KB |
 | `tests/adpcmtest.asm` + `make-adpcmtest.py` | OPL2EX の ADPCM がサンプルを時刻どおりに終えるか。`C0h`/`C1h` を叩くので、本体の MSX-AUDIO にも使える。16KB |
 | `tests/opllex-bank-probe.c` | OPLLEX のコア単体試験（ヘッドレス）。バンクとパン |
 | `tests/opl2ex-probe.cpp` + `opl2ex-host-stub.c` | OPL2EX のコア単体試験（ヘッドレス） |
 | `tests/ssgs-probe.c` + `ssgs-host-stub.c` | SSGS のコア単体試験（ヘッドレス）。配置・音量・パン・GPIO |
-| `tests/MSX2+ - C-BIOS + Y8960/` | 6 ブロックを置いた構成。**`y8960bas.rom` が要る** |
+| `tests/MSX2+ - C-BIOS + Y8960/` | 7 ブロックを置いた構成。**`y8960bas.rom` が要る** |
 | `tests/MSX2+ - C-BIOS + Y8960 (banktest)/` | 同じ構成で、Y8960 SCC に `banktest.rom` を載せたもの。本体 MSX-MUSIC は外してある |
 | `tests/MSX2+ - C-BIOS + Y8960 (cartridge)/` | Y8960 SCC を**外した**構成。`/rom1 <rom> /romtype1 Y8960SCC` でカートリッジとして挿す |
 | `tests/MSX2+ - C-BIOS + Y8960 (whole cart)/` | Y8960 を**一つも持たない**構成。`/rom1 <rom> /romtype1 Y8960` でカード一式をカートリッジとして挿す。`(banktest)` と突き合わせる相手 |
-| `tests/MSX2 - Y8960 (firmware)/` | 汎用 `MSX2`（MSX BASIC 2.1）に Y8960 の 6 ブロックを載せ、Y8960 SCC に `y8960bas.rom` を載せたもの。**`Machines/Shared Roms/` の BIOS と `y8960bas.rom` が要る** |
+| `tests/MSX2 - Y8960 (firmware)/` | 汎用 `MSX2`（MSX BASIC 2.1）に Y8960 の 7 ブロックを載せ、Y8960 SCC に `y8960bas.rom` を載せたもの。**`Machines/Shared Roms/` の BIOS と `y8960bas.rom` が要る** |
 | `tests/MSX2+ - C-BIOS + MSX-AUDIO/` | Y8960 を**持たず**、本体に MSX-AUDIO（ROM 無しの Y8950）を置いた構成。`adpcmtest.rom` を素の ROM として挿し、本体の MSX-AUDIO のバックエンドを試す |
 
 コア単体試験のビルド手順は各ファイルの冒頭にある。
 
 ## 状態
 
-**6 ブロックすべてに中身が入り、MSX 側から確かめられるものは確かめ終えた。**
-DCSG と、OPLLEX / OPL2EX の 2 回路目は 2026-10-16 の仕様書で消え、外してある。
+**7 ブロックすべてに中身が入り、MSX 側から確かめられるものは確かめ終えた。**
+DCSG と、OPLLEX / OPL2EX の 2 回路目は 2026-10-16 の仕様書で消え、外してある。OPM は 2026-10-20 の仕様書で増えた。
 本体内蔵の `MSX2++` は別のハードウェアになるとの回答で、2026-10-17 に撤去した。
 MSX-MIXER だけは実機側が未実装で、入口（値を憶える）までで止まっている。
 

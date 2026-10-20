@@ -225,8 +225,9 @@ y8960.2 までの流れ（`release.yml` が公開する）では自動生成の�
 
 ## Y8960 の実装状況
 
-**6 ブロックが `RomType` を持ち、マシン構成に個別に置ける。すべてに中身が入っている。**
-DCSG と、OPLLEX / OPL2EX の 2 回路目は 2026-10-16 の仕様書でハードウェアから消え、外した（RomType 206 は欠番）。
+**7 ブロックが `RomType` を持ち、マシン構成に個別に置ける。すべてに中身が入っている。**
+DCSG と、OPLLEX / OPL2EX の 2 回路目は 2026-10-16 の仕様書でハードウェアから消え、外した。
+OPM は 2026-10-20 の仕様書で増え、DCSG の番号だった RomType 206 を使っている。
 
 | ブロック | 状態 | 土台 |
 |---|---|---|
@@ -234,13 +235,14 @@ DCSG と、OPLLEX / OPL2EX の 2 回路目は 2026-10-16 の仕様書でハー�
 | OPL2EX | 実装済み・**音を確認** | `Src/SoundChips/OpenMsxY8950Latest.cpp` ほか（openMSX の Y8950 の移植版）のフォーク |
 | SSGS | 実装済み・**音を確認** | `Src/SoundChips/AY8910.c` のフォーク |
 | MSX-TIMER | 実装済み・**音は持たない** | 新規 |
-| MSX-MIXER | 実装済み・**SCC の音量とマスターを録音で確認**（窓の `7FF7h`-`7FFAh` と `7FFEh`） | 新規 |
+| OPM | 実装済み・**音程・音量・左右を録音で確認** | `Src/SoundChips/MameYM2151.c` と `ym2151.c` のフォーク |
+| MSX-MIXER | 実装済み・**SCC と OPM の音量、マスターを録音で確認**（窓の `7FF7h`-`7FFAh`、`7FFDh`、`7FFEh`） | 新規 |
 | Y8960 SCC + マッパー | 実装済み・**音とチャンネル別の定位を録音で確認** | `Src/SoundChips/Y8960Scc.c`（`SCC.c` のフォーク）+ 新規マッパー |
 | I/O イネーブラ / MMIO 窓 | 実装済み | SCC のマッパーが持つ |
 
-**4 つの音源ブロックすべてを、エミュレータの中で人が聴いて確かめた。**
+**OPM 以外の 4 つの音源ブロックを、エミュレータの中で人が聴いて確かめた。** OPM は録音からの判定だけ。
 SCC は録音からも判定している（`y8960/tests/sndtest.asm`）。
-**タイマ割り込みが CPU に届くことも確かめた**（`banktest` の 19）。
+**タイマ割り込みが CPU に届くことも確かめた**（`banktest` の 19。OPM のタイマは 23）。
 詳細は `y8960/implementation-plan.md` の §0 と各 §「確かめたこと」。
 
 **カートリッジ内の音源ブロックは、SCC そのものではなく等価回路である。**
@@ -297,6 +299,8 @@ blueMSX+ のファイルは冒頭に帰属を持つ。**どれも消さない。
 | `Src/SoundChips/NukedOPLL/` | GPLv2 |
 | `Src/SoundChips/OpenMsxY8950Latest/` | GPL（openMSX 由来） |
 | `Src/SoundChips/AY8910.c` / `SCC.c` | GPLv2（blueMSX 由来） |
+| `Src/SoundChips/ym2151.c` | GPLv2（blueMSX 由来） |
+| `Src/SoundChips/MameYM2151.c` | 明記なし（MAME の YM2151 の旧版。Jarek Burczynski）。blueMSX に同梱されている条件のまま |
 
 `Src/SoundChips/Y8960OpllCore.c` は Emu2413 のフォークなので MIT 表示を引き継ぎ、
 音色データの CC BY-SA 表示を併せて持つ。
