@@ -163,18 +163,13 @@ static int sccPanAddress(UInt16 address)
     return (address & 0x1FF8) == 0x1900 && (address & 0x07) <= 4;
 }
 
-/* The window is everywhere but over a RAM bank: software that maps RAM into
-** BANK1 must be able to use all of it. Over the SCC window it takes 7FF0-7FFF
-** from the SCC, as the RTL does. In compatibility mode a bank number from 16
-** up cannot be written and is not RAM here, as openMSX_Y8960 has it. The RTL
-** of 2026-10-20 shows the window over RAM too, which its author counts as a
-** bug to be fixed. */
+/* In RAM mode the window shows only over a ROM bank, judged on the low five
+** bits of the bank number as the RTL does: #32-#47 count as ROM, and the SCC
+** (#63) does not, so 7FF0-7FFF then belong to the SCC. In compatibility mode
+** a bank number from 16 up cannot be written and is not RAM here, as
+** openMSX_Y8960 has it. */
 static int mmioVisible(RomMapperY8960Scc* rm)
 {
-    if (sccVisible(rm, 1)) {
-        return 1;
-    }
-
     return !(rm->ramMode && (rm->bankReg[1] & 0x1F) >= Y8960_ROM_BANKS);
 }
 
@@ -331,8 +326,8 @@ static void write(RomMapperY8960Scc* rm, UInt16 address, UInt8 value)
     int bank;
 
     /* 7FF0-7FFF: the enablers, the tunnels to the other blocks, and the
-    ** mixer's volumes and master. Every write here stays in the window,
-    ** whatever it shows behind. */
+    ** mixer's volumes and master. Every write here stays in the window and
+    ** never reaches the bank behind it. */
     if (region == 1 && (address & 0x1FF0) == Y8960_WIN_BASE && mmioVisible(rm)) {
         int offset = address & 0x0F;
         if (offset >= Y8960_WIN_VOLUME && offset < Y8960_WIN_VOLUME + Y8960_VOL_OPM) {

@@ -780,11 +780,12 @@ t19_fail:
         ld      hl, msg_t19ng
         call    print
 
-; --- 20. the window over the SCC in BANK1
+; --- 20. no window over the SCC in BANK1
 ;
-; RAM mode with 3Fh in BANK1 shows the SCC at 7800-7FFF, and the window takes
-; 7FF0-7FFF from it. The timer is shut through the window over a ROM bank,
-; opened over the SCC, and read with a ROM bank back.
+; RAM mode with 3Fh in BANK1 shows the SCC at 7800-7FFF, and 7FF0-7FFF stay
+; the SCC's: 80h written at 7FFFh must leave the timer shut. The SCC's mode
+; register takes it instead, and is put back through 7FEFh, its mirror below
+; the window, so a window that wrongly took 7FFFh is not shut again here.
 t20:
         ld      a, 1
         ld      (REG_B1C), a
@@ -795,12 +796,14 @@ t20:
         ld      a, 03fh
         ld      (REG_B1R), a            ; the SCC in BANK1
         ld      a, 080h
-        ld      (ENA2), a               ; open the timer, if the window is here
+        ld      (ENA2), a               ; opens the timer only if the window is here
+        xor     a
+        ld      (07fefh), a             ; the SCC's mode register back to 0
         call    rombank1
         in      a, (0b2h)
         cp      0ffh
         ld      hl, msg_t20ok
-        jr      nz, t20_print
+        jr      z, t20_print
         ld      hl, msg_t20ng
 t20_print:
         call    print
@@ -1304,9 +1307,9 @@ msg_t19ok:
 msg_t19ng:
         db      "19 TIMER INTERRUPT: NG", 13, 10, 0
 msg_t20ok:
-        db      "20 WINDOW OVER SCC: OK", 13, 10, 0
+        db      "20 NO WINDOW OVER SCC: OK", 13, 10, 0
 msg_t20ng:
-        db      "20 WINDOW OVER SCC: NG", 13, 10, 0
+        db      "20 NO WINDOW OVER SCC: NG", 13, 10, 0
 msg_t21ok:
         db      "21 NO WINDOW OVER RAM: OK", 13, 10, 0
 msg_t21ng:
