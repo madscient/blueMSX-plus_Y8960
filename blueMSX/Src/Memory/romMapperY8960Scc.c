@@ -61,6 +61,10 @@
 #define Y8960_ENABLE2_SSGS  0x02
 #define Y8960_ENABLE2_OPM   0x04
 #define Y8960_ENABLE2_TIMER 0x80
+/* The cartridge keeps only these bits, so only these come back on a read of
+** 7FFFh. What it returns for the others is not yet known; 0 is a guess. */
+#define Y8960_ENABLE2_READ  (Y8960_ENABLE2_OPL2 | Y8960_ENABLE2_SSGS | \
+                             Y8960_ENABLE2_OPM  | Y8960_ENABLE2_TIMER)
 
 typedef struct {
     int    deviceHandle;
@@ -173,6 +177,14 @@ static int mmioVisible(RomMapperY8960Scc* rm)
     return !(rm->ramMode && (rm->bankReg[1] & 0x1F) >= Y8960_ROM_BANKS);
 }
 
+/* 7FFFh is the one address in the window that also answers a read. The rest
+** of the window is write only, and a read there reaches the bank behind it. */
+static int enable2Readable(RomMapperY8960Scc* rm, UInt16 address)
+{
+    return (address >> 13) == 1 && (address & 0x1FFF) == Y8960_WIN_BASE + Y8960_WIN_ENABLE2 &&
+           mmioVisible(rm);
+}
+
 static int mirrorPage(int region)
 {
     return region < 2 ? region + 6 : region - 2;
@@ -186,10 +198,12 @@ static void bankSwitch(RomMapperY8960Scc* rm, int region)
     /* Region 0 carries the RAM mode and bank registers, so its writes have
     ** to come through the callback even when a RAM bank is mapped there. */
     int    writable = !scc && rm->ramMode && region != 0 && bank >= Y8960_ROM_BANKS;
+    int    readable = !scc && !(region == 1 && mmioVisible(rm));
 
-    /* The SCC window covers only 1800-1FFF of the region, and a mapped page
-    ** is all or nothing, so the whole region goes through the callback. */
-    slotMapPage(rm->slot, rm->sslot, rm->startPage + region, bankData, !scc, writable);
+    /* The SCC window covers only 1800-1FFF of the region, and 7FFFh is a
+    ** single byte, but a mapped page is all or nothing, so the whole region
+    ** goes through the callback. */
+    slotMapPage(rm->slot, rm->sslot, rm->startPage + region, bankData, readable, writable);
 
     /* Each bank also shows four pages away: 4000-7FFF again at C000-FFFF and
     ** 8000-BFFF again at 0000-3FFF. The mirrors are for reading; writes and
@@ -302,6 +316,10 @@ static UInt8 read(RomMapperY8960Scc* rm, UInt16 address)
 {
     int region = address >> 13;
 
+    if (enable2Readable(rm, address)) {
+        return rm->ioEnable2 & Y8960_ENABLE2_READ;
+    }
+
     if ((address & 0x1800) == 0x1800 && sccVisible(rm, region)) {
         return y8960SccRead(rm->scc, (UInt8)(address & 0xFF));
     }
@@ -312,6 +330,10 @@ static UInt8 read(RomMapperY8960Scc* rm, UInt16 address)
 static UInt8 peek(RomMapperY8960Scc* rm, UInt16 address)
 {
     int region = address >> 13;
+
+    if (enable2Readable(rm, address)) {
+        return rm->ioEnable2 & Y8960_ENABLE2_READ;
+    }
 
     if ((address & 0x1800) == 0x1800 && sccVisible(rm, region)) {
         return y8960SccPeek(rm->scc, (UInt8)(address & 0xFF));

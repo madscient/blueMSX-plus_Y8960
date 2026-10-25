@@ -7,7 +7,7 @@
 ; taking the slot from page 1. That holds only while the cartridge sits in a
 ; primary slot that is not expanded, as in the test machine.
 ;
-; Each 8kB bank carries its bank number at offset 0C00h, placed there by
+; Each 8kB bank carries its bank number at offset 0E00h, placed there by
 ; make-banktest.py. Bank 0 holds this code.
 
 CHPUT   equ     000a2h
@@ -15,7 +15,7 @@ RG1SAV  equ     0f3e0h          ; BIOS copy of VDP register 1
 HKEYI   equ     0fd9ah          ; hook called on every interrupt
 TCOUNT  equ     HKEYI + 3       ; free while the hook holds a 3-byte JP
 
-BANK1W  equ     06C00h          ; marker seen through the BANK1 window
+BANK1W  equ     06E00h          ; marker seen through the BANK1 window
 BANK1   equ     06000h          ; BANK1 window itself
 
 REG_B1C equ     07000h          ; BANK1 register, compatibility mode
@@ -548,7 +548,7 @@ t14:
         ld      (REG_B1R), a            ; bank 16 at 6000h, where it can be written
         ld      hl, 04000h
         ld      de, 06000h
-        ld      bc, 00C00h              ; up to the marker, which holds all the code
+        ld      bc, 00E00h              ; up to the marker, which holds all the code
         ldir                            ; the code, into bank 16
         xor     a
         ld      (07f00h), a             ; the probe byte, bank 16 offset 1F00h
@@ -585,7 +585,7 @@ t14_fail:
 ;
 ; Page 0 is given to the cartridge's slot for one read, with interrupts off
 ; because the BIOS lives there. BANK2 still holds bank 2, whose marker sits at
-; 0C00h. An unmirrored slot reads FFh there.
+; 0E00h. An unmirrored slot reads FFh there.
 t15:
         di
         in      a, (0a8h)
@@ -598,7 +598,7 @@ t15:
         and     0fch
         or      c
         out     (0a8h), a
-        ld      a, (00C00h)
+        ld      a, (00E00h)
         ld      c, a
         ld      a, b
         out     (0a8h), a
@@ -622,7 +622,7 @@ t15_done:
 ; Page 3 holds the stack and the BIOS work area, so it belongs to the
 ; cartridge only between the two OUTs, with interrupts off and nothing in
 ; between that touches the stack. BANK0 holds bank 0 and BANK1 bank 1, whose
-; markers sit at 0C00h. An unmirrored slot reads FFh there.
+; markers sit at 0E00h. An unmirrored slot reads FFh there.
 t16:
         ld      a, 1
         ld      (REG_B1C), a
@@ -639,9 +639,9 @@ t16:
         and     03fh
         or      c
         out     (0a8h), a
-        ld      a, (0cc00h)
+        ld      a, (0ce00h)
         ld      d, a
-        ld      a, (0ec00h)
+        ld      a, (0ee00h)
         ld      c, a
         ld      a, b
         out     (0a8h), a
@@ -952,6 +952,34 @@ t23:
 t23_print:
         call    print
 
+; --- 24. enabler 2 reads back
+;
+; BANK1 holds ROM bank 1, whose byte at 7FFFh is 0, so the ROM cannot pass for
+; either value. FFh comes back as the four bits the cartridge keeps.
+t24:
+        ld      a, 0ffh
+        ld      (ENA2), a
+        ld      a, (ENA2)
+        ld      c, a
+        ld      a, 005h
+        ld      (ENA2), a
+        ld      a, (ENA2)
+        ld      b, a
+        xor     a
+        ld      (ENA2), a
+        ld      a, c
+        cp      087h
+        jr      nz, t24_fail
+        ld      a, b
+        cp      005h
+        jr      nz, t24_fail
+        ld      hl, msg_t24ok
+        jr      t24_print
+t24_fail:
+        ld      hl, msg_t24ng
+t24_print:
+        call    print
+
 done:
         ret
 
@@ -1013,9 +1041,9 @@ sccpage2:
         ld      b, a
         ld      (hl), c
 
-        push    hl                      ; the marker, 0400h below the register
+        push    hl                      ; the marker, 0200h below the register
         ld      a, h
-        sub     004h
+        sub     002h
         ld      h, a
         ld      e, (hl)
         pop     hl
@@ -1322,3 +1350,7 @@ msg_t23ok:
         db      "23 OPM INTERRUPT: OK", 13, 10, 0
 msg_t23ng:
         db      "23 OPM INTERRUPT: NG", 13, 10, 0
+msg_t24ok:
+        db      "24 ENABLER 2 READ: OK", 13, 10, 0
+msg_t24ng:
+        db      "24 ENABLER 2 READ: NG", 13, 10, 0
