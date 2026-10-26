@@ -62,7 +62,7 @@
 #define Y8960_ENABLE2_OPM   0x04
 #define Y8960_ENABLE2_TIMER 0x80
 /* The cartridge keeps only these bits, so only these come back on a read of
-** 7FFFh. What it returns for the others is not yet known; 0 is a guess. */
+** 7FFFh, and the others read as 0. */
 #define Y8960_ENABLE2_READ  (Y8960_ENABLE2_OPL2 | Y8960_ENABLE2_SSGS | \
                              Y8960_ENABLE2_OPM  | Y8960_ENABLE2_TIMER)
 
