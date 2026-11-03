@@ -18,8 +18,9 @@
 ;   5 TIMER CLK  core 0 at resolution 3 counts for six frames; the count is
 ;                printed. At 42.95MHz it comes to 65 at 60Hz and 78 at 50Hz,
 ;                on 85.9MHz to twice that. 60-85 passes
-;   6 SSG2 READ  A2h reads the second SSG's registers: 10h as written, 17h
-;                with bits 7-6 as 10, 1Eh as the DIP switch, 00h, 24h as
+;   6 SSG2 READ  A2h reads the second SSG's registers: first the reset
+;                values (11h 0Fh, 1Ch FFh, 1Dh 0Fh), then 10h as written,
+;                17h with bits 7-6 as 10, 1Eh as the DIP switch, 00h, 24h as
 ;                written; a pointer of 50h reads 10h
 ;   7 SSG1 READ  A2h reads the machine's PSG for 00h-0Fh, the same with the
 ;                cartridge's SSG port open as with it shut, while the second
@@ -238,42 +239,59 @@ t5_print:
         call    print
 
 ; --- 6. SSG2 through A2h
+; Nothing has written the second SSG since the reset, so it starts with the
+; cartridge's reset values.
         di
         ld      bc, 0
+        ld      a, 011h
+        out     (SSG_AD), a
+        in      a, (SSG_RD)
+        ld      de, 0010fh
+        call    expect
+        ld      a, 01ch
+        out     (SSG_AD), a
+        in      a, (SSG_RD)
+        ld      de, 002ffh
+        call    expect
+        ld      a, 01dh
+        out     (SSG_AD), a
+        in      a, (SSG_RD)
+        ld      de, 0030fh
+        call    expect
         ld      a, 010h
         out     (SSG_AD), a
         ld      a, 05ah
         out     (SSG_WR), a
         in      a, (SSG_RD)
-        ld      de, 0015ah
+        ld      de, 0045ah
         call    expect
         ld      a, 017h
         out     (SSG_AD), a
         ld      a, 03fh
         out     (SSG_WR), a
         in      a, (SSG_RD)
-        ld      de, 002bfh
+        ld      de, 005bfh
         call    expect
         ld      a, 01eh
         out     (SSG_AD), a
         ld      a, 0a5h
         out     (SSG_WR), a
         in      a, (SSG_RD)
-        ld      de, 00300h
+        ld      de, 00600h
         call    expect
         ld      a, 024h
         out     (SSG_AD), a
         ld      a, 040h
         out     (SSG_WR), a
         in      a, (SSG_RD)
-        ld      de, 00440h
+        ld      de, 00740h
         call    expect
         ld      a, 080h         ; the gain back to unity
         out     (SSG_WR), a
         ld      a, 050h
         out     (SSG_AD), a
         in      a, (SSG_RD)
-        ld      de, 0055ah
+        ld      de, 0085ah
         call    expect
         ld      hl, msg_t6
         call    report

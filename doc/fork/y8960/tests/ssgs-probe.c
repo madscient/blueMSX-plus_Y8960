@@ -371,6 +371,23 @@ int main(void)
         check("but is storage with no GPIO attached", rd(chip, 0x0F) == 0x0A && rd(chip, 0x0E) == 0x00);
     }
 
+    /* ---- the reset values are the cartridge's -------------------------- */
+    {
+        y8960SsgsReset(chip);
+        check("a reset leaves each tone at its longest period",
+              rd(chip, 0x00) == 0xFF && rd(chip, 0x01) == 0x0F &&
+              rd(chip, 0x04) == 0xFF && rd(chip, 0x05) == 0x0F &&
+              rd(chip, 0x10) == 0xFF && rd(chip, 0x15) == 0x0F);
+        check("and the envelope at its longest period, all four shape bits set",
+              rd(chip, 0x0B) == 0xFF && rd(chip, 0x0C) == 0xFF && rd(chip, 0x0D) == 0x0F &&
+              rd(chip, 0x1B) == 0xFF && rd(chip, 0x1C) == 0xFF && rd(chip, 0x1D) == 0x0F);
+        check("and everything else at 0",
+              rd(chip, 0x06) == 0x00 && rd(chip, 0x07) == 0x00 && rd(chip, 0x08) == 0x00 &&
+              rd(chip, 0x0A) == 0x00 && rd(chip, 0x1E) == 0x00 && rd(chip, 0x1F) == 0x00);
+        render(&l, &r);
+        check("and none of it sounds", l == 0.0 && r == 0.0);
+    }
+
     /* ---- the register pointer is six bits wide -------------------------- */
     {
         y8960SsgsReset(chip);

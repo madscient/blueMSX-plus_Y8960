@@ -87,6 +87,15 @@ static const UInt8 regMask[14] = {
     0x1f, 0x1f, 0x1f, 0xff, 0xff, 0x0f
 };
 
+/* The cartridge's reset values (ssg_core.v), not the AY8910's zeros: each
+** tone at its longest period, the envelope at its longest period with all
+** four shape bits set, everything else 0. The volumes start at 0, so none of
+** this sounds; it shows in what A2h reads back. The GPIO comes up cleared. */
+static const UInt8 resetValue[Y8960_SSGS_CORE_REGS] = {
+    0xff, 0x0f, 0xff, 0x0f, 0xff, 0x0f, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0xff, 0xff, 0x0f, 0x00, 0x00
+};
+
 typedef struct {
     UInt8  regs[Y8960_SSGS_CORE_REGS];
 
@@ -400,9 +409,7 @@ void y8960SsgsReset(Y8960SsgsChip* chip)
         c->noiseVolume = 1;
 
         for (i = 0; i < Y8960_SSGS_CORE_REGS; i++) {
-            /* The GPIO is cleared the way the PSG this stands in for clears
-            ** it, so that whatever hangs off it starts in the same state. */
-            updateRegister(chip, (UInt8)(core * Y8960_SSGS_CORE_REGS + i), 0);
+            updateRegister(chip, (UInt8)(core * Y8960_SSGS_CORE_REGS + i), resetValue[i]);
         }
     }
 
