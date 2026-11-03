@@ -70,6 +70,11 @@
 #define Y8960_SSGS_GPIO_A       0x0E
 #define Y8960_SSGS_GPIO_B       0x0F
 
+/* The DIP switch on the second core's port A. Bit 1 high cuts the slot off
+** from the cartridge, so whatever can read the switch at all sees it low.
+** Bit 0 has no pull and no switch on the prototype; 0 stands in for it. */
+#define Y8960_SSGS_DIP_SWITCH   0x00
+
 /* The volume follows the mixer's curve (Y8960Pan.h): 0 mute, 1-127 linear,
 ** bit 7 unity. The sheet's default of 128 is unity. */
 #define Y8960_SSGS_VOLUME_RESET 0x80
@@ -270,9 +275,10 @@ static void updateRegister(Y8960SsgsChip* chip, UInt8 address, UInt8 data)
     }
 }
 
+/* The register pointer is six bits wide, so 40h and up land on 00h-3Fh. */
 void y8960SsgsWriteAddress(Y8960SsgsChip* chip, UInt8 address)
 {
-    chip->address = address;
+    chip->address = address & 0x3F;
 }
 
 void y8960SsgsWriteData(Y8960SsgsChip* chip, UInt8 data)
@@ -299,8 +305,8 @@ static UInt8 peekRegister(Y8960SsgsChip* chip, UInt8 address)
 /* Registers the chip does not have read as all ones rather than as zero: the
 ** bus ANDs what every device drives, so ones are how a device says it is not
 ** answering. The registers it does have read back what was written, as the
-** PSG this is built from does. The cartridge does not drive the read port;
-** this is for the probe and the debugger. */
+** PSG this is built from does. This covers both cores and is for the probe
+** and the debugger; what the cartridge drives is y8960SsgsReadPort(). */
 UInt8 y8960SsgsReadData(Y8960SsgsChip* chip)
 {
     UInt8 address = chip->address;
@@ -320,6 +326,36 @@ UInt8 y8960SsgsReadData(Y8960SsgsChip* chip)
     }
 
     return chip->core[core].regs[sub];
+}
+
+/* Only the second core answers, and only for its own registers: 10h-1Fh and
+** its volume and pan at 24h-27h and 2Ch-2Fh. Every other pointer reads FFh,
+** which leaves the bus to the machine's PSG; that PSG in turn floats for
+** register numbers of 10h and up, so the two never drive the bus together.
+** The second core's port A reads the DIP switch rather than what was written,
+** and R7 reads its top two bits as 10. */
+UInt8 y8960SsgsReadPort(Y8960SsgsChip* chip)
+{
+    UInt8 address = chip->address;
+    int sub = address % Y8960_SSGS_CORE_REGS;
+
+    if (address >= Y8960_SSGS_CORE_REGS && address < Y8960_SSGS_VOLUME_BASE) {
+        switch (sub) {
+        case 7:
+            return (UInt8)(chip->core[1].regs[7] | 0x80);
+        case Y8960_SSGS_GPIO_A:
+            return Y8960_SSGS_DIP_SWITCH;
+        default:
+            return chip->core[1].regs[sub];
+        }
+    }
+
+    if (address >= Y8960_SSGS_VOLUME_BASE && address < Y8960_SSGS_REG_END &&
+        (address & 0x04)) {
+        return peekRegister(chip, address);
+    }
+
+    return 0xFF;
 }
 
 void y8960SsgsSetIoPort(Y8960SsgsChip* chip, Y8960SsgsReadCb readCb,

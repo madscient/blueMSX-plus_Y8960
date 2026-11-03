@@ -31,10 +31,11 @@
 #include <stdio.h>
 #include <string.h>
 
-/* 3579545 * 24. Every counter divides this by 2^(10 + 2 * reso), giving the
-** eight steps from 11.919578us to 195290.369772us that the specification
-** tabulates. */
-#define Y8960_TIMER_FREQ    85909080u
+/* 3579545 * 12, the cartridge's system clock. The timer's design sheet gives
+** 85.9MHz, but the cartridge clocks the timer at 42.95MHz, which its author
+** confirmed as intended. Every counter divides this by 2^(10 + 2 * reso),
+** giving eight steps from 23.839156us to 390580.739545us. */
+#define Y8960_TIMER_FREQ    42954540u
 
 /* Nothing else in the emulator claims this bit of the pending mask. */
 #define Y8960_TIMER_IRQ     0x1000
@@ -243,7 +244,8 @@ static UInt8 coreReadReg(Y8960TimerCore* t, UInt8 rg)
         return t->countEnable;
     }
 
-    return 0xFF;
+    /* Register 3 does not exist; the hardware reads it as 0. */
+    return 0x00;
 }
 
 static UInt8 coreReadCounter(Y8960TimerCore* t)
@@ -291,6 +293,9 @@ static UInt8 read(RomMapperY8960Timer* rm, UInt16 port)
             return result;
         }
     case 0x03:
+        if (rm->counterSelect >= Y8960_TIMER_COUNT) {
+            return 0xFF;
+        }
         return coreReadCounter(&rm->core[rm->counterSelect]);
     }
 
@@ -321,7 +326,8 @@ static void write(RomMapperY8960Timer* rm, UInt16 port, UInt8 value)
         timerUpdateIrq(rm);
         break;
     case 0x03:
-        rm->counterSelect = value & 0x03;
+        /* A value other than 0-3 selects no counter, and B3h then reads FFh. */
+        rm->counterSelect = (value & 0xFC) ? Y8960_TIMER_COUNT : value;
         break;
     }
 }

@@ -39,7 +39,7 @@
 typedef enum {
     Y8960_IO_OPLL,      /* 7CH-7DH, enabler 1 bit 0 */
     Y8960_IO_OPL2,      /* C0H-C1H, enabler 2 bit 0 */
-    Y8960_IO_SSGS,      /* A0H-A1H, enabler 2 bit 1 */
+    Y8960_IO_SSGS,      /* A0H-A2H, enabler 2 bit 1 */
     Y8960_IO_OPM,       /* 7EH-7FH, enabler 2 bit 2 */
     Y8960_IO_TIMER     /* B0H-B3H, enabler 2 bit 7 */
 } Y8960IoBlock;
@@ -108,12 +108,15 @@ int  romMapperY8960MixerCreate(void);
 void romMapperY8960MixerDestroy(void);
 int  romMapperY8960OpmCreate(void);
 void romMapperY8960OpmDestroy(void);
+/* Answers on the switched I/O (40h-4Fh), which no enabler gates. */
+int  romMapperY8960SysCtrlCreate(void);
+void romMapperY8960SysCtrlDestroy(void);
 /* The SCC block carries the cartridge ROM and the bank mapper, so unlike the
 ** others it is created from the slot entry. */
 int  romMapperY8960SccCreate(const char* filename, UInt8* romData,
                              int size, int slot, int sslot, int startPage);
 
-/* The whole card: the SCC block plus the six other blocks, as a cartridge.
+/* The whole card: the SCC block plus the seven other blocks, as a cartridge.
 ** romData may be NULL, which is the card with no firmware in it. */
 int  romMapperY8960CartCreate(const char* filename, UInt8* romData,
                               int size, int slot, int sslot);

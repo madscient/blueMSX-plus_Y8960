@@ -476,6 +476,7 @@ int romMapperY8960SccCreate(const char* filename, UInt8* romData,
 ** would free each of them twice. */
 static void ejectCart(RomMapperY8960Scc* rm)
 {
+    romMapperY8960SysCtrlDestroy();
     romMapperY8960MixerDestroy();
     romMapperY8960OpmDestroy();
     romMapperY8960TimerDestroy();
@@ -498,6 +499,7 @@ int romMapperY8960CartCreate(const char* filename, UInt8* romData,
     success &= romMapperY8960TimerCreate();
     success &= romMapperY8960OpmCreate();
     success &= romMapperY8960MixerCreate();
+    success &= romMapperY8960SysCtrlCreate();
 
     return success;
 }

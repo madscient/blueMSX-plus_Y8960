@@ -354,49 +354,48 @@ t9:
 
 ; --- 10. OPL2EX: the gate and the tunnel, read back
 ;
-; This block answers reads, so unlike the OPLL it can say for
-; itself whether a write arrived. Each step leaves a value that the next one
-; would not produce by accident.
+; This block answers reads, so unlike the OPLL it can say for itself whether a
+; write arrived. Its data port reads back the ADPCM data alone (0Fh), so a
+; byte goes into the sample RAM and is read out again. Each step leaves a
+; value that the next one would not produce by accident.
 t10:
-; a. shut: the data port must not answer at all
+; a. shut: the status port must not answer at all
         xor     a
         ld      (ENA2), a
-        ld      a, 040h
-        out     (OPL20A), a
-        in      a, (OPL20D)
+        in      a, (OPL20A)
         cp      0ffh
         jr      nz, t10_fail
 
-; b. open: a register written reads back
+; b. open: any register but 0Fh reads FFh, and a byte written to the sample
+;    RAM reads back
         ld      a, 001h
         ld      (ENA2), a
         ld      a, 040h
         out     (OPL20A), a
         ld      a, 03fh
         out     (OPL20D), a
-        ld      a, 040h
-        out     (OPL20A), a
         in      a, (OPL20D)
+        cp      0ffh
+        jr      nz, t10_fail
+        ld      hl, tbl_ram3f
+        call    oplsend
+        call    ramread
         cp      03fh
         jr      nz, t10_fail
 
 ; c. the tunnel delivers while the gate is shut
 ;
 ; Written shut and read after opening, so the read cannot be what did the
-; writing. The register holds 3Fh from step b, so an undelivered write leaves
-; that rather than a zero.
+; writing. The RAM holds 3Fh from step b, so an undelivered write leaves that
+; rather than a zero.
         xor     a
         ld      (ENA2), a
-        ld      a, 040h
-        ld      (TUNC0A), a
-        ld      a, 02ah
-        ld      (TUNC0D), a
+        ld      hl, tbl_ram2a
+        call    tunsend
 
         ld      a, 001h
         ld      (ENA2), a
-        ld      a, 040h
-        out     (OPL20A), a
-        in      a, (OPL20D)
+        call    ramread
         cp      02ah
         jr      nz, t10_fail
 
@@ -731,7 +730,7 @@ t19:
         out     (0b1h), a
         ld      a, 001h
         out     (0b0h), a
-        ld      a, 0ffh                 ; terminal value 255: about 80 a second
+        ld      a, 0ffh                 ; terminal value 255: about 41 a second
         out     (0b1h), a
         ld      a, 002h
         out     (0b0h), a
@@ -1241,6 +1240,66 @@ print:
         call    CHPUT
         inc     hl
         jr      print
+
+; OPL2 register and value pairs, ended by FFh: oplsend through C0h/C1h,
+; tunsend through the tunnel. Destroy A and HL.
+oplsend:
+        ld      a, (hl)
+        cp      0ffh
+        ret     z
+        out     (OPL20A), a
+        inc     hl
+        ld      a, (hl)
+        out     (OPL20D), a
+        inc     hl
+        jr      oplsend
+
+tunsend:
+        ld      a, (hl)
+        cp      0ffh
+        ret     z
+        ld      (TUNC0A), a
+        inc     hl
+        ld      a, (hl)
+        ld      (TUNC0D), a
+        inc     hl
+        jr      tunsend
+
+; The first byte of the sample RAM, read through the data port, in A. The
+; ADPCM takes two reads to fetch before the data comes. Destroys HL.
+ramread:
+        ld      hl, tbl_ramrd
+        call    oplsend
+        ld      a, 00fh
+        out     (OPL20A), a
+        in      a, (OPL20D)
+        in      a, (OPL20D)
+        in      a, (OPL20D)
+        push    af
+        ld      a, 007h
+        out     (OPL20A), a
+        xor     a
+        out     (OPL20D), a
+        pop     af
+        ret
+
+; One byte into the sample RAM at address 0, every flag masked first so that
+; BUF-RDY raises no interrupt.
+tbl_ram3f:
+        db      004h, 080h, 004h, 078h
+        db      008h, 000h, 009h, 000h, 00ah, 000h, 00bh, 0ffh, 00ch, 0ffh
+        db      007h, 060h, 00fh, 03fh, 007h, 000h
+        db      0ffh
+tbl_ram2a:
+        db      004h, 080h, 004h, 078h
+        db      008h, 000h, 009h, 000h, 00ah, 000h, 00bh, 0ffh, 00ch, 0ffh
+        db      007h, 060h, 00fh, 02ah, 007h, 000h
+        db      0ffh
+tbl_ramrd:
+        db      004h, 080h, 004h, 078h
+        db      008h, 000h, 009h, 000h, 00ah, 000h, 00bh, 0ffh, 00ch, 0ffh
+        db      007h, 020h
+        db      0ffh
 
 msg_head:
         db      "Y8960 BANK TEST", 13, 10, 0

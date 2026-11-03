@@ -196,6 +196,9 @@ void y8960Opl2exWrite(Y8960Opl2ex* c, int port, UInt8 value)
     }
 }
 
+/* Unlike a Y8950, the data port reads back only the ADPCM data register
+** (0Fh); every other register reads FFh. The debugger still shows the written
+** values, from regCache. */
 UInt8 y8960Opl2exRead(Y8960Opl2ex* c, int port)
 {
     /* A read brings the ADPCM up to date, and that can end a sample. What
@@ -205,6 +208,9 @@ UInt8 y8960Opl2exRead(Y8960Opl2ex* c, int port)
     if ((port & 1) == 0) {
         return c->chip.readStatus((y8960opl2::EmuTime)boardSystemTime());
     }
+    if (c->latchedAddr != 0x0F) {
+        return 0xFF;
+    }
     return c->chip.readReg(c->latchedAddr, (y8960opl2::EmuTime)boardSystemTime());
 }
 
@@ -212,6 +218,9 @@ UInt8 y8960Opl2exPeek(Y8960Opl2ex* c, int port)
 {
     if ((port & 1) == 0) {
         return c->chip.peekStatus((y8960opl2::EmuTime)boardSystemTime());
+    }
+    if (c->latchedAddr != 0x0F) {
+        return 0xFF;
     }
     return c->chip.peekReg(c->latchedAddr, (y8960opl2::EmuTime)boardSystemTime());
 }

@@ -31,12 +31,15 @@
 #include "AudioMixer.h"
 #include <stdlib.h>
 
-/* The machine's own PSG sits on the same two addresses. Both can be
+/* The machine's own PSG sits on the same three addresses. Both can be
 ** registered since the overlap was fixed upstream, and both receive the
-** write; only the machine's PSG drives the read port at A2h, which this block
-** therefore does not claim. */
+** write. The read port at A2h is shared too: this block answers only for its
+** second core's registers, which the machine's PSG leaves alone (Y8960Ssgs.h).
+** Writes to A2h and A3h do nothing on the cartridge, so A2h is read only here
+** and A3h is not claimed. */
 #define Y8960_SSGS_ADDRESS 0xA0
 #define Y8960_SSGS_DATA    0xA1
+#define Y8960_SSGS_READ    0xA2
 
 typedef struct {
     int             deviceHandle;
@@ -57,6 +60,15 @@ static void writeIo(RomMapperY8960Ssgs* rm, UInt16 port, UInt8 value)
     else {
         y8960SsgsWriteAddress(rm->chip, value);
     }
+}
+
+static UInt8 readIo(RomMapperY8960Ssgs* rm, UInt16 port)
+{
+    if (!y8960IoEnabled(Y8960_IO_SSGS)) {
+        return 0xFF;
+    }
+
+    return y8960SsgsReadPort(rm->chip);
 }
 
 /* The tunnel is not gated: the enablers live in the same window and could not
@@ -94,6 +106,7 @@ static void destroy(RomMapperY8960Ssgs* rm)
 
     ioPortUnregister(Y8960_SSGS_ADDRESS, rm);
     ioPortUnregister(Y8960_SSGS_DATA, rm);
+    ioPortUnregister(Y8960_SSGS_READ, rm);
 
     y8960SsgsDestroy(rm->chip);
 
@@ -122,9 +135,9 @@ int romMapperY8960SsgsCreate(void)
 
     rm->chip = y8960SsgsCreate(boardGetMixer(), "Y8960 SSGS");
 
-    /* Write only: the cartridge does not answer reads. */
     ioPortRegister(Y8960_SSGS_ADDRESS, NULL, writeIo, rm);
     ioPortRegister(Y8960_SSGS_DATA, NULL, writeIo, rm);
+    ioPortRegister(Y8960_SSGS_READ, readIo, NULL, rm);
 
     y8960RegisterTunnel(Y8960_TUN_SSGS, tunnel, rm);
 

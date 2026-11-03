@@ -283,6 +283,7 @@ SOURCE_FILES += romMapperY8960Ssgs.c
 SOURCE_FILES += romMapperY8960Timer.c
 SOURCE_FILES += romMapperY8960Mixer.c
 SOURCE_FILES += romMapperY8960Opm.c
+SOURCE_FILES += romMapperY8960SysCtrl.c
 SOURCE_FILES += romMapperY8960Scc.c
 SOURCE_FILES += SlotManager.c
 SOURCE_FILES += sramMapperMatsuchita.c

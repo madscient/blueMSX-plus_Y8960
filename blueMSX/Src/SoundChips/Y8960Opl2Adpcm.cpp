@@ -30,10 +30,11 @@
 ** Forked for the Y8960 cartridge, 2026 by madscient.
 **
 ** The cartridge's OPL2EX is a YM3812 with ADPCM-B bolted on, and its register
-** map is the Y8950's, so this is the Y8950 port with three changes: the four
+** map is the Y8950's, so this is the Y8950 port with four changes: the four
 ** waveforms a YM3812 has and a Y8950 does not, the MSX-AUDIO parts the
-** cartridge does not carry (keyboard connector, 13 bit DAC, periphery), and a
-** sample RAM that lives outside the circuit so that two circuits can share it.
+** cartridge does not carry (keyboard connector, 13 bit DAC, periphery), a
+** sample RAM that lives outside the circuit so that two circuits can share it,
+** and PCM_BSY, which follows START here and so drops when a sample ends.
 **
 ** It is a fork rather than an extension because the machine's own MSX-AUDIO
 ** keeps using the unmodified port; both end up in one binary. The namespace
@@ -57,14 +58,16 @@ extern "C" {
 namespace y8960opl2 {
 
 static constexpr int R07_RESET       = 0x01;
-/* Bit 3, SP-OFF on the Y8950, was dropped from the Y8960 (specification of
-** 2026-10-16): it is stored with the rest of the register and does nothing. */
+/* The specification lists SP-OFF as dropped, but the hardware still mutes the
+** ADPCM output with it while the sample goes on playing. */
+static constexpr int R07_SP_OFF      = 0x08;
 static constexpr int R07_REPEAT      = 0x10;
 static constexpr int R07_MEMORY_DATA = 0x20;
 static constexpr int R07_REC         = 0x40;
 static constexpr int R07_START       = 0x80;
 static constexpr int R07_MODE        = 0xE0;
 
+static constexpr int R08_ROM         = 0x01;
 static constexpr int R08_64K         = 0x02;
 static constexpr int R08_DA_AD       = 0x04;
 static constexpr int R08_SAMPL       = 0x08;
@@ -89,7 +92,7 @@ Y8950Adpcm::Y8950Adpcm(Y8950& y8950_, const DeviceConfig& config,
     , aud{}
     , startAddr(0), stopAddr(7), addrMask((1 << 18) - 1)
     , volumeWStep(0), readDelay(0), delta(0)
-    , reg7(0), reg15(0)
+    , reg7(0), reg15(0), romBank(false)
 {
     clearRam();
 }
@@ -112,6 +115,7 @@ void Y8950Adpcm::reset(EmuTime time)
     reg7 = 0;
     reg15 = 0;
     readDelay = 0;
+    romBank = false;
     writeReg(0x12, 255, time);
 
     restart(emu);
@@ -127,7 +131,7 @@ bool Y8950Adpcm::isPlaying() const
 
 bool Y8950Adpcm::isMuted() const
 {
-    return !isPlaying();
+    return !isPlaying() || (reg7 & R07_SP_OFF);
 }
 
 void Y8950Adpcm::restart(PlayData& pd) const
@@ -192,13 +196,15 @@ void Y8950Adpcm::writeReg(uint8_t rg, uint8_t data, EmuTime time)
     switch (rg) {
     case 0x07:
         reg7 = data;
+        /* RESET goes first, so 81h leaves PCM_BSY clear as the Y8960 does.
+        ** A Y8950 takes PCM_BSY from the written value and keeps it set. */
+        if (reg7 & R07_RESET) {
+            reg7 = 0;
+        }
         if (reg7 & R07_START) {
             y8950.setStatus(Y8950::STATUS_PCM_BSY);
         } else {
             y8950.resetStatus(Y8950::STATUS_PCM_BSY);
-        }
-        if (reg7 & R07_RESET) {
-            reg7 = 0;
         }
         if (reg7 & R07_START) {
             restart(emu);
@@ -220,9 +226,9 @@ void Y8950Adpcm::writeReg(uint8_t rg, uint8_t data, EmuTime time)
         break;
 
     case 0x08:
-        /* Bit 0 is not looked at. A Y8950 uses it to read samples from a ROM
-        ** instead of its RAM; the Y8960 has only the SRAM behind its ADPCM,
-        ** so there is nothing for the bit to choose. */
+        /* There is no sample ROM behind the Y8960's ADPCM, but the bit still
+        ** takes the SRAM away, as on a Y8950 with an empty ROM socket. */
+        romBank = (data & R08_ROM) != 0;
         addrMask = data & R08_64K ? (1 << 16) - 1 : (1 << 18) - 1;
         break;
 
@@ -359,7 +365,7 @@ uint8_t Y8950Adpcm::peekData() const
 void Y8950Adpcm::writeMemory(unsigned memPtr, uint8_t value)
 {
     unsigned addr = (memPtr / 2) & addrMask;
-    if (addr < ram.size()) {
+    if ((addr < ram.size()) && !romBank) {
         ram.write(addr, value);
     }
 }
@@ -367,7 +373,7 @@ void Y8950Adpcm::writeMemory(unsigned memPtr, uint8_t value)
 uint8_t Y8950Adpcm::readMemory(unsigned memPtr) const
 {
     unsigned addr = (memPtr / 2) & addrMask;
-    if (addr >= ram.size()) {
+    if (romBank || (addr >= ram.size())) {
         return 0;
     } else {
         return ram.read(addr);
@@ -384,7 +390,8 @@ int Y8950Adpcm::calcSample()
         (aud.memPtr > stopAddr) && ((aud.nowStep + delta) & ~STEP_MASK)) {
         return 0;
     }
-    return calcSample(false);
+    int output = calcSample(false);
+    return (reg7 & R07_SP_OFF) ? 0 : output;
 }
 	
 int Y8950Adpcm::calcSample(bool doEmu)
@@ -433,6 +440,9 @@ int Y8950Adpcm::calcSample(bool doEmu)
             } else if (doEmu) {
                 removeSyncPoint();
                 reg7 = 0;
+                /* A Y8950 leaves PCM_BSY set here; the Y8960 drops it
+                ** together with START. */
+                y8950.resetStatus(Y8950::STATUS_PCM_BSY);
             }
         }
     } else {
@@ -453,6 +463,7 @@ void Y8950Adpcm::blueMsxSaveStateImpl(SaveState* s)
     saveStateSet(s, "adpcm_delta",       (UInt32)delta);
     saveStateSet(s, "adpcm_reg7",        (UInt32)reg7);
     saveStateSet(s, "adpcm_reg15",       (UInt32)reg15);
+    saveStateSet(s, "adpcm_romBank",     (UInt32)romBank);
 
     saveStateSet(s, "adpcm_emu_memPtr",       (UInt32)emu.memPtr);
     saveStateSet(s, "adpcm_emu_nowStep",      (UInt32)emu.nowStep);
@@ -475,6 +486,8 @@ void Y8950Adpcm::blueMsxLoadStateImpl(SaveState* s)
     delta       = (int)saveStateGet(s, "adpcm_delta",       delta);
     reg7        = (uint8_t)saveStateGet(s, "adpcm_reg7",  reg7);
     reg15       = (uint8_t)saveStateGet(s, "adpcm_reg15", reg15);
+    /* Missing from states saved before the bit took the SRAM away. */
+    romBank     = saveStateGet(s, "adpcm_romBank", 0) != 0;
 
     emu.memPtr       = saveStateGet(s, "adpcm_emu_memPtr",       emu.memPtr);
     emu.nowStep      = saveStateGet(s, "adpcm_emu_nowStep",      emu.nowStep);

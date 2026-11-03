@@ -32,22 +32,25 @@ Y8960 対応は upstream には存在しない、このフォーク固有の機�
 | `tests/banktest.asm` + `make-banktest.py` | MSX 側で走る回帰テスト。バンクマッパー・窓・ミラー・タイマ・OPLLEX・OPL2EX・SSGS・OPM。128KB に展開 |
 | `tests/sndtest.asm` + `make-sndtest.py` + `analyze-sndtest.py` + `run-sndtest.ps1` | SCC の音と定位、ミキサーの SCC 音量とマスター、OPM の音と音量と左右。録音した WAV を音程・レベル比・左右で判定する。16KB |
 | `tests/adpcmtest.asm` + `make-adpcmtest.py` | OPL2EX の ADPCM がサンプルを時刻どおりに終えるか。`C0h`/`C1h` を叩くので、本体の MSX-AUDIO にも使える。16KB |
+| `tests/v099test.asm` + `make-v099test.py` | ハードウェアの v0.9.5〜v0.9.9 で変わったポートの読み。System Controller、C1h、PCM_BSY、MSX-TIMER のレジスタと刻み、A2h での SSG2 と本体 PSG。特殊カートリッジに挿す。16KB |
+| `tests/run-screen.ps1` | 試験 ROM を `/hidden` で走らせ、決めた時刻に画面を撮る。構成が ROM を持つなら `-Rom` は要らない |
 | `tests/opllex-bank-probe.c` | OPLLEX のコア単体試験（ヘッドレス）。バンクとパン |
 | `tests/opl2ex-probe.cpp` + `opl2ex-host-stub.c` | OPL2EX のコア単体試験（ヘッドレス） |
-| `tests/ssgs-probe.c` + `ssgs-host-stub.c` | SSGS のコア単体試験（ヘッドレス）。配置・音量・パン・GPIO |
-| `tests/MSX2+ - C-BIOS + Y8960/` | 7 ブロックを置いた構成。**`y8960bas.rom` が要る** |
+| `tests/ssgs-probe.c` + `ssgs-host-stub.c` | SSGS のコア単体試験（ヘッドレス）。配置・音量・パン・GPIO・6 ビットの番号・A2h の読み |
+| `tests/MSX2+ - C-BIOS + Y8960/` | 8 ブロックを置いた構成。**`y8960bas.rom` が要る** |
 | `tests/MSX2+ - C-BIOS + Y8960 (banktest)/` | 同じ構成で、Y8960 SCC に `banktest.rom` を載せたもの。本体 MSX-MUSIC は外してある |
 | `tests/MSX2+ - C-BIOS + Y8960 (cartridge)/` | Y8960 SCC を**外した**構成。`/rom1 <rom> /romtype1 Y8960SCC` でカートリッジとして挿す |
 | `tests/MSX2+ - C-BIOS + Y8960 (whole cart)/` | Y8960 を**一つも持たない**構成。`/rom1 <rom> /romtype1 Y8960` でカード一式をカートリッジとして挿す。`(banktest)` と突き合わせる相手 |
-| `tests/MSX2 - Y8960 (firmware)/` | 汎用 `MSX2`（MSX BASIC 2.1）に Y8960 の 7 ブロックを載せ、Y8960 SCC に `y8960bas.rom` を載せたもの。**`Machines/Shared Roms/` の BIOS と `y8960bas.rom` が要る** |
+| `tests/MSX2 - Y8960 (firmware)/` | 汎用 `MSX2`（MSX BASIC 2.1）に Y8960 の 8 ブロックを載せ、Y8960 SCC に `y8960bas.rom` を載せたもの。**`Machines/Shared Roms/` の BIOS と `y8960bas.rom` が要る** |
 | `tests/MSX2+ - C-BIOS + MSX-AUDIO/` | Y8960 を**持たず**、本体に MSX-AUDIO（ROM 無しの Y8950）を置いた構成。`adpcmtest.rom` を素の ROM として挿し、本体の MSX-AUDIO のバックエンドを試す |
 
 コア単体試験のビルド手順は各ファイルの冒頭にある。
 
 ## 状態
 
-**7 ブロックすべてに中身が入り、MSX 側から確かめられるものは確かめ終えた。**
+**8 ブロックすべてに中身が入り、MSX 側から確かめられるものは確かめ終えた。**
 DCSG と、OPLLEX / OPL2EX の 2 回路目は 2026-10-16 の仕様書で消え、外してある。OPM は 2026-10-20 の仕様書で増えた。
+System Controller（識別だけ）は、ハードウェアの v0.9.9 に追随したときに足した（2026-11-04）。
 本体内蔵の `MSX2++` は別のハードウェアになるとの回答で、2026-10-17 に撤去した。
 MSX-MIXER だけは実機側が未実装で、入口（値を憶える）までで止まっている。
 
@@ -123,6 +126,25 @@ blueMSX+.exe /machine "MSX2+ - C-BIOS + Y8960 (cartridge)" /rom1 <dir>/adpcmtest
 
 1 の数字は EOS を待つループが回った回数で、サンプルの長さ 20.6ms は 04F8h 回に当たる。
 時計が進まないコアでは 1 が `NG` になる（1 秒待っても EOS が立たない）。
+
+`v099test` は 7 行を出す。どれも機械判定で、`/hidden` で回せる。System Controller を持つのは特殊カートリッジだけなので、
+`(whole cart)` に `/romtype1 Y8960` で挿す（`run-screen.ps1` の既定）。
+
+```sh
+py "doc/fork/y8960/tests/make-v099test.py" <pasmo.exe> <dir>/v099test.rom
+powershell -File doc/fork/y8960/tests/run-screen.ps1 -Exe <ビルド出力>/blueMSX+.exe -Rom <dir>/v099test.rom -Shot <dir>/v099test.png
+```
+
+```
+1 SYSCTRL: OK          4 TIMER REG: OK        7 SSG1 READ: OK
+2 OPL2 READ: OK        5 TIMER CLK: OK 41
+3 PCM_BSY: OK          6 SSG2 READ: OK
+```
+
+5 の数字は MSX-TIMER が 6 フレームで数えた値で、60Hz の機種では 41h（65）になる（**確認済み**）。50Hz では 4Eh（78）前後の
+はず（**未検証**: 計算値で、50Hz の機種では走らせていない）。
+`NG` は、最初に外れた段の番号と読んだ値を出す。7 は SSGS が本体 PSG の読みを乱さないことを見る番人で、
+v0.9.9 より前の版でも OK になる。
 
 **本体の MSX-AUDIO に掛けるときは、バックエンドを設定で選ぶ。** 既定は emu8950 なので、
 openMSX バックエンドを試すなら `/rootdir` の先の `bluemsx.ini` に

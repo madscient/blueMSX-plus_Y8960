@@ -3,7 +3,8 @@
 ** It links the chip with stubbed blueMSX services, so it needs neither a
 ** machine nor a ROM and runs headless. The checks cover what the fork added to
 ** the PSG it is built from: a second core at 10h-1Fh, a volume and a pan per
-** channel at 20h-2Fh, and the GPIO registers of both cores.
+** channel at 20h-2Fh, the GPIO registers of both cores, a six bit register
+** pointer, and the reads the cartridge answers on A2h.
 **
 ** Every check is written so that it fails if the addition were not there. The
 ** panning checks compare the two sides against each other, so a chip that
@@ -78,6 +79,13 @@ static UInt8 rd(Y8960SsgsChip* chip, UInt8 address)
 {
     y8960SsgsWriteAddress(chip, address);
     return y8960SsgsReadData(chip);
+}
+
+/* What the cartridge itself drives onto A2h. */
+static UInt8 rdPort(Y8960SsgsChip* chip, UInt8 address)
+{
+    y8960SsgsWriteAddress(chip, address);
+    return y8960SsgsReadPort(chip);
 }
 
 /* A tone on channel A of the given core, at full volume and the given pan. */
@@ -338,8 +346,8 @@ int main(void)
         wr(chip, 0x27, 0x00);
         wr(chip, 0x2B, 0x01);
         wr(chip, 0x2F, 0x01);
-        wr(chip, 0x30, 0x00);        /* nothing from here up */
-        wr(chip, 0x40, 0x00);
+        wr(chip, 0x30, 0x00);        /* nothing at 30h-3Fh, nor where 40h and up land there */
+        wr(chip, 0x3F, 0x00);
         wr(chip, 0xFF, 0x00);
         render(&lAfter, &rAfter);
         check("the registers the chip does not have change nothing",
@@ -361,6 +369,54 @@ int main(void)
         wr(chip, 0x0F, 0x0A);        /* the same register on the first core */
         check("0Fh on the first core is not the LED", y8960SsgsGetLed(chip) == 0x05);
         check("but is storage with no GPIO attached", rd(chip, 0x0F) == 0x0A && rd(chip, 0x0E) == 0x00);
+    }
+
+    /* ---- the register pointer is six bits wide -------------------------- */
+    {
+        y8960SsgsReset(chip);
+        wr(chip, 0x45, 0x0A);        /* lands on 05h */
+        wr(chip, 0x7F, 0x1A);        /* lands on 3Fh, which is not connected */
+        check("a pointer of 40h and up lands on 00h-3Fh",
+              rd(chip, 0x05) == 0x0A && rd(chip, 0x45) == 0x0A);
+        check("and one landing on 30h-3Fh changes nothing",
+              rd(chip, 0x1F) == 0x00 && rd(chip, 0x2F) == 0xFF);
+    }
+
+    /* ---- what the cartridge drives onto A2h ---------------------------- */
+    {
+        /* Only the second core answers, for its own registers; FFh is not
+        ** answering, which leaves the bus to the machine's PSG. */
+        y8960SsgsReset(chip);
+        wr(chip, 0x01, 0x05);
+        wr(chip, 0x07, 0x3E);
+        wr(chip, 0x10, 0x5A);
+        wr(chip, 0x11, 0x0C);
+        wr(chip, 0x17, 0x3E);
+        wr(chip, 0x18, 0x1F);
+        wr(chip, 0x1E, 0x5A);
+        wr(chip, 0x1F, 0xA5);
+        wr(chip, VOLUME_OF(0, 0), 0x40);
+        wr(chip, VOLUME_OF(1, 0), 0x41);
+        wr(chip, PAN_OF(1, 2), 0x10);
+
+        check("the first core does not answer",
+              rdPort(chip, 0x01) == 0xFF && rdPort(chip, 0x07) == 0xFF &&
+              rdPort(chip, 0x0E) == 0xFF);
+        check("the second core reads back what it holds",
+              rdPort(chip, 0x10) == 0x5A && rdPort(chip, 0x11) == 0x0C &&
+              rdPort(chip, 0x18) == 0x1F);
+        check("R7 reads its top two bits as 10", rdPort(chip, 0x17) == 0xBE);
+        check("port A reads the DIP switch, not what was written", rdPort(chip, 0x1E) == 0x00);
+        check("port B reads what was written", rdPort(chip, 0x1F) == 0xA5);
+        check("the second core's volume and pan answer, reset ones included",
+              rdPort(chip, VOLUME_OF(1, 0)) == 0x41 && rdPort(chip, PAN_OF(1, 2)) == 0x10 &&
+              rdPort(chip, VOLUME_OF(1, 1)) == 0x80);
+        check("the first core's volume and pan do not answer",
+              rdPort(chip, VOLUME_OF(0, 0)) == 0xFF && rdPort(chip, PAN_OF(0, 0)) == 0xFF);
+        check("27h, 2Fh and 30h-3Fh read FFh",
+              rdPort(chip, 0x27) == 0xFF && rdPort(chip, 0x2F) == 0xFF &&
+              rdPort(chip, 0x30) == 0xFF && rdPort(chip, 0x3F) == 0xFF);
+        check("a pointer of 50h reads 10h", rdPort(chip, 0x50) == 0x5A);
     }
 
     /* ---- a silent channel places nothing ------------------------------- */

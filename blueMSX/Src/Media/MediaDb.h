@@ -226,7 +226,8 @@ enum  {
     /* 206 was Y8960 DCSG until the hardware dropped it (2026-10-16). */
     ROM_Y8960OPM    = 206,           /* Y8960 OPM     */
     ROM_Y8960       = 207,           /* the whole cartridge: every block at once */
-    ROM_MAXROMID    = 207
+    ROM_Y8960SYSCTRL = 208,          /* Y8960 System Controller */
+    ROM_MAXROMID    = 208
 };
 
 typedef struct MediaType MediaType;

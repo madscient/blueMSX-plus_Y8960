@@ -7,7 +7,9 @@
 ** ADPCM, and the rhythm sounds at 1:1. They
 ** also cover the end of an ADPCM sample, which the core has to bring about
 ** by itself: on time, with its interrupt, whatever the software is doing
-** meanwhile. And they cover the one bit of 07h the Y8960 dropped, SP-OFF.
+** meanwhile. And they cover where the Y8960 parts from a Y8950 or from the
+** specification: SP-OFF, which the hardware keeps although the specification
+** drops it, the ROM bit of 08h, and PCM_BSY.
 **
 ** Every check is written so that it fails if the change were not there. The
 ** waveform checks compare the four against each other before trusting any of
@@ -336,38 +338,57 @@ int main()
         check("a shut gate makes every slot play the sine", std::fabs(ra - rb) < 1e-9);
     }
 
-    /* ---- bit 0 of 08h selects nothing ----------------------------------- */
+    /* ---- bit 0 of 08h takes the RAM away -------------------------------- */
     {
-        /* On a Y8950 the bit sends the ADPCM to a sample ROM, where writes are
-        ** dropped and reads come back as zero. The Y8960 has only its SRAM
-        ** behind the ADPCM, so software that sets the bit must still find the
-        ** RAM there. */
+        /* There is no sample ROM behind the Y8960's ADPCM, but the bit does
+        ** what it does on a Y8950 with an empty ROM socket: writes are dropped
+        ** and reads come back as zero. The RAM keeps what it held. */
         SampleRam ram(256 * 1024);
         Y8950 chip("probe", cfg, ram, 0x2000, T);
-        const uint8_t pattern[4] = { 0x3C, 0x5A, 0x69, 0x96 };
-        uint8_t got[4] = { 0, 0, 0, 0 };
+        const uint8_t before[4]  = { 0x3C, 0x5A, 0x69, 0x96 };
+        const uint8_t pattern[4] = { 0xC3, 0xA5, 0x96, 0x69 };
+        const uint8_t zero[4]    = { 0, 0, 0, 0 };
+        uint8_t inRom[4], after[4], afterReset[4];
+
+        auto range = [&](uint8_t r8) {
+            chip.writeReg(0x08, r8, T);
+            chip.writeReg(0x09, 0x00, T);
+            chip.writeReg(0x0A, 0x00, T);
+            chip.writeReg(0x0B, 0xFF, T);
+            chip.writeReg(0x0C, 0xFF, T);
+        };
+        auto put = [&](const uint8_t* bytes) {
+            chip.writeReg(0x07, 0x60, T);
+            for (int i = 0; i < 4; i++) chip.writeReg(0x0F, bytes[i], T);
+            chip.writeReg(0x07, 0x00, T);
+        };
+        auto get = [&](uint8_t* bytes) {
+            chip.writeReg(0x07, 0x20, T);
+            chip.readReg(0x0F, T);
+            chip.readReg(0x0F, T);
+            for (int i = 0; i < 4; i++) bytes[i] = chip.readReg(0x0F, T);
+            chip.writeReg(0x07, 0x00, T);
+        };
 
         chip.reset(T);
-        chip.writeReg(0x08, 0x01, T);           /* ROM bit set */
-        chip.writeReg(0x09, 0x00, T);
-        chip.writeReg(0x0A, 0x00, T);
-        chip.writeReg(0x0B, 0xFF, T);
-        chip.writeReg(0x0C, 0xFF, T);
-        chip.writeReg(0x07, 0x60, T);
-        for (int i = 0; i < 4; i++) chip.writeReg(0x0F, pattern[i], T);
-        chip.writeReg(0x07, 0x00, T);
+        range(0x00); put(before);
+        range(0x01); put(pattern);
+        range(0x01); get(inRom);
+        range(0x00); get(after);
+        range(0x01);
+        chip.reset(T);                          /* 08h is left as reset made it */
+        chip.writeReg(0x09, 0x00, T); chip.writeReg(0x0A, 0x00, T);
+        chip.writeReg(0x0B, 0xFF, T); chip.writeReg(0x0C, 0xFF, T);
+        get(afterReset);
 
-        chip.writeReg(0x07, 0x20, T);           /* read back, bit still set */
-        chip.readReg(0x0F, T);
-        chip.readReg(0x0F, T);
-        for (int i = 0; i < 4; i++) got[i] = chip.readReg(0x0F, T);
-        chip.writeReg(0x07, 0x00, T);
-
-        printf("  with 08h b0 set: wrote %02x %02x %02x %02x, read %02x %02x %02x %02x\n",
+        printf("  with 08h b0 set: wrote %02x %02x %02x %02x, read %02x %02x %02x %02x;"
+               " cleared: %02x %02x %02x %02x\n",
                pattern[0], pattern[1], pattern[2], pattern[3],
-               got[0], got[1], got[2], got[3]);
-        check("08h bit 0 does not take the RAM away",
-              memcmp(pattern, got, 4) == 0);
+               inRom[0], inRom[1], inRom[2], inRom[3],
+               after[0], after[1], after[2], after[3]);
+        check("08h bit 0 reads the sample memory as zero", memcmp(inRom, zero, 4) == 0);
+        check("and drops writes, leaving what the RAM held", memcmp(after, before, 4) == 0);
+        check("a reset gives the RAM back", memcmp(afterReset, before, 4) == 0);
     }
 
     /* ---- the registers the cartridge does not carry --------------------- */
@@ -521,17 +542,20 @@ int main()
         check("the ADPCM follows FFh: left only", al > 1 && ar == 0.0);
     }
 
-    /* ---- SP-OFF was dropped from the Y8960 ------------------------------ */
+    /* ---- SP-OFF silences the ADPCM while it plays on -------------------- */
     {
-        /* On a Y8950 bit 3 of 07h silences the ADPCM output while it plays.
-        ** The Y8960 has no such bit (specification of 2026-10-16). */
+        /* The specification lists bit 3 of 07h as dropped, but the hardware
+        ** still mutes the ADPCM output with it. The sample plays on behind
+        ** the mute and ends when it would have. */
         std::vector<int32_t> with, without;
+        long endWith, endWithout;
         {
             *boardSysTime = 1000;
             Player p(cfg);
-            p.playShort(0xA8);              /* START | MEMORY_DATA | bit 3 */
+            p.playShort(0xA8);              /* START | MEMORY_DATA | SP-OFF */
             p.runMixed(600 * TICK);
             with = p.out;
+            endWith = p.eosTick(3000);
         }
         {
             *boardSysTime = 1000;
@@ -539,11 +563,39 @@ int main()
             p.playShort(0xA0);
             p.runMixed(600 * TICK);
             without = p.out;
+            endWithout = p.eosTick(3000);
         }
-        bool heard = false;
-        for (auto v : with) if (v != 0) { heard = true; break; }
-        check("07h bit 3, the Y8950's SP-OFF, no longer silences the ADPCM", heard);
-        check("and the sample sounds just as it does without the bit", with == without);
+        bool heardWith = false, heardWithout = false;
+        for (auto v : with)    if (v != 0) { heardWith = true; break; }
+        for (auto v : without) if (v != 0) { heardWithout = true; break; }
+        printf("  EOS %ld samples after START with SP-OFF, %ld without\n",
+               endWith < 0 ? -1 : 600 + endWith, endWithout < 0 ? -1 : 600 + endWithout);
+        check("07h bit 3, SP-OFF, silences the ADPCM", heardWithout && !heardWith);
+        check("and the sample plays on behind it, ending on time",
+              endWith > 0 && endWith == endWithout);
+    }
+
+    /* ---- PCM_BSY follows START ------------------------------------------ */
+    {
+        /* A Y8950 keeps PCM_BSY set after a sample ends and after 81h, as
+        ** real hardware was measured to do. The Y8960 drops it with START. */
+        *boardSysTime = 1000;
+        Player p(cfg);
+        p.playShort(0xA0);
+        bool busy = (p.chip.peekRawStatus() & 0x01) != 0;
+        long at = p.eosTick(3000);
+        bool idleAtEnd = (p.chip.peekRawStatus() & 0x01) == 0;
+        p.wr(0x07, 0x80);
+        bool busyAgain = (p.chip.peekRawStatus() & 0x01) != 0;
+        p.wr(0x07, 0x81);
+        bool idleAfterReset = (p.chip.peekRawStatus() & 0x01) == 0;
+        p.wr(0x07, 0x80);
+        p.wr(0x07, 0x00);
+        bool idleAfterStop = (p.chip.peekRawStatus() & 0x01) == 0;
+        check("PCM_BSY shows while a sample plays", busy);
+        check("and drops when the sample ends by itself", at > 0 && idleAtEnd);
+        check("81h, START with RESET, leaves it clear", busyAgain && idleAfterReset);
+        check("00h clears it", idleAfterStop);
     }
 
     /* ---- what the mixer is given ---------------------------------------- */

@@ -1313,6 +1313,11 @@ int machineInitialize(Machine* machine, UInt8** mainRam, UInt32* mainRamSize, UI
             continue;
         }
 
+        if (machine->slotInfo[i].romType == ROM_Y8960SYSCTRL) {
+            success &= romMapperY8960SysCtrlCreate();
+            continue;
+        }
+
         if (machine->slotInfo[i].romType == ROM_TURBORIO) {
             success &= romMapperTurboRIOCreate();
             continue;

@@ -843,8 +843,8 @@ void Y8950::writeReg(uint8_t rg, uint8_t data, EmuTime time)
             break;
         /* 06h drove the MSX-AUDIO keyboard connector and 18h-19h its I/O
         ** port; the cartridge has neither, so the bytes are only remembered.
-        ** 07h keeps its ADPCM meaning but loses SP-OFF, which drove the
-        ** periphery. */
+        ** 07h keeps its ADPCM meaning, SP-OFF included; only the SP-OFF line
+        ** out to the periphery is gone. */
         case 0x06:
             reg[rg] = data;
             break;
