@@ -34,6 +34,7 @@ Y8960 対応は upstream には存在しない、このフォーク固有の機�
 | `tests/adpcmtest.asm` + `make-adpcmtest.py` | OPL2EX の ADPCM がサンプルを時刻どおりに終えるか。`C0h`/`C1h` を叩くので、本体の MSX-AUDIO にも使える。16KB |
 | `tests/v099test.asm` + `make-v099test.py` | ハードウェアの v0.9.5〜v0.9.9 で変わったポートの読み。System Controller、C1h、PCM_BSY、MSX-TIMER のレジスタと刻み、A2h での SSG2 と本体 PSG。特殊カートリッジに挿す。16KB |
 | `tests/run-screen.ps1` | 試験 ROM を `/hidden` で走らせ、決めた時刻に画面を撮る。構成が ROM を持つなら `-Rom` は要らない |
+| `tests/run-dos.ps1` + `dsk-extract.py` + `wav-envelope.py` | MSX-DOS をフォルダから起動し、カード一式を挿してハードウェア側のサンプル曲（`y8960_fm_sample/`）を流して録る。DOS のシステムファイルは手元の起動ディスクから取り出す。録音は 1 秒ごとの大きさで読む |
 | `tests/opllex-bank-probe.c` | OPLLEX のコア単体試験（ヘッドレス）。バンクとパン |
 | `tests/opl2ex-probe.cpp` + `opl2ex-host-stub.c` | OPL2EX のコア単体試験（ヘッドレス） |
 | `tests/ssgs-probe.c` + `ssgs-host-stub.c` | SSGS のコア単体試験（ヘッドレス）。配置・音量・パン・GPIO・6 ビットの番号・A2h の読み |
@@ -145,6 +146,28 @@ powershell -File doc/fork/y8960/tests/run-screen.ps1 -Exe <ビルド出力>/blue
 はず（**未検証**: 計算値で、50Hz の機種では走らせていない）。
 `NG` は、最初に外れた段の番号と読んだ値を出す。7 は SSGS が本体 PSG の読みを乱さないことを見る番人で、
 v0.9.9 より前の版でも OK になる。
+
+### ハードウェア側のサンプル曲
+
+Y8960_Cartridge の `y8960_fm_sample/` にある `CANCAN.COM`（全音源、約 72 秒）と `BRAND3.COM`（OPM と OPL2、約 5 分）は
+MSX-DOS 用で、C-BIOS では動かない。どちらも起動時に System Controller でカートリッジを探し、`4000h` に `AB` を持つスロットを
+`7FFFh` の読み戻しで見つけ、OPL2 の状態が `06h` かを見る。**MSX-DOS の起動ディスクと実機の BIOS はリポジトリに置かない**ので、
+手元のものを使う。
+
+```sh
+py doc/fork/y8960/tests/dsk-extract.py <MSX-DOS 1 の起動ディスク.dsk> <dir>      # MSXDOS.SYS と COMMAND.COM
+cp <Y8960_Cartridge>/y8960_fm_sample/CANCAN.COM <dir>/
+printf 'CANCAN\r\n' > <dir>/AUTOEXEC.BAT
+powershell -File doc/fork/y8960/tests/run-dos.ps1 -Exe <ビルド出力>/blueMSX+.exe -Machine "MSX2+ - Sony HB-F1XDJ" -Rom <AB を持つ ROM> -DiskDir <dir> -Out <dir>/cancan -Seconds 100 -Shots 97
+py doc/fork/y8960/tests/wav-envelope.py <dir>/cancan.wav
+```
+
+ROM は `4000h` に `AB` があれば中身は要らない（試したときは `AB` の 2 バイトだけで残りが 0 の 16KB）。
+ドラムは ADPCM で全編に入るので、**ある区間の音源が鳴ったことは、ほかを消して録って確かめる。**
+`-Root` の `bluemsx.ini`（1 行目は `[config]`）に `sound.mix.y8960.slot1-0.opl2.enable=no` のような行を足すと、
+カード一式のそのブロックが黙る（名前は `ssg` `scc` `opll` `opl2` `opm`。ADPCM は `opl2` に入る）。
+CANCAN は、OPL2 を消すと 54-63 秒目（OPL2 のソロ）だけが無音になり、OPL2 だけを残すとほかのソロの区間にドラムだけが残る
+（**確認済み** 2026-11-04、`HB-F1XDJ`、60Hz。秒数は起動に 16 秒かかったときのもの）。
 
 **本体の MSX-AUDIO に掛けるときは、バックエンドを設定で選ぶ。** 既定は emu8950 なので、
 openMSX バックエンドを試すなら `/rootdir` の先の `bluemsx.ini` に
