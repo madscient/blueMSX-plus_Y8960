@@ -2437,6 +2437,79 @@ blueMSX+ の内蔵版は基盤タイプ `MSX2++`（§9.9）で、`config.ini` �
 
 ## 11. 実行経緯
 
+### 2026-11-04 (58) — Y8960_Cartridge v0.9.5〜v0.9.9 に追随した。System Controller を RomType 208 で足した
+
+**ユーザー指示**（2026-11-03）: 「Y8960 のハードウェア更新に追従する。ハードウェアリポジトリは隣に pull してある。
+openMSX_Y8960 が先行して対応してるので、そっちの文書を読んで同じように対応して。（openMSX_Y8960 が見送ったものもあるので、
+それはこっちではどうなるかを見てから決める）」。決定は §9.20。
+
+#### 読んだもの（**確認済み(読解)**）
+
+- Y8960_Cartridge の v0.9.4（`e9094fa`）から `a51074a`（2026-11-03 18:53）まで。手元のクローンは `origin/main` と同じ
+  （`git fetch` のあとの `git status`）。**`daf9f55` より後の 4 コミットは RTL を変えていない**（`git diff --stat daf9f55 HEAD` は
+  マニュアル 4 本、`history.md`、`readme.md`、`y8960_fm_sample/` だけ）。`readme.md` に「残件」が足された: 2 枚挿すと
+  System Control Port がバス競合を起こす（次の基板で切り離せるようにする予定）、BUSDIR が繋がっていない
+- openMSX_Y8960 の `9b5ce1117..dacefa7af`。文書（`implementation-plan.md` §3.4.3、§3.6、§3.11、§4.2.6、§8 の 2026-11-03 の 6 項、
+  `hardware-notes.md`）とコード（`076313699`、`511d0f24f`）
+- RTL を自分で読んだのは、SSG の読み出し（`ssg_core.v` の `w_own_reg` / `w_rd_answer` と読みの `case`、リセット、ポート A/B、
+  `dual_ssg.v` の `builtin` / `read_others`）、SSG のイネーブラ（`y8960_address_decode.v` の `w_bus_ssg_cs_io`）、
+  System Controller の識別（`system_controller.v` の `ff_enable` / `ff_devsel` / `ff_func_rom` と読みの応答）。
+  どれも openMSX_Y8960 の読みと一致した
+- サンプル曲 `y8960_fm_sample/brand3.asm` と `cancan.asm` の `sc_detect` と `find_and_enable`。40h に 80h → `7Fh`、41h に 02h → `FDh`
+  で見つけ、`4000h` の `AB` と `7FFFh` の読み戻しでスロットを探し、OPL2 の状態の下位 3 ビットが `06h` かを見る
+
+#### 変えたもの
+
+| ファイル | 内容 |
+|---|---|
+| `Src/SoundChips/Y8960Opl2Adpcm.{cpp,h}` | `08h` の ROM ビット（`romBank`。読み 0、書き捨て、リセットで 0、ステートは `adpcm_romBank`）。PCM_BSY を RESET の後で決め、一回再生の終わりで落とす。SP-OFF を `isMuted` と出力に戻す（上流の写し `OpenMsxY8950LatestAdpcm.cpp` と同じ 2 か所） |
+| `Src/SoundChips/Y8960Opl2Core.cpp` | SP-OFF のコメントだけ |
+| `Src/SoundChips/Y8960Opl2ex.cpp` | C1h の読みと覗きは `0Fh` 以外 `FFh` |
+| `Src/Memory/romMapperY8960Timer.c` | クロック 42954540、B3h の範囲外は `FFh`、レジスタ 3 は `00h` |
+| `Src/SoundChips/Y8960Ssgs.{c,h}` | レジスタ番号を `& 0x3F`。`y8960SsgsReadPort`（カートリッジが A2h に出す値）を足した |
+| `Src/Memory/romMapperY8960Ssgs.c` | A2h に読みを登録 |
+| `Src/Memory/romMapperY8960SysCtrl.c`（新規） | System Controller（§5.10） |
+| `Src/Media/MediaDb.{h,cpp}`、`Src/Board/Machine.c`、`Src/Win32/Win32machineConfig.c`、`romMapperY8960.h`、`romMapperY8960Scc.c`、ビルド定義 3 系統 | RomType 208（§6.1）。OPM が出る所すべての隣に足した（`Win32machineConfig.c` は 6 か所）。特殊カートリッジの生成と排出 |
+| `tests/opl2ex-probe.cpp` | ROM ビットの節と SP-OFF の節を裏返した。PCM_BSY の節を足した |
+| `tests/ssgs-probe.c` | 6 ビットの番号と A2h の読みの 11 項目。既存の 1 項目の期待値を直した（下） |
+| `tests/v099test.asm`、`make-v099test.py`（新規） | ポートの層を通した 7 項目。特殊カートリッジ（`/romtype1 Y8960`）に挿す |
+| `tests/run-screen.ps1`（新規） | `/hidden` で走らせて画面を撮る。これまで毎回その場で書いていた手順 |
+| `tests/banktest.asm` | 10 を書き直した（下）。19 のコメントの「1 秒に約 80 回」を 41 回に |
+| `tests/` の機種構成 4 本 | 208 の行を足した（OPM を足した 4 本と同じ）。**変更前の実行ファイルはこの 4 本を読めない**（`Machine.c` が `ROM_MAXROMID` を超える番号を拒む） |
+| `hardware-notes.md` | 写し元の今の版で本文を写し直した（差は 864 行あった）。冒頭の表から、本文が持つようになった 7 行を落とした |
+
+上流のファイルで新しく触ったものは無い（`MediaDb`・`Machine.c`・`Win32machineConfig.c`・ビルド定義は Phase 0 からの一覧の中）。
+
+#### 試験（**確認済み**。Release / x64、`msvc2022`、0 エラー・5 警告で、警告はすべて Y8960 が触っていない `Win32*.c`）
+
+変更前の実行ファイルは、手を入れる前の作業ツリー（`8c074e44`）を全部組み直して作った。
+
+| 試験 | 変更後 | 変更前・壊した版 |
+|---|---|---|
+| `opl2ex-probe` | 全項目 ok | HEAD のソースで 6 項目 FAIL（ROM ビットの 3、SP-OFF の消音、PCM_BSY の終わりと 81h）。1 か所ずつ壊した 4 版（リセットで ROM ビットを戻さない、SP-OFF で再生を止める、終わりで PCM_BSY を残す、81h で残す）は、それぞれ狙った 1 項目だけが FAIL |
+| `ssgs-probe` | 全項目 ok | HEAD のソースは `y8960SsgsReadPort` が無くて組めない。壊した 5 版（8 ビットの番号、R7 の上位を足さない、ポート A を書いた値で返す、SSG1 にも応じる、SSG1 の音量・定位にも応じる）は、それぞれ狙った項目だけが FAIL |
+| `v099test`（`(whole cart)` に `/romtype1 Y8960`） | 7 項目 OK。5 の数は `41h`（65。60Hz で 6 フレーム、計算値 65.6） | 変更前の実行ファイル: 1 `NG 01 FF`、2 `NG 01 21`、3 `NG 02 01`、4 `NG 01 FF`、5 `NG 83`（131、85.9MHz の値）、6 `NG 01 FF`、7 OK。SSG1 にも応じる版: 7 だけ `NG 01 00` |
+| `banktest`（`(banktest)` の構成） | 1-7・10・13-24 が OK。9・11・12 は聴く項目で、聴いていない | 変更前の実行ファイル（208 を外した一時の構成）: 10 だけ NG |
+| `banktest`（`(whole cart)` に `/romtype1 Y8960`） | 1-7・10・13-24 が OK | — |
+| `adpcmtest`（`(cartridge)` に `/romtype1 Y8960SCC`） | 1 `OK 04F5`、2 OK | — |
+
+画面はどれも `/hidden` で走らせ、`run-screen.ps1` で撮って読んだ。表示されたウィンドウは 0。
+**回していないもの**: `sndtest`（SCC と OPM の音。今回は触っていない）、`run-keytest`、セーブステート、マシン構成エディタ。
+
+#### 踏んだこと
+
+- **`banktest` の 10 は、変更後のコードで NG になった。** C1h で `40h` を書いて読み戻す項目で、期待値が Y8950 の振る舞いだった。
+  RTL（v0.9.5 以降の `adpcm.v:462-463`。openMSX_Y8960 の読み）では C1h は `0Fh` しか返さないので、試験の側を直した。
+  閉じたゲートは状態ポートが `FFh` を返すことで、開いたゲートとトンネルはサンプル RAM の先頭に 1 バイト書いて読み戻すことで見る
+- **`ssgs-probe` の既存の 1 項目「the registers the chip does not have change nothing」が落ちた。** `40h` への書き込みが何も起こさない
+  ことを期待していたが、RTL（`ssg_core.v:342`）では `00h` に当たる。期待値を直し、`30h`-`3Fh` に落ちる番地だけを残した
+- **`v099test` の 7 の最初の版は判別しなかった。** SSG1 にも応じる版でも OK になった。本体 PSG の R7 と SSG2 の R7（6 で `3Fh`）の
+  AND が、たまたま本体の値と同じだった。SSG2 の同じ番号のレジスタを `00h` にしてから読む形に直し、壊した版で NG になることを見た
+- **壊した版の後片付けで、作業ツリーのファイルを `cp -p` で戻したら、MSBuild が再コンパイルしなかった。** 戻したソースの時刻が
+  壊した版の `.obj` より古くなるため。`.obj` の時刻とソースを比べて気づき、`touch` してから組み直した（`.obj` の大きさが変わった）
+- **上流の S1985 の不具合を見つけた**（**確認済み(読解)**。直していない、報告もしていない）: `sramMapperS1985.c` は switched I/O の
+  ID `FEh` に登録し、`destroy` で `08h`（松下の ID）を外している
+
 ### 2026-10-27 (57) — 上流 `develop` `0d6ba91b` を取り込んだ
 
 **ユーザー判断**: v0.9.4 に追従した版のリリースに、上流の 5 コミット（PR #119 / #120）を含める。
