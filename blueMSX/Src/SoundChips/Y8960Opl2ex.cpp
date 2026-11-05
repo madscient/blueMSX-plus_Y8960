@@ -50,8 +50,8 @@ extern "C" {
 #define Y8960_OPL2EX_IRQ 0x2000
 
 /* The same << 1 the machine's own Y8950 port applies, so the block lands where
-** the chip it stands in for would. Whether it balances against the other
-** Y8960 blocks is unverified; that is the mixer block's question. */
+** the chip it stands in for would. The balance against the other Y8960 blocks
+** is set on top of it, in the mixer block's gain (romMapperY8960Mixer.c). */
 #define Y8960_OPL2EX_GAIN_SHIFT 1
 
 struct Y8960Opl2ex {

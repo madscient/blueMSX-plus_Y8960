@@ -68,16 +68,36 @@ void y8960MixerWriteMaster(UInt8 value)
     theMixer->master = value;
 }
 
+/* How loud each block is against the others, on top of the factor its own
+** code applies, in Y8960_GAIN_ONE units. One channel of each block at full
+** volume then stands to the OPM as on a v0.9.10 cartridge measured through
+** its line output (SSG -0.89dB, SCC -3.60dB, OPLL -3.60dB, OPL2 -3.00dB,
+** fundamental at about 1kHz). The OPM, the loudest, is held at unity, which
+** keeps it at the level of an SFG; the card is never mixed with the MSX's own
+** sound, so nothing else sets the overall level. Measured again with
+** doc/fork/y8960/level/ if the hardware's balance changes. */
+static const Int32 blockLevel[Y8960_VOL_COUNT] = {
+    8324,   /* SSGS */
+    5831,   /* OPLL */
+    6216,   /* OPL2 */
+    7213,   /* SCC  */
+    4096,   /* OPM  */
+};
+
 /* The master covers the cartridge's own blocks only. The MSX's own sound
 ** never passes through the card, so blueMSX's other channels stay as they
 ** are. */
 Int32 y8960MixerGain(Y8960Volume channel)
 {
-    if (theMixer == NULL || channel >= Y8960_VOL_COUNT) {
+    if (channel >= Y8960_VOL_COUNT) {
         return Y8960_GAIN_ONE;
     }
-    return y8960VolumeGain(theMixer->volume[channel])
-         * y8960VolumeGain(theMixer->master) / Y8960_GAIN_ONE;
+    if (theMixer == NULL) {
+        return blockLevel[channel];
+    }
+    return (Int32)((Int64)y8960VolumeGain(theMixer->volume[channel])
+         * y8960VolumeGain(theMixer->master) / Y8960_GAIN_ONE
+         * blockLevel[channel] / Y8960_GAIN_ONE);
 }
 
 /* The sheet names 128 as the maximum and the hardware side confirmed it as

@@ -717,24 +717,24 @@ void Y8950::generateChannels(std::span<float*> bufs, unsigned num)
             (void)ch[7].slot[MOD].calc_phase(lfo_pm);
             (void)ch[8].slot[CAR].calc_phase(lfo_pm);
 
-            /* The Y8950 port doubled the rhythm sounds here. The Y8960 mixes
-            ** them 1:1 with the melody (hardware side, 2026-10-17): rhythm
-            ** mode only changes what channels 7-9 do, not how loud. */
+            /* The rhythm sounds are twice the melody, as in the Y8950 this was
+            ** ported from, the other OPL emulators and the JTOPL core of the
+            ** Y8960 hardware. */
             bufs[ 9][sample] += (ch[6].slot[CAR].isActive())
-                ? float(ch[6].slot[CAR].calc_slot_car(lfo_pm, lfo_am,
+                ? float(2 * ch[6].slot[CAR].calc_slot_car(lfo_pm, lfo_am,
                         ch[6].slot[MOD].calc_slot_mod(lfo_pm, lfo_am)))
                 : 0.0f;
             bufs[10][sample] += (ch[7].slot[CAR].isActive())
-                ? float(ch[7].slot[CAR].calc_slot_snare(lfo_pm, lfo_am, whiteNoise))
+                ? float(2 * ch[7].slot[CAR].calc_slot_snare(lfo_pm, lfo_am, whiteNoise))
                 : 0.0f;
             bufs[11][sample] += (ch[8].slot[CAR].isActive())
-                ? float(ch[8].slot[CAR].calc_slot_cym(lfo_am, noiseA, noiseB))
+                ? float(2 * ch[8].slot[CAR].calc_slot_cym(lfo_am, noiseA, noiseB))
                 : 0.0f;
             bufs[12][sample] += (ch[7].slot[MOD].isActive())
-                ? float(ch[7].slot[MOD].calc_slot_hat(lfo_am, noiseA, noiseB, whiteNoise))
+                ? float(2 * ch[7].slot[MOD].calc_slot_hat(lfo_am, noiseA, noiseB, whiteNoise))
                 : 0.0f;
             bufs[13][sample] += (ch[8].slot[MOD].isActive())
-                ? float(ch[8].slot[MOD].calc_slot_tom(lfo_pm, lfo_am))
+                ? float(2 * ch[8].slot[MOD].calc_slot_tom(lfo_pm, lfo_am))
                 : 0.0f;
         }
         bufs[14][sample] += float(adpcm->calcSample());

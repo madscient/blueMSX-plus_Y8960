@@ -48,8 +48,8 @@
 #define Y8960_OPM_IRQ    0x4000
 
 /* The factor ym2151.c applies, so the block lands at the level of an SFG
-** rather than at one nobody has measured. Whether it balances against the
-** other Y8960 blocks is unverified. */
+** rather than at one nobody has measured. The other Y8960 blocks are set
+** against it in the mixer block's gain (romMapperY8960Mixer.c). */
 #define Y8960_OPM_VOLUME 11
 
 struct Y8960OpmChip {

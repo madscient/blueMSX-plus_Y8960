@@ -37,10 +37,9 @@
 
 /* The same factor Emu2413Backend applies, so the block lands at the level of
 ** the machine's own MSX-MUSIC rather than at one nobody has measured. That
-** figure was set by RMS-matching emu2413 against OpenYM2413_2; picking a
-** different one here would be a guess. Whether it balances against the other
-** Y8960 blocks, which share one volume slider, is unverified -- no one has
-** heard this chip yet. */
+** figure was set by RMS-matching emu2413 against OpenYM2413_2. The balance
+** against the other Y8960 blocks is set on top of it, in the mixer block's
+** gain (romMapperY8960Mixer.c). */
 #define Y8960_OPLLEX_VOLUME (32767 * 9 / 10)
 #define Y8960_OPLLEX_VOLUME_DIV 1024
 

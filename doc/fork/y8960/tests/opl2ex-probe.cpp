@@ -4,7 +4,7 @@
 ** ROM and runs headless. The checks cover what the fork changed: the four
 ** waveforms a YM3812 has, the sample RAM outside the circuit, the MSX-AUDIO
 ** registers the cartridge does not carry, the pan per channel and for the
-** ADPCM, and the rhythm sounds at 1:1. They
+** ADPCM, and the rhythm sounds at twice the melody. They
 ** also cover the end of an ADPCM sample, which the core has to bring about
 ** by itself: on time, with its interrupt, whatever the software is doing
 ** meanwhile. And they cover where the Y8960 parts from a Y8950 or from the
@@ -505,12 +505,11 @@ int main()
         check("CYM follows FEh: left only", l > 1 && r == 0.0);
     }
 
-    /* ---- the rhythm sounds are mixed 1:1 with the melody ---------------- */
+    /* ---- the rhythm sounds are twice the melody --------------------------- */
     {
         /* The same voice on channel 7, once keyed as a melody note and once
-        ** as the bass drum, must come out at the same level: rhythm mode
-        ** changes what channels 7-9 do, not how loud they are. The Y8950
-        ** port doubled the rhythm sounds. */
+        ** as the bass drum: the drum comes out at twice the level, as in the
+        ** other OPL emulators and the hardware's JTOPL core. */
         SampleRam ram(256 * 1024);
         Y8950 chip("probe", cfg, ram, 0x2000, T);
         chip.reset(T);
@@ -522,8 +521,8 @@ int main()
         chip.writeReg(0xBD, 0x30, T);                        /* rhythm mode, BD */
         double drum = rms(chip, 2000);
         printf("  channel 7 as melody rms = %.1f, as BD rms = %.1f\n", melody, drum);
-        check("BD is as loud as the same voice played as a melody note",
-              melody > 1 && std::fabs(drum - melody) < melody * 0.02);
+        check("BD is twice the same voice played as a melody note",
+              melody > 1 && std::fabs(drum - 2 * melody) < melody * 0.04);
     }
 
     /* ---- the ADPCM's pan (FFh) ------------------------------------------- */
