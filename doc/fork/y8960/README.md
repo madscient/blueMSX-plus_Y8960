@@ -35,7 +35,7 @@ Y8960 対応は upstream には存在しない、このフォーク固有の機�
 | `tests/v099test.asm` + `make-v099test.py` | ハードウェアの v0.9.5〜v0.9.9 で変わったポートの読み。System Controller、C1h、PCM_BSY、MSX-TIMER のレジスタと刻み、A2h での SSG2 と本体 PSG。特殊カートリッジに挿す。16KB |
 | `tests/run-screen.ps1` | 試験 ROM を `/hidden` で走らせ、決めた時刻に画面を撮る。構成が ROM を持つなら `-Rom` は要らない |
 | `tests/run-dos.ps1` + `dsk-extract.py` + `wav-envelope.py` | MSX-DOS をフォルダから起動し、カード一式を挿してハードウェア側のサンプル曲（`y8960_fm_sample/`）を流して録る。DOS のシステムファイルは手元の起動ディスクから取り出す。録音は 1 秒ごとの大きさで読む |
-| `level/make-tones-rom.py` | openMSX_Y8960 の音量測定の音列（`doc/fork/y8960/level/*.txt`）を、Y8960 SCC に挿す 16KB の ROM にする。音源どうしの音量比を測るための道具で、回帰テストではない |
+| `level/make-tones-rom.py` | openMSX_Y8960 の音量測定の音列（`doc/fork/y8960/level/`）を、Y8960 SCC に挿す ROM にする。音源どうしの音量比を測るための道具で、回帰テストではない |
 | `tests/opllex-bank-probe.c` | OPLLEX のコア単体試験（ヘッドレス）。バンクとパン |
 | `tests/opl2ex-probe.cpp` + `opl2ex-host-stub.c` | OPL2EX のコア単体試験（ヘッドレス） |
 | `tests/ssgs-probe.c` + `ssgs-host-stub.c` | SSGS のコア単体試験（ヘッドレス）。配置・音量・パン・GPIO・6 ビットの番号・A2h の読み |
@@ -209,8 +209,11 @@ py $L/tone-levels.py --ref opm-center --names blueMSX,x <dir>/tones-bluemsx.wav
 
 `--ref opm-center` の「区間どうしの差」が、各ブロックの OPM との差になる。目標は実機の録音（openMSX_Y8960 の `tones-mga.ps1`）か、
 実機に合わせた後の openMSX の録音の同じ値。`blockLevel[]` の各値に「目標 − こちら」の dB を倍率にして掛ける（OPM は動かさない）。
-ほかの音列（`rhythm.txt`、`opll-rhythm.txt`）も同じ形で組んで流し、`tone-levels.py` の `--seq` に渡す。`only <対象>` の行は
-`--target`（既定は `Y8960`）が一致するものだけを組む。ROM は待ちを空回しで作るので、録音の長さは音列の `wait` の合計に起動の数秒を足す。
+ほかの音列（`rhythm.txt`、`opll-rhythm.txt`、`pan9.txt`、`adpcm-tones.py` が書き出す ADPCM の音列）も同じ形で組んで流し、
+`tone-levels.py` の `--seq` に渡す（`pan9.txt` の判定は `pan9-levels.py`）。`only <対象>` の行は `--target`（既定は `Y8960`）が
+一致するものだけを組む。ROM はバンク 0 の再生器と、バンク 1 からの書き込みの表でできていて、表は 15 バンク（120KB）まで入る。
+同じ I/O ポートへの連続した書き込みは 1 つにまとめるので、ADPCM の音列（約 2.5 万回）は 4 バンクになる。待ちは空回しで作るので、
+録音の長さは音列の `wait` の合計に起動の数秒を足す。
 
 ## 取り込み元
 
