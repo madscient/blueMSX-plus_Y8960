@@ -14,6 +14,11 @@ A file is the fork's own when <ref> (default upstream/develop) does not have
 it. Bits shared only among upstream's files are listed but do not fail: this
 cannot tell a real clash from the backends of one chip sharing its bit.
 
+Bits are counted per file that raises them, so sharing through one file does
+not show: ym2151.c raises 0x40 for both the SFG cartridges and Yamaha NET,
+and two cartridges of one kind share whatever bit their file raises. Each
+Y8960 block raises its bit in a file of its own, and the card goes in once.
+
 Exit status: 0 when no bit of a fork file is shared, 1 when one is, 2 when a
 call could not be resolved to a value. For 2, add a rule to PASS_THROUGH
 rather than skip the call: a value read from elsewhere is still a bit someone
