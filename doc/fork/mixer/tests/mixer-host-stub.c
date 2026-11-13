@@ -9,7 +9,10 @@
 UInt32  probeSysTime = 0;
 UInt32* boardSysTime = &probeSysTime;
 
-UInt32 archGetSystemUpTime(UInt32 frequency) { (void)frequency; return 0; }
+/* The meters take new blocks only when this moves, so the probe moves it
+** before each reading. Read as milliseconds, which is what they ask for. */
+UInt32  probeUpTime = 0;
+UInt32 archGetSystemUpTime(UInt32 frequency) { (void)frequency; return probeUpTime; }
 
 /* The probe is single-threaded, so the mixer's lock only counts. A count
 ** that goes below zero means the lock was taken while already held, which

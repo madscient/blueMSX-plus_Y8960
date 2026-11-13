@@ -24,6 +24,7 @@
 #include "AudioMixer.h"
 
 extern UInt32 probeSysTime;
+extern UInt32 probeUpTime;
 extern int probeMidiLeft;
 extern int probeMidiRight;
 int probeSemaphoreCount(void);
@@ -35,8 +36,9 @@ int probeSemaphoreLowest(void);
 #define LEVEL      1000
 
 typedef struct {
-    Int32 level;
-    Int32 buffer[AUDIO_STEREO_BUFFER_SIZE];
+    Int32  level;
+    UInt32 phase;
+    Int32  buffer[AUDIO_STEREO_BUFFER_SIZE];
 } ProbeChannel;
 
 static ProbeChannel probeChannels[MAX_PROBE_CHANNELS];
@@ -50,17 +52,6 @@ static Int32* probeSync(void* ref, UInt32 count)
     ProbeChannel* ch = (ProbeChannel*)ref;
     UInt32 i;
     for (i = 0; i < count; i++) {
-        ch->buffer[i] = ch->level;
-    }
-    return ch->buffer;
-}
-
-/* The same level on both sides, interleaved. */
-static Int32* probeSyncStereo(void* ref, UInt32 count)
-{
-    ProbeChannel* ch = (ProbeChannel*)ref;
-    UInt32 i;
-    for (i = 0; i < 2 * count; i++) {
         ch->buffer[i] = ch->level;
     }
     return ch->buffer;
@@ -254,7 +245,7 @@ static void checkNoChannelCap(void)
     mixerMeterGetTypePercent(mixer, MIXER_CHANNEL_PSG, 0);
     mixerMeterGetTypePercent(mixer, MIXER_CHANNEL_MIDI, 0);
     mixerMeterGetMasterPercent(mixer, 0);
-    mixerGetChannelVolume(mixer, handles[39], 0);
+    mixerMeterGetChannelPercent(mixer, handles[39], 0);
     mixerIsChannelTypeActive(mixer, MIXER_CHANNEL_PSG, 1);
     mixerSetSampleRate(mixer, AUDIO_SAMPLERATE);
     checkLockBalanced("cap");
@@ -456,85 +447,196 @@ static void checkMidiVolume(void)
     mixerDestroy(mixer);
 }
 
-/* Mixes enough frames at `level` on channel `index` alone for the
-** per-instance meter to take a reading: it takes one per 441 frames, and
-** one sync here makes 2 * FRAMES. */
-static void playFor(Mixer* mixer, int index, int count, Int32 level)
+/* A square wave of the channel's level, one sign per frame and carried on
+** across calls. The meters take out a constant offset, so a steady level
+** would read as silence; any 128 frames of this sum to zero. */
+static Int32* probeSyncSquare(void* ref, UInt32 count)
 {
+    ProbeChannel* ch = (ProbeChannel*)ref;
+    UInt32 i;
+    for (i = 0; i < count; i++) {
+        ch->buffer[i] = (ch->phase++ & 1) ? ch->level : -ch->level;
+    }
+    return ch->buffer;
+}
+
+/* Half the level on the right, so a meter that swaps or shares the sides
+** shows it. */
+static Int32* probeSyncSquareStereo(void* ref, UInt32 count)
+{
+    ProbeChannel* ch = (ProbeChannel*)ref;
+    UInt32 i;
+    for (i = 0; i < count; i++) {
+        Int32 v = (ch->phase++ & 1) ? ch->level : -ch->level;
+        ch->buffer[2 * i]     = v;
+        ch->buffer[2 * i + 1] = v / 2;
+    }
+    return ch->buffer;
+}
+
+#define METER_LEVEL  20000
+#define METER_PLAY   8192   /* frames: 64 meter blocks, the window is 16 */
+#define METER_LAP    70000  /* frames: past one turn of the 512-block ring */
+#define METER_HOLD   200    /* ms a taken block keeps counting */
+
+static Mixer* newMeterMixer(int count, int stereo)
+{
+    Mixer* mixer = newMixer();
     int i;
     for (i = 0; i < count; i++) {
-        probeChannels[i].level = (i == index) ? level : 0;
+        probeChannels[i].level = 0;
+        probeChannels[i].phase = 0;
+        handles[i] = mixerRegisterChannel(mixer, MIXER_CHANNEL_PSG, stereo,
+                                          stereo ? probeSyncSquareStereo : probeSyncSquare,
+                                          NULL, &probeChannels[i]);
     }
     mixerReset(mixer);
-    for (i = 0; i < 4; i++) {
-        probeSysTime += (UInt32)((UInt64)(2 * FRAMES) * 6 * CPU_FREQ / AUDIO_SAMPLERATE);
+    return mixer;
+}
+
+/* Mixes `frames` frames, in steps the mixer takes in one sync, with each
+** channel at the level it was last given. */
+static void mixFrames(Mixer* mixer, int frames)
+{
+    while (frames > 0) {
+        int step = frames < 2048 ? frames : 2048;
+        probeSysTime += (UInt32)((UInt64)step * 6 * CPU_FREQ / AUDIO_SAMPLERATE);
         mixerSync(mixer);
-    }
-    for (i = 0; i < count; i++) {
-        probeChannels[i].level = 0;
+        frames -= step;
     }
 }
 
-/* The device window's meter: one reading per channel, through the gain
-** without the master, so neither the master volume nor its mute moves it.
-** The peak-average law (/2048 per frame, /328 over the frames) is the one the
-** window has always read. */
+/* The meter scale written out: the RMS amplitude to the power 0.45, as a
+** percentage rounded up, with -60 dBFS and below as 0. */
+static int meterPercentOf(double rms)
+{
+    double a = rms / 32767.0;
+    int p;
+    if (a <= 0.001) {
+        return 0;
+    }
+    p = (int)ceil(100.0 * pow(a, 0.45));
+    return p < 1 ? 1 : p > 100 ? 100 : p;
+}
+
+/* A square wave of `level` through the gain the meters take: type volume
+** 100, the instance volume and the centre pan, without the master. Its RMS
+** is the level times that gain. */
+static int meterExpected(int instVolume, int level)
+{
+    double p = pow(10.0, 0.0) - pow(10.0, -50 / 30.0);
+    Int32 gain = (Int32)(1024 * curve(100) * (curve(instVolume) / curve(100)) * p);
+    return meterPercentOf((double)level * gain / 4096.0);
+}
+
+/* The device window's meter, on the RMS blocks of the type meters. */
 static void checkChannelMeter(void)
 {
-    const Int32 level = 20000;
-    double p = pow(10.0, 0.0) - pow(10.0, -50 / 30.0);
-    Int32 gain = (Int32)(1024 * curve(100) * p);
-    int want = (gain * level / 2048) / 328;
-    int full, lowered, muted, silent;
+    int want     = meterExpected(100, METER_LEVEL);
+    int wantHalf = meterExpected(50, METER_LEVEL);
+    int wantRight = meterExpected(100, METER_LEVEL / 2);
+    int full, silent, asType, held, both[2], lowered, muted, quiet, moved, paused;
     int stereo[2][2];
     int i;
     Mixer* mixer;
 
-    mixer = newMixer();
-    registerChannels(mixer, MIXER_CHANNEL_PSG, 2);
-    playFor(mixer, 0, 2, level);
-    full   = mixerGetChannelVolume(mixer, handles[0], 0);
-    silent = mixerGetChannelVolume(mixer, handles[1], 0);
+    mixer = newMeterMixer(2, 0);
+    probeChannels[0].level = METER_LEVEL;
+    mixFrames(mixer, METER_PLAY);
+    probeUpTime += 1;
+    full   = mixerMeterGetChannelPercent(mixer, handles[0], 0);
+    silent = mixerMeterGetChannelPercent(mixer, handles[1], 0);
+    asType = mixerMeterGetTypePercent(mixer, MIXER_CHANNEL_PSG, 0);
     checkLockBalanced("meter");
+    /* No sync since: as if the emulator had stopped. */
+    probeUpTime += METER_HOLD + 100;
+    held = mixerMeterGetChannelPercent(mixer, handles[0], 0);
     mixerDestroy(mixer);
 
-    mixer = newMixer();
+    mixer = newMeterMixer(2, 0);
+    mixerSetChannelVolume(mixer, handles[1], 50);
+    probeChannels[0].level = METER_LEVEL;
+    probeChannels[1].level = METER_LEVEL;
+    mixFrames(mixer, METER_PLAY);
+    probeUpTime += 1;
+    both[0] = mixerMeterGetChannelPercent(mixer, handles[0], 0);
+    both[1] = mixerMeterGetChannelPercent(mixer, handles[1], 0);
+    mixerDestroy(mixer);
+
+    mixer = newMeterMixer(1, 0);
     mixerSetMasterVolume(mixer, 50);
-    registerChannels(mixer, MIXER_CHANNEL_PSG, 2);
-    playFor(mixer, 0, 2, level);
-    lowered = mixerGetChannelVolume(mixer, handles[0], 0);
-    mixerDestroy(mixer);
-
-    mixer = newMixer();
+    probeChannels[0].level = METER_LEVEL;
+    mixFrames(mixer, METER_PLAY);
+    probeUpTime += 1;
+    lowered = mixerMeterGetChannelPercent(mixer, handles[0], 0);
     mixerEnableMaster(mixer, 0);
-    registerChannels(mixer, MIXER_CHANNEL_PSG, 2);
-    playFor(mixer, 0, 2, level);
-    muted = mixerGetChannelVolume(mixer, handles[0], 0);
+    mixFrames(mixer, METER_PLAY);
+    probeUpTime += 1;
+    muted = mixerMeterGetChannelPercent(mixer, handles[0], 0);
     mixerDestroy(mixer);
 
-    printf("  meter full=%d lowered=%d muted=%d silent=%d expected=%d\n", full, lowered, muted, silent, want);
+    /* Played past one turn of the meter ring first, here and below, so a
+    ** block left unwritten would still hold a loud one. */
+    mixer = newMeterMixer(1, 0);
+    probeChannels[0].level = METER_LEVEL;
+    mixFrames(mixer, METER_LAP);
+    probeChannels[0].level = 0;
+    mixFrames(mixer, METER_PLAY);
+    probeUpTime += 1;
+    quiet = mixerMeterGetChannelPercent(mixer, handles[0], 0);
+    mixerDestroy(mixer);
+
+    /* Removing the first channel moves the second down the array. */
+    mixer = newMeterMixer(2, 0);
+    probeChannels[1].level = METER_LEVEL;
+    mixFrames(mixer, METER_PLAY);
+    mixerUnregisterChannel(mixer, handles[0]);
+    probeUpTime += 1;
+    moved = mixerMeterGetChannelPercent(mixer, handles[1], 0);
+    mixerDestroy(mixer);
+
+    /* The turbo R PCM stops the chips. */
+    mixer = newMeterMixer(1, 0);
+    probeChannels[0].level = METER_LEVEL;
+    mixFrames(mixer, METER_LAP);
+    mixerSetEnable(mixer, 0);
+    mixFrames(mixer, METER_PLAY);
+    probeUpTime += 1;
+    paused = mixerMeterGetChannelPercent(mixer, handles[0], 0);
+    mixerDestroy(mixer);
+
+    printf("  meter full=%d silent=%d type=%d held=%d expected=%d\n", full, silent, asType, held, want);
+    printf("  meter both=%d/%d expected=%d/%d lowered=%d muted=%d quiet=%d moved=%d paused=%d\n",
+           both[0], both[1], want, wantHalf, lowered, muted, quiet, moved, paused);
     check("meter: a playing channel reads its level", full == want && want > 0);
     check("meter: a silent channel reads 0", silent == 0);
+    check("meter: the only playing channel reads as its type", full == asType);
+    check("meter: it reads 0 once the emulator stops", held == 0);
+    check("meter: two playing channels read their own", both[0] == want && both[1] == wantHalf && want != wantHalf);
     check("meter: the master volume leaves it", lowered == want);
     check("meter: the master mute leaves it", muted == want);
+    check("meter: it reads 0 a window after the sound stops", quiet == 0);
+    check("meter: a channel moved down the array keeps its reading", moved == want);
+    check("meter: it reads 0 while the mixer is off", paused == 0);
 
     /* A stereo channel takes its own branch in the mix. */
     for (i = 0; i < 2; i++) {
-        mixer = newMixer();
+        mixer = newMeterMixer(1, 1);
         if (i == 1) {
             mixerSetMasterVolume(mixer, 50);
             mixerEnableMaster(mixer, 0);
         }
-        probeChannels[0].level = 0;
-        handles[0] = mixerRegisterChannel(mixer, MIXER_CHANNEL_PSG, 1, probeSyncStereo, NULL, &probeChannels[0]);
-        playFor(mixer, 0, 1, level);
-        stereo[i][0] = mixerGetChannelVolume(mixer, handles[0], 0);
-        stereo[i][1] = mixerGetChannelVolume(mixer, handles[0], 1);
+        probeChannels[0].level = METER_LEVEL;
+        mixFrames(mixer, METER_PLAY);
+        probeUpTime += 1;
+        stereo[i][0] = mixerMeterGetChannelPercent(mixer, handles[0], 0);
+        stereo[i][1] = mixerMeterGetChannelPercent(mixer, handles[0], 1);
         mixerDestroy(mixer);
     }
-    printf("  stereo meter %d/%d, lowered and muted %d/%d\n", stereo[0][0], stereo[0][1], stereo[1][0], stereo[1][1]);
-    check("meter: a stereo channel reads its level", stereo[0][0] == want && stereo[0][1] == want);
-    check("meter: the master leaves a stereo channel", stereo[1][0] == want && stereo[1][1] == want);
+    printf("  stereo meter %d/%d, lowered and muted %d/%d, expected %d/%d\n",
+           stereo[0][0], stereo[0][1], stereo[1][0], stereo[1][1], want, wantRight);
+    check("meter: a stereo channel reads each side", stereo[0][0] == want && stereo[0][1] == wantRight && want != wantRight);
+    check("meter: the master leaves a stereo channel", stereo[1][0] == want && stereo[1][1] == wantRight);
 }
 
 int main(void)
