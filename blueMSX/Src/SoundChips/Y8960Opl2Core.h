@@ -137,9 +137,9 @@ private:
     int value;
 };
 
-/* The mask is given per circuit rather than fixed at MSX-AUDIO's bit: the
-** cartridge's two circuits and the machine's own MSX-AUDIO can all be present
-** at once, and one clearing another's pending bit would lose an interrupt. */
+/* The mask is given by the owner rather than fixed at MSX-AUDIO's bit: the
+** cartridge's block and the machine's own MSX-AUDIO can both be present, and
+** one clearing the other's pending bit would lose an interrupt. */
 class IRQHelper {
 public:
     explicit IRQHelper(UInt32 mask_) : mask(mask_) {}

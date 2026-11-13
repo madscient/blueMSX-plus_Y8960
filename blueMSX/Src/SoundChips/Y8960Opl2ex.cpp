@@ -45,9 +45,9 @@ extern "C" {
 /* 256kB, the whole of the cartridge's sample RAM. */
 #define Y8960_OPL2EX_SAMPLE_RAM (256 * 1024)
 
-/* A bit nothing else in the emulator claims; the MSX-TIMER block took 0x1000
-** the same way. */
-#define Y8960_OPL2EX_IRQ 0x2000
+/* Second of the bits the Y8960 blocks take from the top of the pending mask;
+** romMapperY8960Timer.c says why. */
+#define Y8960_OPL2EX_IRQ 0x20000000
 
 /* The same << 1 the machine's own Y8950 port applies, so the block lands where
 ** the chip it stands in for would. The balance against the other Y8960 blocks

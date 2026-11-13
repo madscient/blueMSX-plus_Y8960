@@ -37,8 +37,10 @@
 ** giving eight steps from 23.839156us to 390580.739545us. */
 #define Y8960_TIMER_FREQ    42954540u
 
-/* Nothing else in the emulator claims this bit of the pending mask. */
-#define Y8960_TIMER_IRQ     0x1000
+/* The Y8960 blocks take bits from the top of the pending mask downwards
+** (this one, OPL2EX, OPM), away from the bottom-up order the other devices
+** are given theirs in. Bit 31 is left alone: the mask is kept in a signed int. */
+#define Y8960_TIMER_IRQ     0x40000000
 
 #define Y8960_TIMER_COUNT   4
 

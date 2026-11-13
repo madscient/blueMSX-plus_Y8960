@@ -43,9 +43,9 @@
 /* One timer A step is 64 master clocks, one sample. */
 #define TIMER_FREQUENCY  (boardFrequency() / SAMPLERATE)
 
-/* A bit no other device raises, so that clearing it cannot drop another's
-** pending interrupt. */
-#define Y8960_OPM_IRQ    0x4000
+/* Third of the bits the Y8960 blocks take from the top of the pending mask;
+** romMapperY8960Timer.c says why. */
+#define Y8960_OPM_IRQ    0x10000000
 
 /* The factor ym2151.c applies, so the block lands at the level of an SFG
 ** rather than at one nobody has measured. The other Y8960 blocks are set
