@@ -213,6 +213,7 @@ enum  {
     ROM_ROOKIEDRIVE = 180,           /* Rookie Drive NX */
     ROM_GFX9000     = 181,           /* GFX9000 (V9990) */
     ROM_VIDEO9000   = 182,           /* Video9000 (V9990 with superimpose) */
+    ROM_V9968CART   = 183,           /* V9968 cartridge with geo3d */
     /* Y8960 cartridge, one RomType per device block so that a machine
     ** configuration can carry the blocks independently. The block sits
     ** at 200 so that upstream can keep adding types below it without

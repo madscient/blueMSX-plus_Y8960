@@ -85,6 +85,7 @@ void langInitEnglish(LanguageStrings* ls)
     ls->errorCreateTapeImage    = "Could not create the tape image file.";
     ls->errorNoCasInZip         = "Could not locate a .CAS file in the ZIP archive.";
     ls->errorUnknownFileType    = "Cannot open the file: its type is unknown.";
+    ls->errorCartV9968WithV9990 = "The V9968 cartridge cannot be inserted together with a GFX9000 or a Video9000, as both take over the screen. Remove the other cartridge first.";
     ls->errorDirDiskTooLarge    = "%d file(s) did not fit on the disk and were left out.";
     ls->errorDirDiskOnline      = "%d online-only file(s) were left out. Make them available on this device to include them.";
     ls->errorDirDiskSubdirs     = "Subdirectories left out because the chosen format cannot hold them: %d.";
@@ -300,7 +301,81 @@ void langInitEnglish(LanguageStrings* ls)
     ls->mixerDevicesLevel       = "Level";
     ls->mixerDevicesSlot        = "Slot";
     ls->mixerDevicesBoard       = "Board";
+    ls->menuToolsVdpViewer      = "VDP Viewer";
+    ls->menuToolsControlDeck    = "Control Deck";
     ls->menuToolsLoadMemory     = "Load Memory";
+    ls->menuToolsAgentControl   = "Agent Control";
+    ls->menuToolsAgentActivity  = "Agent Activity...";
+    ls->menuAgentOff            = "Off";
+    ls->menuAgentReadOnly       = "Read Only";
+    ls->menuAgentFull           = "Full";
+    ls->activityTitle        = "blueMSX+ agent activity";
+    ls->activityListening    = "Listening on 127.0.0.1:%d     access: %s";
+    ls->activityNotListening = "Not listening. Tools, Agent Control, Read Only or Full.";
+    ls->activityStillClosing = "Not listening yet: a request from before Agent Control was turned Off is still ending. Choose Read Only or Full again in a moment.";
+    ls->activityNoTool       = "No tool is connected.";
+    ls->activityRevokedTag   = "cut off";
+    ls->activityConnected    = "Connected: %s";
+    ls->activityColTime      = "Time";
+    ls->activityColClient    = "Client";
+    ls->activityColOperation = "Operation";
+    ls->activityColTarget    = "Target";
+    ls->activityColResult    = "Result";
+    ls->activityFailed       = "failed";
+    ls->activityFailedWhy    = "failed (%s)";
+    ls->activityWhyNoMachine = "emulator stopped";
+    ls->activityWhyNotPaused = "not paused";
+    ls->activityWhyBusy      = "emulator busy";
+    ls->activityWhyBadAddress = "bad address";
+    ls->activityWhyOutOfRange = "out of range";
+    ls->activityNotKeptSame  = "not kept (still %s)";
+    ls->activityNotKeptRom   = "not kept: ROM (still %s)";
+    ls->activityNotKeptChange = "not kept (%s)";
+    ls->activityWhyReadOnly  = "access is Read Only";
+    ls->activityWhyCutOff    = "connection cut off";
+    ls->activityWasNow       = "was %s now %s";
+    ls->activityNow          = "now %s";
+    ls->activityWas          = "was %s";
+    ls->activityRefused      = "refused (%s)";
+    ls->activityTimedOut     = "wait timed out";
+    ls->activityInstructions = "%u instructions";
+    ls->activityCandidates   = "%u candidates";
+    ls->activityLeft         = "%u left";
+    ls->activityDropped      = "Older rows dropped: %u";
+    ls->activityVerbRead       = "read";
+    ls->activityVerbWrite      = "write";
+    ls->activityVerbRun        = "resume";
+    ls->activityVerbPause      = "pause";
+    ls->activityVerbStep       = "step";
+    ls->activityVerbReset      = "hard reset";
+    ls->activityVerbBreakSet   = "set breakpoint";
+    ls->activityVerbBreakClear = "clear breakpoint";
+    ls->activityVerbWatchSet   = "set watch";
+    ls->activityVerbWatchClear = "clear watch";
+    ls->activityVerbHuntStart  = "start search";
+    ls->activityVerbHuntRefine = "narrow search";
+    ls->activityVerbHuntList   = "list matches";
+    ls->activityVerbHuntEnd    = "end search";
+    ls->activityVerbConnect    = "connected";
+    ls->activityVerbDisconnect = "disconnected";
+    ls->activityVerbRevoked    = "cut off";
+    ls->activityVerbKeyTap     = "tap key";
+    ls->activityVerbLoadSymbols = "load symbols";
+    ls->activityVerbUndo       = "undo write";
+    ls->activityVerbSnapshot   = "take snapshot";
+    ls->activityVerbRegWrite   = "set register";
+    ls->activityVerbBankSwitch = "switch bank";
+    ls->activityVerbScreenSave = "save screenshot";
+    ls->activityVerbType       = "type text";
+    ls->activityVerbResetSoft  = "soft reset";
+    ls->activityVerbKeyPress   = "press key";
+    ls->activityVerbKeyRelease = "release key";
+    ls->activityVerbSnapshotRestore = "restore snapshot";
+    ls->activityVerbStepOver   = "step over";
+    ls->activityVerbStepOut    = "step out";
+    ls->activityVerbRunUntilStop = "run until stop";
+    ls->activityVerbBreakClearAll = "clear all breakpoints";
+    ls->activityVerbScreenText = "read screen text";
     ls->menuToolsDebugger       = "Debugger";               
     ls->menuToolsTrainer        = "Trainer";                
     ls->menuToolsTraceLogger    = "Trace Logger";           
@@ -819,6 +894,10 @@ void langInitEnglish(LanguageStrings* ls)
     ls->shortcutToggleMouseLock = "Connect/disconnect PC mouse to MSX";
     ls->shortcutEmuSpeedMax     = "Max emulation speed";
     ls->shortcutEmuPlayReverse  = "Rewind emulation";                     // New in 2.8.3
+    ls->shortcutEmuFrameAdvance = "Advance one frame";
+    ls->shortcutEmuAdvanceToChange = "Advance to the next screen update";
+    ls->shortcutEmuBackFrame    = "Back one frame";
+    ls->shortcutEmuBackToChange = "Back to the previous screen update";
     ls->shortcutEmuSpeedToggle  = "Toggle max emulation speed";
     ls->shortcutEmuSpeedNormal  = "Normal emulation speed";
     ls->shortcutEmuSpeedInc     = "Increase emulation speed";
@@ -915,6 +994,7 @@ void langInitEnglish(LanguageStrings* ls)
     ls->romTypeColecoCart       = "Coleco Cartridge";
     ls->romTypeSg1000Cart       = "SG-1000 Cartridge";
     ls->romTypeSc3000Cart       = "SC-3000 Cartridge";
+    ls->romTypeV9968Cart        = "V9968 Cartridge";
     ls->romTypeMsxPrinter       = "MSX Printer";
     ls->romTypeTurborPcm        = "Turbo-R PCM Chip";
     ls->romTypeNms8280Digitiz   = "Philips NMS-8280 Digitizer";
@@ -955,6 +1035,15 @@ void langInitEnglish(LanguageStrings* ls)
     ls->dbgDevSvi80Col          = "SVI 80 Column";
     ls->dbgDevRtc               = "RTC";
     ls->dbgDevTrPause           = "TR Pause";
+
+
+    //----------------------
+    // Tool windows
+    //----------------------
+
+#define TS(id, en, ja) ls->tool[TS_##id] = en;
+#include "LanguageToolStrings.h"
+#undef TS
 
 
     //----------------------
