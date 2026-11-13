@@ -183,7 +183,8 @@ void verifyFileHistory(char* history, RomType* historyType) {
             strcmp(fname, CARTNAME_WAVESCSI1MB) &&
             strcmp(fname, CARTNAME_ESESCC128)   &&
             strcmp(fname, CARTNAME_ESESCC256)   &&
-            strcmp(fname, CARTNAME_ESESCC512))
+            strcmp(fname, CARTNAME_ESESCC512)   &&
+            strcmp(fname, CARTNAME_Y8960))
         {
             struct stat s;
             int rv = archFileExists(fname);
