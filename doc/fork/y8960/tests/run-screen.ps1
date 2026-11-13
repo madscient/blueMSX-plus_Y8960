@@ -5,8 +5,12 @@ param(
     [string]$RomType = "Y8960",                     # the whole card carries every block
     [string]$Machine = "MSX2+ - C-BIOS + Y8960 (whole cart)",
     [string]$Root = (Join-Path ([IO.Path]::GetTempPath()) "bluemsx-screen"),
-    [int[]]$Seconds = @(15)                         # when to shoot, from the start
+    [string[]]$Seconds = @("15")                    # when to shoot, from the start
 )
+
+# powershell -File hands "16,60" over as one string, which an [int[]]
+# parameter reads as 1660, the comma taken for a thousands separator.
+$Seconds = @($Seconds -split '[,\s]+' | Where-Object { $_ } | ForEach-Object { [int]$_ })
 
 # Runs a test cartridge in a hidden blueMSX+ and leaves a screenshot of what
 # it printed at $Shot. Nothing is shown or heard. /rootdir keeps the settings
