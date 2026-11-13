@@ -153,6 +153,7 @@ Makoto の種別名（`opnafm` / `opnassg`）は、ミキサーと Makoto のう
 | issue #74 | PSG のレジスタ番号を 4bit で丸めている件 | OPEN のまま。上流は PR #75（`be45fc46`）で直しており、本フォークは cherry-pick 済み |
 | PR #136 | サウンドミキサー（個体ごとの音量・パン・有効と窓、個体のメーターを RMS に）。`feature/sound-mixer`（`upstream/develop` `55ca0a3f` の上、8 コミット、`5d8f9a0b`） | **OPEN**（2026-11-13 作成。`MERGEABLE`。CI の 4 構成（Debug / Release × Win32 / x64）がすべて pass、**確認済み**: `gh pr checks`）。本文は日本語を先、英語を `<details>`。目的の 2 点（`mixer/plan.md` §0）と、Y8960 の PR をこれが入った後に出す予定であることを書いた（ユーザーの指示）。**レビューで直すときは、この枝にコミットを足し、上流がマージする前に `feature/y8960` にも取り込む**（`mixer/plan.md` §4.4） |
 | PR #137 | Makoto（YM2608 / OPNA カートリッジ）。`feature/makoto-cartridge`（`upstream/develop` `55ca0a3f` の上、8 コミット、`4b1d9e31`） | **OPEN**（2026-11-13 作成。`MERGEABLE`。CI の 4 構成（Debug / Release × Win32 / x64）がすべて pass、**確認済み**: `gh pr checks`）。本文は日本語を先、英語を `<details>`。下書きをユーザーが確認した。RomType 188 を保つ理由と、#136 と `Properties.c` で衝突して後に入る方で解くことを書いた。ライセンス表示（`b2d4d185`）は入れていない（上の「これから出すもの」の 1）。**`feature/y8960` には Makoto が入っていない**ので、上流が採ったら `develop` のマージで初めて入る |
+| issue #138 | VDP の垂直帰線と RS-232C（MSX と NMS1210）が割り込みの線 `0x01` を共有し、互いの保留を消す件。オリジナルの blueMSX から | **OPEN**（2026-11-13 作成）。本文は日本語を先、英語を `<details>`。コードを読んだ見立てで、走らせていないと書いた。提案は RS-232C を空いている `0x80` へ移すことと、使用中の線の一覧を 1 か所にまとめること。Y8960 の線を上端へ移したことと、Y8960 の PR をその値で出す予定も添えた。SFG と Yamaha NET の共有（`0x40`、`0x800`）は、実機で同時に使えないので入れていない（ユーザー判断）。経緯は `y8960/implementation-plan.md` §11 の (68) |
 
 PR #77 と issue #78 は本文を**日本語を先、英語を後**（`<details>` に格納）。
 上流の所有者と報告者がどちらも日本語話者で、かつ公開リポジトリに
