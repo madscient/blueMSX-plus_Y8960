@@ -49,7 +49,7 @@ MSBUILD=$("$VSWHERE" -products '*' -version '[17.0,18.0)' \
 LOG="$TMPDIR/bluemsx-build.log"
 cd blueMSX/Make/msvc2022
 "$MSBUILD" blueMSX.sln -nologo -m \
-  '-t:blueMSX;TraceWindow;Trainer;SimpleDebugger' \
+  '-t:blueMSX;TraceWindow;Trainer;SimpleDebugger;McpServer' \
   '-p:Configuration=Release;Platform=x64;BlueMsxPackUpx=false' \
   -p:VcpkgEnabled=false > "$LOG"
 ```
@@ -61,7 +61,7 @@ cd blueMSX/Make/msvc2022
 
 | 引数 | なぜ要るか |
 |---|---|
-| `/t:blueMSX;TraceWindow;Trainer;SimpleDebugger` | CI と同じターゲット。ソリューションには `DeviceViewer` も在るが、**意図的に外してある**（`scripts/ci-package.ps1` の冒頭に明記） |
+| `/t:blueMSX;TraceWindow;Trainer;SimpleDebugger;McpServer` | CI と同じターゲット（`McpServer` は上流 `55ca0a3f` から。**確認済み(読解)**: `.github/workflows/ci.yml`）。ソリューションには `DeviceViewer` も在るが、**意図的に外してある**（`scripts/ci-package.ps1` の冒頭に明記） |
 | `BlueMsxPackUpx=false` | UPX 圧縮を切る。CI も切っている |
 | `VcpkgEnabled=false` | §3.1 |
 
@@ -99,6 +99,7 @@ git checkout -- blueMSX/Src/BuildInfo/build_info.txt blueMSX/Src/BuildInfo/build
 |---|---|
 | 実行ファイル | `blueMSX/Make/msvc2022/x64/Release/blueMSX+.exe` |
 | プラグイン | 同 `Tools/*.dll` |
+| MCP サーバ | 同 `Tools/bluemsx-mcp.exe` |
 | 中間ファイル | 同じディレクトリ（`.obj` が同居する） |
 
 `Win32` は `x64` が付かず `blueMSX/Make/msvc2022/Release/` になる
@@ -207,7 +208,7 @@ msbuild は 2 つ目のプロジェクト指定として受け取る。
 
 ```sh
 "$MSBUILD" blueMSX.sln -nologo -m \
-  '-t:blueMSX;TraceWindow;Trainer;SimpleDebugger' \
+  '-t:blueMSX;TraceWindow;Trainer;SimpleDebugger;McpServer' \
   '-p:Configuration=Release;Platform=x64;BlueMsxPackUpx=false' \
   -p:VcpkgEnabled=false > build.log
 ```
@@ -603,3 +604,16 @@ ROM タイプを使う機種が `unknown machine` になる（**確認済み**�
   ので、比べ方に判別力はある）。確かめたのはこの 1 本だけ
 - 出力先の `Machines/MSX2+ - Sony HB-F1XDJ` には `config.ini` しか無く、`run-dos.ps1` は録音も画面も残さずに終わった（エラーは
   出ない）。展開してある blueMSX+ から ROM 7 本を一時的に写して回し、終わってから消した
+
+### 2026-11-13（Win11 機、上流 `55ca0a3f` の同期）
+
+- **上流が `McpServer` のプロジェクトを足し、CI のターゲットに入れた。** §2 のターゲットに足した。Release / x64 で 0 エラー / 0 警告
+  （**確認済み**）。出力は `Tools/bluemsx-mcp.exe`
+- 試験 ROM 5 本（`banktest` `sndtest` `v099test` `adpcmtest` `keytest`）を 2026-11-05 と同じ zmac の中継で組めた。中継では出力のパスを
+  `%~f3` で受け、`move` が通った
+- **出力先の `(banktest)` の構成は、構成の隣の `banktest.rom` を読む。** `check-test-machines.py` は `config.ini` だけを比べるので
+  （**確認済み(読解)**: 同スクリプトの 20-27 行）、この ROM が古いままでも `same` と出る。10-26 の ROM が残っていて、今のソース（11-04）から
+  組んだものと違った（`cmp`）。組み直した ROM を写して回した。**同スクリプトは、構成の隣にある ROM を「比べていない、組み直す」と
+  出すようにした**（**確認済み**: 出力先で走らせ、`(banktest)` の下に 1 行出た）
+- 比べるためのマージ前の実行ファイルは、`git worktree add` で `%TEMP%` の直下に取り出して組んだ（scratchpad の下は長すぎる。§3.7）。
+  組んだ後は作業ツリーごと消した

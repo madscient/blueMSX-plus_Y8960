@@ -31,5 +31,8 @@ void  archSemaphoreWait(void* semaphore, int timeout)
 int   probeSemaphoreCount(void) { return probeSemaphore; }
 int   probeSemaphoreLowest(void) { return probeSemaphoreMin; }
 
+/* The last volume the mixer handed to the external MIDI synth. */
+int  probeMidiLeft  = -1;
+int  probeMidiRight = -1;
 int  archMidiGetNoteOn(void) { return 0; }
-void archMidiUpdateVolume(int left, int right) { (void)left; (void)right; }
+void archMidiUpdateVolume(int left, int right) { probeMidiLeft = left; probeMidiRight = right; }

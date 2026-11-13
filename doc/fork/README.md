@@ -35,7 +35,7 @@ blueMSX+ 自身が [blueMSX](https://msxblue.com/bluemsx/) の非公式フォー
 | このフォーク | `origin` = madscient/blueMSX-plus_Y8960 |
 | 直接の上流 | Hesoten/blueMSX-plus（remote 名 `upstream`） |
 | そのまた上流 | blueMSX 本家 |
-| 作業ブランチ | `feature/y8960`（分岐点は上流 `main` の `5afffd55`。上流 `develop` の `475dadfa` までマージ済み） |
+| 作業ブランチ | `feature/y8960`（分岐点は上流 `main` の `5afffd55`。上流 `develop` の `55ca0a3f` までマージ済み） |
 | ライセンス | **GPLv2**（blueMSX+ と同じ。ルートの `README.md` §License） |
 
 ### 枝の役割
@@ -71,6 +71,15 @@ blueMSX+ 自身が [blueMSX](https://msxblue.com/bluemsx/) の非公式フォー
 | 2026-10-16 | `develop` `96771382`（28 コミット。PR #103-#107 / #110 / #111。Rookie Drive NX、フォルダディスクの修正、MegaFlashROM SCC+ SD の修正、物理ドライブの接続、フォルダをハードディスク・フロッピーとして挿して書き戻す） | `43b73cad` | `MediaDb.{h,cpp}`、`Win32Menu.c`（上流が Rookie Drive NX に RomType 180 とメニュー ID 41122 を取り、フォークの Y8960 と重なった。**Y8960 の RomType を 200-207 へ移した**。ユーザー判断。`v3.1.1-y8960.2` の利用者の `config.ini`・履歴・ステートが壊れる破壊的変更） | ビルド 0 エラー / 7 警告（(37) と同じ 6 件と `SimpleDebugger` の 1 件。Y8960 のファイルには無い）。フォーク元の音源コアへの上流の修正は 0 件で、移植は無し。新しい番号の構成で `banktest` の機械判定 15 項目、`ssgstest` の機械判定 5 項目がすべて OK、`/romtype1 Y8960`（207）でも `banktest` 15 項目 OK、`/listromtypes` と `/listmachines` が終了コード 0（**確認済み**、`/hidden` で画面）。**`sndtest` と `run-keytest` は回していない**（上流は `SoundChips/` と `Input/` に触れていない）。`y8960/implementation-plan.md` §11 の (38) |
 | 2026-10-19 | `develop` `475dadfa`（41 コミット。PR #112-#118。GFX9000 / Video9000、ROM の判定、フラッシュの書き込み保護、zip の一覧、コマンドラインの ROM の拡張子） | `24246cc5` | `MediaDb.{h,cpp}`、`Win32Menu.c`（上流が RomType 181 / 182 とメニュー ID 41123 / 41124 を取った。RomType は重ならず両方残した。**メニュー ID 41123 が `Y8960 Cartridge` と重なり、Y8960 側を 41125 へ移した**。メニュー ID は外に出ない） | ビルド 0 エラー / 6 警告（すべて上流と同一の `Win32*.c`）。フォーク元の音源コアへの上流の修正は 0 件で、移植は無し。出力先の試験構成と `banktest.rom` が古いままだったので写し直した。`banktest` の機械判定 15 項目（カード一式でも 15 項目）、`run-keytest` 12 項目がすべて OK、`/listromtypes` と `/listmachines` が終了コード 0（**確認済み**、`/hidden` で画面）。**`sndtest` は回していない**（上流は `SoundChips/` に触れていない）。`y8960/implementation-plan.md` §11 の (46) |
 | 2026-10-27 | `develop` `0d6ba91b`（5 コミット。PR #119 / #120。ASCII16-X・Yamanooto・Flash-ROM SCC のフラッシュを変えた分だけ保存、長いパスのダイアログ、ポインタの自動非表示） | `a4a6e998` | 無し | ビルド 0 エラー / 3 警告（すべて上流と同一の `Win32*.c`。Release / x64、`msvc2026`）。フォーク元の音源コアへの上流の修正は 0 件で、移植は無し。Y8960 のマッパーは `AmdFlash` も `sramLoader` も使わない。`banktest` の 1-7・10・13-24 が OK（**確認済み**、`/hidden` で画面。9・11・12 は聴く項目で、聴いていない）。**`sndtest` と `run-keytest` は回していない**（上流は `SoundChips/` と `Input/` に触れていない）。`y8960/implementation-plan.md` §11 の (57) |
+| 2026-11-13 | `develop` `55ca0a3f`（166 コミット。PR #122-#131 / #133-#135。サウンドミキサーのメーターを RMS に作り直し、MIDI フェーダー、設定の読み込み、ダイアログの位置、`/mute`、文字モードの色 0、Agent Control と MCP サーバ、VDP ビューア、V9968 + geo3d v2.0。上流の `v3.2.0-pre-alpha` と同じコミット） | `bfb20e9b` | 13 ファイル 26 箇所。両側の追加を並べただけのものが 10 本（言語 5 本、`MediaDb.cpp`、`MegaromCartridge.c`、`SlotManager.c`、`blueMSX.vcxproj` 2 本）。`MediaDb.h`（上流の RomType 183 は Y8960 の 200-208 と重ならず、両方残した）。`Win32Menu.c`（**上流の V9968 がメニュー ID 41125 を取り、`Y8960 Cartridge` とまた重なった。Y8960 をカートリッジ 1 の範囲の上端 41149 へ移した**。ユーザー判断。下の「フォーク固有の番号」）。`AudioMixer.c`（9 箇所。上流がメーターを作り直し、フォークのミキサーの作り直しと重なった。解き方は `y8960/implementation-plan.md` §11 の (65)） | ビルド 0 エラー / 7 警告（すべて上流と同一の `Win32*.c` と `SimpleDebugger`。Release / x64、`msvc2026`）。上流が足した `McpServer` も 0 エラー / 0 警告。フォーク元の音源コアへの上流の修正は 0 件で、移植は無し。`banktest` の 1-7・10・13-24（`(whole cart)` と `(banktest)` の両方）、`v099test` 1-7、`adpcmtest` 1-2、`run-keytest` 12 項目がすべて OK、`sndtest` が PASS で、**録音がマージ前の実行ファイルとバイト単位で一致**（音が出始めてから 1,154,812 フレーム）。ミキサーの probe が全項目 OK（**確認済み**、`/hidden` で画面と録音）。メニュー命令 41149 / 41299 で両スロットに `Y8960 Cartridge`（207）が、41125 / 41275 で V9968（183）が挿さる（**確認済み**、閉じた後の設定ファイル）。`y8960/implementation-plan.md` §11 の (65) |
+
+**フォーク固有の番号は、上流が番号を伸ばす向きと反対の端に置く。** 上流は新しい項目に、最後の番号の次を順に振る。
+RomType は 2026-10-16 に 200 番台へ移してから重なっていない。カートリッジのメニュー ID は 41123 → 41125 と 2 回重なり、
+2026-11-13 に `ID_FILE_CART_Y8960` をカートリッジ 1 の範囲の上端 41149 へ移した（ユーザー判断）。範囲は `ID_FILE_CART_OFFSET`（150）で
+決まり、カートリッジ 2 は 150 足した 41299。41140-41149 と 41290-41299 は、移した時点で全ソースに使われていなかった
+（**確認済み**: `blueMSX/Src` を数字で検索。履歴は 41003-41032、名前付きの項目は 41070-41125）。
+**前提**: 上流が番号を下から順に取ること、`ID_FILE_CART_OFFSET` が 150 のままであること。どちらかが変わったら置き場所を見直す。
+Makoto（`feature/makoto-opna`）の 41126 は動かしていない。Makoto の枝は上流に出す PR の枝なので、上流の振り方（次の番号）に揃えたままにしてある。
 
 **`Board/MSX.c` の `machineInitialize` から `msxPsgCreate` までは、上流とフォークの両方が触っている。**
 フォークは PSG の生成を `BOARD_MSX2PP` で分岐し、上流は同じ場所に R800 のウェイト設定を置いた
@@ -183,6 +192,11 @@ MegaFlashROM SCC+ SD に触れているが、PR に本文も参照も無く、#7
 
 **前提**: 上流の `prerelease.yml` と `ci-package.ps1` をそのまま使っていること。
 上流がこれらを変えたら、公開の流れ（`release: prereleased` で起動）と zip の中身を見直す。
+
+**2026-11-13 の同期（`55ca0a3f`）で上流が両方を変えた。** 起動の条件は変わっていない。ビルドのターゲットに `McpServer` が加わり、
+zip の `Tools/` に `bluemsx-mcp.exe` と、その案内 `bluemsx-mcp.md` / `bluemsx-mcp.ja.md`（`blueMSX/McpServer/README{,.ja}.md` を改名したもの）が入るようになった
+（**確認済み(読解)**: `git diff 0d6ba91b 55ca0a3f -- .github/workflows/prerelease.yml scripts/ci-package.ps1`）。`doc/` が入らないことは変わらない。
+この形の zip はまだ公開していない。
 
 **`prerelease.yml` はフォークの `main` にも置いてある**（`06e81676`。上流 `develop` のものと同一）。
 フォークの Actions の一覧に `prerelease` が出るのは、`main` に置いてからである。**`main` に無くても
