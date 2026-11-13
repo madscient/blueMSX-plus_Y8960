@@ -6,8 +6,12 @@ param(
     [Parameter(Mandatory = $true)][string]$Out,       # prefix of the recording and the screenshots
     [string]$Root = (Join-Path ([IO.Path]::GetTempPath()) "bluemsx-dos"),
     [int]$Seconds = 90,                               # how long to record, from the start
-    [int[]]$Shots = @(30)                             # when to shoot, from the start
+    [string[]]$Shots = @("30")                        # when to shoot, from the start
 )
+
+# powershell -File hands "30,60" over as one string, which an [int[]]
+# parameter reads as 3060, the comma taken for a thousands separator.
+$Shots = @($Shots -split '[,\s]+' | Where-Object { $_ } | ForEach-Object { [int]$_ })
 
 # Boots MSX-DOS from a folder in a hidden blueMSX+ with the whole Y8960 card
 # inserted, records everything to $Out.wav and shoots the screen at $Shots.
