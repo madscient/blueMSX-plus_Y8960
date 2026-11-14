@@ -129,7 +129,7 @@ int romMapperY8960SsgsCreate(void)
     DeviceCallbacks callbacks = { destroy, reset, saveState, loadState };
     RomMapperY8960Ssgs* rm = (RomMapperY8960Ssgs*)calloc(1, sizeof(RomMapperY8960Ssgs));
 
-    rm->deviceHandle = deviceManagerRegister(ROM_Y8960SSGS, &callbacks, rm);
+    rm->deviceHandle = deviceManagerRegister(ROM_Y8960, &callbacks, rm);
 
     theSsgs = rm;
 

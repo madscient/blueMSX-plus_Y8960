@@ -173,7 +173,7 @@ int romMapperY8960MixerCreate(void)
     DebugCallbacks dbgCallbacks = { getDebugInfo, NULL, NULL, NULL };
     RomMapperY8960Mixer* rm = (RomMapperY8960Mixer*)calloc(1, sizeof(RomMapperY8960Mixer));
 
-    rm->deviceHandle = deviceManagerRegister(ROM_Y8960MIXER, &callbacks, rm);
+    rm->deviceHandle = deviceManagerRegister(ROM_Y8960, &callbacks, rm);
 
     theMixer = rm;
     rm->debugHandle  = debugDeviceRegister(DBGTYPE_AUDIO, "Y8960 MSX-MIXER", &dbgCallbacks, rm);

@@ -118,7 +118,7 @@ int romMapperY8960Opl2exCreate(void)
     DeviceCallbacks callbacks = { destroy, reset, saveState, loadState };
     RomMapperY8960Opl2ex* rm = (RomMapperY8960Opl2ex*)calloc(1, sizeof(RomMapperY8960Opl2ex));
 
-    rm->deviceHandle = deviceManagerRegister(ROM_Y8960OPL2EX, &callbacks, rm);
+    rm->deviceHandle = deviceManagerRegister(ROM_Y8960, &callbacks, rm);
 
     theOpl2ex = rm;
 

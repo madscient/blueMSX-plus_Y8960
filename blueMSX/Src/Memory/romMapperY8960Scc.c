@@ -430,7 +430,7 @@ static int sccCreate(const char* filename, UInt8* romData, int size,
     DeviceCallbacks callbacks = { destroy, reset, saveState, loadState };
     RomMapperY8960Scc* rm = (RomMapperY8960Scc*)calloc(1, sizeof(RomMapperY8960Scc));
 
-    rm->deviceHandle = deviceManagerRegister(ROM_Y8960SCC, &callbacks, rm);
+    rm->deviceHandle = deviceManagerRegister(ROM_Y8960, &callbacks, rm);
     slotRegister(slot, sslot, startPage, Y8960_REGIONS, read, peek, write, eject, rm);
 
     /* No callbacks on the mirrors: they are always mapped for reading, and a

@@ -165,7 +165,7 @@ int romMapperY8960SysCtrlCreate(void)
     DebugCallbacks dbgCallbacks = { getDebugInfo, NULL, NULL, NULL };
     RomMapperY8960SysCtrl* rm = (RomMapperY8960SysCtrl*)calloc(1, sizeof(RomMapperY8960SysCtrl));
 
-    rm->deviceHandle = deviceManagerRegister(ROM_Y8960SYSCTRL, &callbacks, rm);
+    rm->deviceHandle = deviceManagerRegister(ROM_Y8960, &callbacks, rm);
     rm->debugHandle  = debugDeviceRegister(DBGTYPE_PORT, "Y8960 System Controller", &dbgCallbacks, rm);
 
     theSysCtrl = rm;

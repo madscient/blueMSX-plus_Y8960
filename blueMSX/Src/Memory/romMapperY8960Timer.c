@@ -442,7 +442,7 @@ int romMapperY8960TimerCreate(void)
     RomMapperY8960Timer* rm = (RomMapperY8960Timer*)calloc(1, sizeof(RomMapperY8960Timer));
     int i;
 
-    rm->deviceHandle = deviceManagerRegister(ROM_Y8960TIMER, &callbacks, rm);
+    rm->deviceHandle = deviceManagerRegister(ROM_Y8960, &callbacks, rm);
 
     for (i = 0; i < Y8960_TIMER_COUNT; i++) {
         rm->core[i].owner      = rm;

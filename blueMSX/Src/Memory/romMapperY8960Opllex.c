@@ -114,7 +114,7 @@ int romMapperY8960OpllexCreate(void)
     DeviceCallbacks callbacks = { destroy, reset, saveState, loadState };
     RomMapperY8960Opllex* rm = (RomMapperY8960Opllex*)calloc(1, sizeof(RomMapperY8960Opllex));
 
-    rm->deviceHandle = deviceManagerRegister(ROM_Y8960OPLLEX, &callbacks, rm);
+    rm->deviceHandle = deviceManagerRegister(ROM_Y8960, &callbacks, rm);
 
     theOpllex = rm;
 
