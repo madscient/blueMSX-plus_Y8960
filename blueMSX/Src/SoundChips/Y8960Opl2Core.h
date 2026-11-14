@@ -143,6 +143,9 @@ private:
 class IRQHelper {
 public:
     explicit IRQHelper(UInt32 mask_) : mask(mask_) {}
+    /* As openMSX's IntHelper: a request still up goes with the chip. Ejecting
+    ** the cartridge destroys it, and nothing else would lower the line. */
+    ~IRQHelper()  { reset(); }
     void reset()  { boardClearInt(mask); }
     void set()    { boardSetInt  (mask); }
 private:
