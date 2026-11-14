@@ -34,7 +34,7 @@ Y8960 対応は upstream には存在しない、このフォーク固有の機�
 | `tests/adpcmtest.asm` + `make-adpcmtest.py` | OPL2EX の ADPCM がサンプルを時刻どおりに終えるか。`C0h`/`C1h` を叩くので、本体の MSX-AUDIO にも使える。16KB |
 | `tests/v099test.asm` + `make-v099test.py` | ハードウェアの v0.9.5〜v0.9.9 で変わったポートの読み。System Controller、C1h、PCM_BSY、MSX-TIMER のレジスタと刻み、A2h での SSG2 と本体 PSG。特殊カートリッジに挿す。16KB |
 | `tests/run-screen.ps1` | 試験 ROM を `/hidden` で走らせ、決めた時刻に画面を撮る。構成が ROM を持つなら `-Rom` は要らない |
-| `tests/check-irq-lines.py` | 割り込みの線（`boardSetInt` のビット）を立てるファイルを全ソースから並べ、フォークのファイルの線が上流のものと重なれば終了コード 1。上流を取り込むたびに走らせる（`../README.md` の「上流との関係」）。別の枝の木にも `--src` で向けられる |
+| `tests/check-irq-lines.py` | 割り込みの線（`boardSetInt` のビット）を立てるファイルを全ソースから並べ、フォークのファイルの線が上流のものと重なれば終了コード 1。名前は `Board.h` の表（`BOARD_INT_*`）から読み、表にあって `Board.c` の `BOARD_INT_ALL` に無い名前も 1 で報告する（上流のビルド時の検査はその名前を見ない）。上流を取り込むたびに走らせる（`../README.md` の「上流との関係」）。別の枝の木にも `--src` で向けられる |
 | `tests/run-dos.ps1` + `dsk-extract.py` + `wav-envelope.py` | MSX-DOS をフォルダから起動し、カード一式を挿してハードウェア側のサンプル曲（`y8960_fm_sample/`）を流して録る。DOS のシステムファイルは手元の起動ディスクから取り出す。録音は 1 秒ごとの大きさで読む |
 | `level/make-tones-rom.py` | openMSX_Y8960 の音量測定の音列（`doc/fork/y8960/level/`）を、Y8960 SCC に挿す ROM にする。音源どうしの音量比を測るための道具で、回帰テストではない |
 | `tests/opllex-bank-probe.c` | OPLLEX のコア単体試験（ヘッドレス）。バンクとパン |

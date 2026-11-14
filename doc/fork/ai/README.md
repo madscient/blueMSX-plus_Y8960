@@ -196,7 +196,8 @@ Y8960 の音源ブロックは本体のチップそのものではなく等価�
 Y8960 の実装で上流のファイルに手が入ることが分かっているのは、
 `Src/Media/MediaDb.{h,cpp}`、`Src/Board/Machine.c`、
 `Src/SoundChips/AudioMixer.h`、`Src/Emulator/Properties.c`、
-`Src/Win32/Win32machineConfig.c`、ビルド定義 3 系統、`Src/Emulator/FileHistory.c`（特殊カートリッジの名前の一覧に 1 行。2026-11-13）。
+`Src/Win32/Win32machineConfig.c`、ビルド定義 3 系統、`Src/Emulator/FileHistory.c`（特殊カートリッジの名前の一覧に 1 行。2026-11-13）、
+`Src/Board/Board.{h,c}`（割り込みの線の表 `BOARD_INT_*` と `BOARD_INT_ALL` に 3 本。2026-11-14）。
 
 **音源コアは上流を広げずにフォークする。** カートリッジ内の音源ブロックは
 本体のチップそのものではなく等価回路なので、共有すると挙動の分岐を表現できない。
@@ -211,10 +212,12 @@ Y8960 の実装で上流のファイルに手が入ることが分かってい�
 ```sh
 # フォーク元: Y8960Scc <- SCC.c, Y8960Dcsg <- SN76489.c, Y8960Ssgs <- AY8910.c,
 #             Y8960OpllCore <- Emu2413/,
-#             Y8960Opl2Core / Opl2Adpcm <- OpenMsxY8950Latest{,Adpcm}.{cpp,h}（移植版）
+#             Y8960Opl2Core / Opl2Adpcm <- OpenMsxY8950Latest{,Adpcm}.{cpp,h}（移植版）,
+#             Y8960Opm <- ym2151.c, Y8960OpmCore <- MameYM2151.c
 git log --oneline HEAD..upstream/develop -- \
   blueMSX/Src/SoundChips/SCC.c blueMSX/Src/SoundChips/SN76489.c \
   blueMSX/Src/SoundChips/AY8910.c \
+  blueMSX/Src/SoundChips/ym2151.c blueMSX/Src/SoundChips/MameYM2151.c \
   blueMSX/Src/SoundChips/Emu2413 blueMSX/Src/SoundChips/OpenMsxY8950Latest \
   blueMSX/Src/SoundChips/OpenMsxY8950Latest.cpp blueMSX/Src/SoundChips/OpenMsxY8950Latest.h \
   blueMSX/Src/SoundChips/OpenMsxY8950LatestAdpcm.cpp blueMSX/Src/SoundChips/OpenMsxY8950LatestAdpcm.h

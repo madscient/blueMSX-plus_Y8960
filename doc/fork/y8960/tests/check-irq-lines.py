@@ -6,9 +6,11 @@ Usage:  py check-irq-lines.py [--src <blueMSX/Src>] [--upstream <ref>]
 
 boardClearInt (Board.c) drops a bit for everyone, and lets the line go once
 no bit is left. Two devices on one bit therefore lose each other's
-interrupts, and nothing says so at build or run time. Upstream gives out new
-bits from the bottom up and keeps no table of them, so run this after every
-merge of upstream.
+interrupts. Upstream names the bits in one table in Board.h (BOARD_INT_*),
+and Board.c fails the build when two of the names listed in its
+BOARD_INT_ALL overlap. That check sees only the names in that list: a bit
+given as a number, or a name left out of the list, passes it. Run this after
+every merge of upstream.
 
 A file is the fork's own when <ref> (default upstream/develop) does not have
 it. Bits shared only among upstream's files are listed but do not fail: this
@@ -19,32 +21,36 @@ not show: ym2151.c raises 0x40 for both the SFG cartridges and Yamaha NET,
 and two cartridges of one kind share whatever bit their file raises. Each
 Y8960 block raises its bit in a file of its own, and the card goes in once.
 
-Exit status: 0 when no bit of a fork file is shared, 1 when one is, 2 when a
-call could not be resolved to a value. For 2, add a rule to PASS_THROUGH
-rather than skip the call: a value read from elsewhere is still a bit someone
-holds.
+Exit status: 0 when no bit of a fork file is shared and every BOARD_INT_*
+name is in BOARD_INT_ALL, 1 when either fails, 2 when a call could not be
+resolved to a value. For 2, add a rule to PASS_THROUGH rather than skip the
+call: a value read from elsewhere is still a bit someone holds.
 """
 import argparse
+import ast
 import os
 import re
 import subprocess
 import sys
 
 # Calls whose argument is a parameter rather than a constant. Each maps to
-# the #define(s) that are handed in, as (file, name).
+# the names that are handed in, as (file that hands it in, name).
 PASS_THROUGH = {
-    ("SoundChips/Y8960Opl2Core.h", "mask"): [("SoundChips/Y8960Opl2ex.cpp", "Y8960_OPL2EX_IRQ")],
-    ("SoundChips/YM2608.cpp", "ym2608->irqMask"): [("Memory/romMapperMakoto.c", "MAKOTO_IRQ_MASK")],
+    ("SoundChips/Y8960Opl2Core.h", "mask"): [("SoundChips/Y8960Opl2ex.cpp", "BOARD_INT_Y8960_OPL2EX")],
+    ("SoundChips/YM2608.cpp", "ym2608->irqMask"): [("Memory/romMapperMakoto.c", "BOARD_INT_MAKOTO")],
 }
 
 # Where the functions are defined; their argument is the parameter itself.
 SKIP_FILES = {"Board/Board.c", "Board/Board.h"}
+TABLE_FILE = "Board/Board.h"
+CHECK_FILE = "Board/Board.c"
 
 CALL = re.compile(r"\bboard(?:Set|Clear|Get)Int\s*\(")
 DEFINE = re.compile(r"^[ \t]*#[ \t]*define[ \t]+(\w+)[ \t]+(.+?)[ \t]*$", re.M)
-LITERAL = re.compile(r"^\(?\s*(0[xX][0-9a-fA-F]+|\d+)[uUlL]*\s*\)?$")
 VDP_IE = re.compile(r"^vdp->intIE([0-2])$")
 SECONDARY = re.compile(r"\bVdpSecondaryConfig\s+\w+\s*=\s*\{([^}]*)\}")
+TABLE_NAME = re.compile(r"\bBOARD_INT_\w+")
+INT_SUFFIX = re.compile(r"\b(0[xX][0-9a-fA-F]+|\d+)[uUlL]+\b")
 
 
 def strip_comments(text):
@@ -72,9 +78,29 @@ def strip_comments(text):
     return "".join(out)
 
 
-def literal(expr):
-    m = LITERAL.match(expr.strip())
-    return int(m.group(1), 0) if m else None
+def evaluate(expr, lookup):
+    """The value of a constant expression of numbers, names, << and |, or None.
+    lookup(name) gives a name's value or None."""
+    try:
+        tree = ast.parse(INT_SUFFIX.sub(r"\1", expr.strip()), mode="eval")
+    except SyntaxError:
+        return None
+
+    def walk(node):
+        if isinstance(node, ast.Expression):
+            return walk(node.body)
+        if isinstance(node, ast.Constant) and isinstance(node.value, int):
+            return node.value
+        if isinstance(node, ast.Name):
+            return lookup(node.id)
+        if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.LShift, ast.BitOr)):
+            a, b = walk(node.left), walk(node.right)
+            if a is None or b is None:
+                return None
+            return a << b if isinstance(node.op, ast.LShift) else a | b
+        return None
+
+    return walk(tree)
 
 
 def call_args(text):
@@ -102,7 +128,7 @@ def main():
         return 2
     upstream = {p[len("blueMSX/Src/"):] for p in r.stdout.splitlines()}
 
-    texts, defines = {}, {}
+    texts, raw = {}, {}
     for dirpath, _, names in os.walk(args.src):
         for name in names:
             if os.path.splitext(name)[1].lower() not in (".c", ".cpp", ".h", ".hpp"):
@@ -112,26 +138,56 @@ def main():
             with open(path, "rb") as f:
                 text = strip_comments(f.read().decode("latin-1"))
             texts[rel] = text
-            defines[rel] = {k: literal(v) for k, v in DEFINE.findall(text)}
+            raw[rel] = dict(DEFINE.findall(text))
 
-    def define(rel, name):
-        return defines.get(rel, {}).get(name)
+    unresolved = []
+    if TABLE_FILE not in raw:
+        print("no %s under %s" % (TABLE_FILE, args.src))
+        return 2
+    table_names = sorted(n for n in raw[TABLE_FILE] if n.startswith("BOARD_INT_"))
 
-    # The second VDP's owner hands in intBase; the VDP raises it, << 1 and << 2.
+    def table(name, seen=()):
+        if name not in table_names or name in seen:
+            return None
+        return evaluate(raw[TABLE_FILE][name], lambda n: table(n, seen + (name,)))
+
+    def define(rel, name, seen=()):
+        """A name's value in rel: its own #define first, then the table."""
+        if (rel, name) in seen:
+            return None
+        expr = raw.get(rel, {}).get(name)
+        if expr is not None:
+            v = evaluate(expr, lambda n: define(rel, n, seen + ((rel, name),)))
+            if v is not None:
+                return v
+        return table(name)
+
+    for name in table_names:
+        if table(name) is None:
+            unresolved.append((TABLE_FILE, 0, name))
+
+    # Every table name has to be in BOARD_INT_ALL, or the build check skips it.
+    m = re.search(r"#\s*define\s+BOARD_INT_ALL\s*\(\s*op\s*\)(.*?)\n\s*typedef", texts.get(CHECK_FILE, ""), re.S)
+    listed = set(TABLE_NAME.findall(m.group(1))) if m else set()
+    if not m:
+        print("no BOARD_INT_ALL in %s" % CHECK_FILE)
+    missing = [n for n in table_names if n != "BOARD_INT_ALL" and n not in listed]
+
+    # The machine's own VDP takes the table's IE bits. A second VDP's owner
+    # hands in intBase; the VDP raises it, << 1 and << 2.
     vdp_ie = {k: [] for k in range(3)}
     for k in range(3):
-        v = define("VideoChips/VDP.c", "INT_IE%d" % k)
-        if v is not None:
+        v = table("BOARD_INT_VDP_IE%d" % k)
+        if v is None:
+            unresolved.append(("VideoChips/VDP.c", 0, "BOARD_INT_VDP_IE%d" % k))
+        else:
             vdp_ie[k].append(("VideoChips/VDP.c", v))
-    unresolved = []
     for rel, text in texts.items():
-        for m in SECONDARY.finditer(text):
-            fields = [f.strip() for f in m.group(1).split(",")]
-            base = literal(fields[1]) if len(fields) > 1 else None
-            if base is None and len(fields) > 1:
-                base = define(rel, fields[1])
+        for m2 in SECONDARY.finditer(text):
+            fields = [f.strip() for f in m2.group(1).split(",")]
+            base = evaluate(fields[1], lambda n: define(rel, n)) if len(fields) > 1 else None
             if base is None:
-                unresolved.append((rel, text.count("\n", 0, m.start()) + 1, "VdpSecondaryConfig intBase"))
+                unresolved.append((rel, text.count("\n", 0, m2.start()) + 1, "VdpSecondaryConfig intBase"))
                 continue
             for k in range(3):
                 vdp_ie[k].append((rel, base << k))
@@ -144,9 +200,7 @@ def main():
             for term in arg.split("|"):
                 term = term.strip().strip("()").strip()
                 found = []
-                v = literal(term)
-                if v is None:
-                    v = define(rel, term)
+                v = evaluate(term, lambda n: define(rel, n))
                 if v is not None:
                     found = [(rel, v)]
                 elif VDP_IE.match(term) and rel == "VideoChips/VDP.c":
@@ -154,7 +208,7 @@ def main():
                 elif (rel, term) in PASS_THROUGH:
                     for src, name in PASS_THROUGH[(rel, term)]:
                         v = define(src, name)
-                        if v is None:
+                        if v is None or not re.search(r"\b%s\b" % name, texts.get(src, "")):
                             unresolved.append((rel, line, "%s (no %s in %s)" % (term, name, src)))
                         else:
                             found.append((src, v))
@@ -177,12 +231,15 @@ def main():
                 note = "  (shared, upstream only)"
         print("0x%08X   %s%s" % (bit, ", ".join(f + ("*" if f in fork else "") for f in files), note))
 
+    for name in missing:
+        print("NOT IN BOARD_INT_ALL  %s (%s)" % (name, CHECK_FILE))
     for rel, line, term in unresolved:
         print("UNRESOLVED  %s:%d  %s" % (rel, line, term))
     if unresolved:
         return 2
     if clash:
         print("%d bit(s) of the fork's files are shared" % clash)
+    if clash or missing or not m:
         return 1
     return 0
 
