@@ -433,6 +433,27 @@ int main()
               quietBefore && y8960ProbePendingIrq != 0);
     }
 
+    /* ---- the request goes with the circuit ------------------------------ */
+    {
+        /* Ejecting the cartridge destroys the circuit. A request it left up
+        ** would hold the line until the machine is started again: a soft
+        ** reset reaches only the devices that are still there. */
+        bool raised;
+        *boardSysTime = 1000;
+        {
+            Player p(cfg);
+            p.playShort(0xA0);
+            p.eosTick(3000);
+            raised = (y8960ProbePendingIrq & 0x2000) != 0;
+            y8960ProbePendingIrq |= 0x0001;     /* another source's request */
+        }
+        printf("  after the circuit went, interrupt lines %04x\n",
+               (unsigned)y8960ProbePendingIrq);
+        check("destroying the circuit drops its request and no other",
+              raised && y8960ProbePendingIrq == 0x0001);
+        y8960ProbePendingIrq = 0;
+    }
+
     /* ---- the pan registers F6h-FEh place a channel ----------------------- */
     {
         double lL, rL, lR, rR, lC, rC, l0, r0;
@@ -772,7 +793,7 @@ int main()
         /* 600 samples in, the play pointer stands at nibble 300. The next
         ** nibble is one sample away. */
         long ahead, behind;
-        bool quietBefore;
+        bool quietBefore, raised;
         {
             *boardSysTime = 1000;
             Player p(cfg);
@@ -789,6 +810,8 @@ int main()
             p.wr(0x0B, 0x10);               /* to nibble 135, already passed */
             quietBefore = (y8960ProbePendingIrq == 0);
             behind = p.eosTick(3000);
+            /* Read while the circuit is there: its request goes with it. */
+            raised = (y8960ProbePendingIrq != 0);
         }
         printf("  stop address moved 600 samples in: EOS %ld samples later when it is ahead, "
                "%ld when it is behind\n", ahead, behind);
@@ -797,7 +820,7 @@ int main()
         check("one moved behind playback ends it at the next nibble",
               behind >= 1 && behind <= 3);
         check("and the interrupt comes with it",
-              quietBefore && y8960ProbePendingIrq != 0);
+              quietBefore && raised);
     }
 
     /* ---- a state saved and loaded while a sample plays --------------------- */
