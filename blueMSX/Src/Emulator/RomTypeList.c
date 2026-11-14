@@ -47,6 +47,7 @@ static const char* const groupNames[ROMCAT_COUNT] = {
 typedef struct {
     RomType         romType;
     RomTypeCategory category;
+    int             hidden;
 } RomTypeMapper;
 
 /* A hidden row is not listed, but its name is still accepted. */
@@ -160,6 +161,14 @@ static const RomTypeMapper mapperList[] = {
     { ROM_SG1000CASTLE,          ROMCAT_NONMSX        },
     { ROM_SVI328CART,            ROMCAT_NONMSX        },
 
+    /* Not listed, but /romtype still accepts them for an image. */
+    { ROM_SCC,                   ROMCAT_SOUND,        1 },
+    { ROM_SCCPLUS,               ROMCAT_SOUND,        1 },
+    { ROM_DUMAS,                 ROMCAT_ONEGAME,      1 },
+    { ROM_FORTEII,               ROMCAT_ONEGAME,      1 },
+    { SRAM_ESERAM,               ROMCAT_STORAGE,      1 },
+    { SRAM_ESESCC,               ROMCAT_STORAGE,      1 },
+
     { ROM_UNKNOWN,               ROMCAT_NONE          }
 };
 
@@ -195,6 +204,7 @@ static const RomTypeCart cartList[] = {
 
     { ROM_FMPAC,                 CARTNAME_FMPAC,              ROMCAT_SOUND,      0 },
     { ROM_JOYREXPSG,             CARTNAME_JOYREXPSG,          ROMCAT_SOUND,      0 },
+    { ROM_MAKOTO,                CARTNAME_MAKOTO,             ROMCAT_SOUND,      0 },
     { ROM_PAC,                   CARTNAME_PAC,                ROMCAT_SOUND,      0 },
     { ROM_SCC,                   CARTNAME_SCC,                ROMCAT_SOUND,      0 },
     { ROM_SCCPLUS,               CARTNAME_SCCPLUS,            ROMCAT_SOUND,      0 },
@@ -256,11 +266,15 @@ const char* romTypeListCartGroupName(int category)
 
 RomType romTypeListMapperAt(int index)
 {
-    if (index < 0 || index >= (int)(sizeof(mapperList) / sizeof(mapperList[0])) - 1) {
-        return ROM_UNKNOWN;
+    int i;
+
+    for (i = 0; mapperList[i].romType != ROM_UNKNOWN; i++) {
+        if (!mapperList[i].hidden && index-- == 0) {
+            return mapperList[i].romType;
+        }
     }
 
-    return mapperList[index].romType;
+    return ROM_UNKNOWN;
 }
 
 RomTypeCategory romTypeListMapperCategory(RomType romType)

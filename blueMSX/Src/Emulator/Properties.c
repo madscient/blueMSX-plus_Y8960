@@ -437,6 +437,15 @@ void propInitDefaults(Properties* properties, int langType, PropKeyboardLanguage
     properties->sound.mixerChannel[MIXER_CHANNEL_CASSETTE].enable = 1;
     properties->sound.mixerChannel[MIXER_CHANNEL_CASSETTE].pan = 50;
     properties->sound.mixerChannel[MIXER_CHANNEL_CASSETTE].volume = 75;
+
+    properties->sound.mixerChannel[MIXER_CHANNEL_OPNA_FM].enable = 1;
+    properties->sound.mixerChannel[MIXER_CHANNEL_OPNA_FM].pan = 50;
+    properties->sound.mixerChannel[MIXER_CHANNEL_OPNA_FM].volume = 95;
+
+    properties->sound.mixerChannel[MIXER_CHANNEL_OPNA_SSG].enable = 1;
+    properties->sound.mixerChannel[MIXER_CHANNEL_OPNA_SSG].pan = 50;
+    properties->sound.mixerChannel[MIXER_CHANNEL_OPNA_SSG].volume = 95;
+
     properties->sound.mixerChannel[MIXER_CHANNEL_Y8960].enable = 1;
     properties->sound.mixerChannel[MIXER_CHANNEL_Y8960].pan = 50;
     properties->sound.mixerChannel[MIXER_CHANNEL_Y8960].volume = 90;
@@ -718,6 +727,8 @@ const char* propGetMixerTypeName(int mixerType)
     case MIXER_CHANNEL_PCM:        return "pcm";
     case MIXER_CHANNEL_IO:         return "io";
     case MIXER_CHANNEL_CASSETTE:   return "cassette";
+    case MIXER_CHANNEL_OPNA_FM:    return "opnafm";
+    case MIXER_CHANNEL_OPNA_SSG:   return "opnassg";
     case MIXER_CHANNEL_Y8960:      return "y8960";
     }
     /* MIDI is played outside the mixer and has no channels. */
@@ -1063,6 +1074,12 @@ static void propLoad(Properties* properties)
     GET_ENUM_VALUE_2s1(propFile, sound, mixerChannel, MIXER_CHANNEL_CASSETTE, enable, BoolPair);
     GET_INT_VALUE_2s1(propFile, sound, mixerChannel, MIXER_CHANNEL_CASSETTE, pan);
     GET_INT_VALUE_2s1(propFile, sound, mixerChannel, MIXER_CHANNEL_CASSETTE, volume);
+    GET_ENUM_VALUE_2s1(propFile, sound, mixerChannel, MIXER_CHANNEL_OPNA_FM, enable, BoolPair);
+    GET_INT_VALUE_2s1(propFile, sound, mixerChannel, MIXER_CHANNEL_OPNA_FM, pan);
+    GET_INT_VALUE_2s1(propFile, sound, mixerChannel, MIXER_CHANNEL_OPNA_FM, volume);
+    GET_ENUM_VALUE_2s1(propFile, sound, mixerChannel, MIXER_CHANNEL_OPNA_SSG, enable, BoolPair);
+    GET_INT_VALUE_2s1(propFile, sound, mixerChannel, MIXER_CHANNEL_OPNA_SSG, pan);
+    GET_INT_VALUE_2s1(propFile, sound, mixerChannel, MIXER_CHANNEL_OPNA_SSG, volume);
     GET_ENUM_VALUE_2s1(propFile, sound, mixerChannel, MIXER_CHANNEL_Y8960, enable, BoolPair);
     GET_INT_VALUE_2s1(propFile, sound, mixerChannel, MIXER_CHANNEL_Y8960, pan);
     GET_INT_VALUE_2s1(propFile, sound, mixerChannel, MIXER_CHANNEL_Y8960, volume);
@@ -1488,6 +1505,12 @@ void propSave(Properties* properties)
     SET_ENUM_VALUE_2s1(propFile, sound, mixerChannel, MIXER_CHANNEL_CASSETTE, enable, YesNoPair);
     SET_INT_VALUE_2s1(propFile, sound, mixerChannel, MIXER_CHANNEL_CASSETTE, pan);
     SET_INT_VALUE_2s1(propFile, sound, mixerChannel, MIXER_CHANNEL_CASSETTE, volume);
+    SET_ENUM_VALUE_2s1(propFile, sound, mixerChannel, MIXER_CHANNEL_OPNA_FM, enable, YesNoPair);
+    SET_INT_VALUE_2s1(propFile, sound, mixerChannel, MIXER_CHANNEL_OPNA_FM, pan);
+    SET_INT_VALUE_2s1(propFile, sound, mixerChannel, MIXER_CHANNEL_OPNA_FM, volume);
+    SET_ENUM_VALUE_2s1(propFile, sound, mixerChannel, MIXER_CHANNEL_OPNA_SSG, enable, YesNoPair);
+    SET_INT_VALUE_2s1(propFile, sound, mixerChannel, MIXER_CHANNEL_OPNA_SSG, pan);
+    SET_INT_VALUE_2s1(propFile, sound, mixerChannel, MIXER_CHANNEL_OPNA_SSG, volume);
     SET_ENUM_VALUE_2s1(propFile, sound, mixerChannel, MIXER_CHANNEL_Y8960, enable, YesNoPair);
     SET_INT_VALUE_2s1(propFile, sound, mixerChannel, MIXER_CHANNEL_Y8960, pan);
     SET_INT_VALUE_2s1(propFile, sound, mixerChannel, MIXER_CHANNEL_Y8960, volume);
@@ -1787,7 +1810,8 @@ int propertiesIsSpecialCartName(const char* name)
     static const char* const kMarkers[] = {
         CARTNAME_SNATCHER,    CARTNAME_SDSNATCHER,  CARTNAME_SCCMIRRORED,
         CARTNAME_SCCEXPANDED, CARTNAME_SCC,         CARTNAME_SCCPLUS,
-        CARTNAME_JOYREXPSG,   CARTNAME_FMPAC,       CARTNAME_PAC,
+        CARTNAME_JOYREXPSG,   CARTNAME_MAKOTO,      CARTNAME_FMPAC,
+        CARTNAME_PAC,
         CARTNAME_GAMEREADER,  CARTNAME_SUNRISEIDE,  CARTNAME_BEERIDE,
         CARTNAME_GIDE,        CARTNAME_NMS1210,     CARTNAME_GOUDASCSI,
         CARTNAME_SONYHBI55,

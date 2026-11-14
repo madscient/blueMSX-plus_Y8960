@@ -106,6 +106,8 @@ static const char* typeLabel(int type)
     case MIXER_CHANNEL_PCM:        return "PCM";
     case MIXER_CHANNEL_IO:         return "I/O";
     case MIXER_CHANNEL_CASSETTE:   return "Cassette";
+    case MIXER_CHANNEL_OPNA_FM:    return "OPNA FM";
+    case MIXER_CHANNEL_OPNA_SSG:   return "OPNA SSG";
     case MIXER_CHANNEL_Y8960:      return "Y8960";
     }
     return propGetMixerTypeName(type) ? propGetMixerTypeName(type) : "?";

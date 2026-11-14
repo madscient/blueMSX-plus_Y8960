@@ -53,6 +53,11 @@ typedef enum {
     MIXER_CHANNEL_IO,
     MIXER_CHANNEL_MIDI,
     MIXER_CHANNEL_CASSETTE,
+    /* The two outputs of a YM2608 (OPNA). A board mixes them outside the
+    ** chip, so the balance between them is not the chip's: each has its
+    ** own level here. */
+    MIXER_CHANNEL_OPNA_FM,
+    MIXER_CHANNEL_OPNA_SSG,
     /* Every Y8960 block shares this one type, so the cartridge can be
     ** balanced against the machine with a single control. */
     MIXER_CHANNEL_Y8960,
@@ -115,7 +120,8 @@ void mixerStopLog(Mixer* mixer);
 void mixerReset(Mixer* mixer);
 void mixerSync(Mixer* mixer);
 
-Int32 mixerRegisterChannel(Mixer* mixer, Int32 audioType, Int32 stereo,
+/* Returns 0 when every channel is taken; 0 is never a handle, and unregistering it does nothing. */
+Int32 mixerRegisterChannel(Mixer* mixer, Int32 audioType, Int32 stereo, 
                            MixerUpdateCallback callback, MixerSetSampleRateCallback rateCallback,
                            void*param);
 /* As mixerRegisterChannel, for a device that registers several channels of
