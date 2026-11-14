@@ -5,7 +5,6 @@
 ** Copyright (C) 2003-2006 Daniel Vik
 **
 ** Forked from blueMSX's ym2151.c for the Y8960 cartridge, 2026 by madscient.
-** See https://github.com/madscient/blueMSX-plus_Y8960 for change history.
 ** The cartridge carries IKAOPM, an equivalent circuit, rather than the
 ** YM2151 of a Yamaha SFG unit, so it runs on its own copy of the core
 ** (Y8960OpmCore.c). What the cartridge adds: the mixer block's volume, and an

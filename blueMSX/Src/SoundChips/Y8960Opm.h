@@ -5,7 +5,6 @@
 ** Copyright (C) 2003-2006 Daniel Vik
 **
 ** Forked from blueMSX's ym2151.h for the Y8960 cartridge, 2026 by madscient.
-** See https://github.com/madscient/blueMSX-plus_Y8960 for change history.
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by

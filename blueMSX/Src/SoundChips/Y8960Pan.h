@@ -3,7 +3,6 @@
 ** Y8960 cartridge - the pan and volume laws its registers share.
 **
 ** Copyright (C) 2026 madscient
-** See https://github.com/madscient/blueMSX-plus_Y8960 for change history.
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
