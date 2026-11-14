@@ -467,6 +467,7 @@ int createSaveFileBaseName(char* fileBase,Properties* properties, int useExtende
                 strcmp(properties->media.carts[i].fileName, CARTNAME_ESESCC128)    &&
                 strcmp(properties->media.carts[i].fileName, CARTNAME_ESESCC256)    &&
                 strcmp(properties->media.carts[i].fileName, CARTNAME_ESESCC512)    &&
+                strcmp(properties->media.carts[i].fileName, CARTNAME_Y8960)        &&
                 properties->media.carts[i].type != ROM_FMPAC               &&
                 properties->media.carts[i].type != ROM_PAC                 &&
                 properties->media.carts[i].type != ROM_GAMEREADER          &&
