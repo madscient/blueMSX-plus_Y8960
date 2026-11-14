@@ -190,6 +190,13 @@ static void timerSchedule(Y8960TimerCore* t)
     if (sysTicks == 0) {
         sysTicks = 1;
     }
+    /* boardTimerAdd takes a wake-up about 2^31 board clocks ahead or further
+    ** for one already past and drops it, and the longest count (255 at
+    ** resolution 7) comes to exactly 2^31. A long wait is walked a second at a time;
+    ** onTimer counts what has passed and schedules the rest. */
+    if (sysTicks > boardFrequency()) {
+        sysTicks = boardFrequency();
+    }
 
     boardTimerAdd(t->boardTimer, t->refTime + (UInt32)sysTicks);
 }
