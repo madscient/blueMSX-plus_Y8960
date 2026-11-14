@@ -4,7 +4,8 @@
 ** ROM and runs headless. The checks cover what the fork changed: the four
 ** waveforms a YM3812 has, the sample RAM outside the circuit, the MSX-AUDIO
 ** registers the cartridge does not carry, the pan per channel and for the
-** ADPCM, and the rhythm sounds at twice the melody. They
+** ADPCM, the rhythm sounds at twice the melody and on their slots'
+** waveforms. They
 ** also cover the end of an ADPCM sample, which the core has to bring about
 ** by itself: on time, with its interrupt, whatever the software is doing
 ** meanwhile. And they cover where the Y8960 parts from a Y8950 or from the
@@ -27,9 +28,11 @@
 **
 ** Exit status is non-zero if any check fails.
 */
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <initializer_list>
 #include <vector>
 
 #include "Y8960Opl2Core.h"
@@ -241,6 +244,72 @@ static void rhythm(DeviceConfig& cfg, SampleRam& ram, Y8950& chip, int pan7, int
     chip.writeReg(0xFE, uint8_t(pan9), T);
     chip.writeReg(0xBD, uint8_t(0x20 | keys), T);
     (void)cfg;
+}
+
+/* Fresh chip in rhythm mode with the gate as given, every rhythm slot at full
+** level, one rhythm key struck. `waves` holds the waveforms for F0h-F5h, two
+** bits each from the bottom (allWaves() puts one on all six). Returns `n`
+** samples of mono output, taken after the attack. */
+static unsigned allWaves(int wave) { return 0x555u * (unsigned)wave; }
+
+static std::vector<int32_t> rhythmWave(DeviceConfig& cfg, int keys, unsigned waves, bool gate, int n)
+{
+    SampleRam ram(256 * 1024);
+    Y8950 chip("probe", cfg, ram, 0x2000, T);
+    chip.reset(T);
+    chip.writeReg(0x01, uint8_t(gate ? 0x20 : 0x00), T);
+    for (int c = 6; c < 9; c++) voice(chip, c);
+    for (int rg = 0x50; rg <= 0x55; rg++) chip.writeReg(uint8_t(rg), 0x00, T);
+    for (int i = 0; i < 6; i++) chip.writeReg(uint8_t(0xF0 + i), uint8_t((waves >> (2 * i)) & 3), T);
+    chip.writeReg(0xBD, uint8_t(0x20 | keys), T);
+    std::vector<int32_t> buf((size_t)n);
+    chip.generateMono(buf.data(), 64);
+    chip.generateMono(buf.data(), (unsigned)n);
+    return buf;
+}
+
+static bool anyNegative(const std::vector<int32_t>& b)
+{
+    for (int32_t s : b) if (s < 0) return true;
+    return false;
+}
+
+static int32_t peakOf(const std::vector<int32_t>& b)
+{
+    int32_t p = 0;
+    for (int32_t s : b) p = std::max(p, s < 0 ? -s : s);
+    return p;
+}
+
+static double rmsOfBuf(const std::vector<int32_t>& b)
+{
+    double a = 0.0;
+    for (int32_t s : b) a += (double)s * s;
+    return std::sqrt(a / (double)b.size());
+}
+
+/* The level the chip's sine has at a 10-bit phase, as a fraction of its peak:
+** the quarter-wave table is addressed with the low 8 bits, mirrored when bit 8
+** is clear, half a step off zero. */
+static double sineAt(unsigned phase)
+{
+    unsigned q = phase & 0xFF;
+    if (!(phase & 0x100)) q ^= 0xFF;
+    return std::sin((255 - q + 0.5) * 3.14159265358979 / 512);
+}
+
+/* Fraction of the samples whose magnitude is within 4% of one of the given
+** levels (fractions of `full`). */
+static double fractionAt(const std::vector<int32_t>& b, double full, std::initializer_list<double> levels)
+{
+    int hit = 0;
+    for (int32_t s : b) {
+        double m = (double)(s < 0 ? -s : s);
+        for (double lv : levels) {
+            if (std::fabs(m - lv * full) <= 0.04 * full) { hit++; break; }
+        }
+    }
+    return (double)hit / (double)b.size();
 }
 
 /* One held note on channel 0, loud enough to measure, with the given
@@ -544,6 +613,80 @@ int main()
         printf("  channel 7 as melody rms = %.1f, as BD rms = %.1f\n", melody, drum);
         check("BD is twice the same voice played as a melody note",
               melody > 1 && std::fabs(drum - 2 * melody) < melody * 0.04);
+    }
+
+    /* ---- the rhythm sounds take the waveform of their slot ---------------- */
+    {
+        /* HH, SD and CYM play a phase the chip builds from the noise and from
+        ** bits of the HH and CYM phase generators: HH 034h or 0D0h, SD 000h or
+        ** 100h, CYM 080h, each with bit 9 set or clear (the Y8960's RTL,
+        ** jtopl_pg_rhy.v; Nuked-OPL3 builds the same). The slot's waveform is
+        ** then read at that phase, as for any slot. TOM plays its own phase.
+        ** So waves 1-3 never go negative, and the levels each sound can take
+        ** follow from the sine at those phases. The full level is TOM's sine
+        ** peak, which wave 0 has always had. */
+        const int N = 4000;
+        enum { HH = 0x01, CYM = 0x02, TOM = 0x04, SD = 0x08 };
+        struct { const char* name; int key; } snd[] = {
+            { "HH", HH }, { "SD", SD }, { "TOM", TOM }, { "CYM", CYM },
+        };
+        std::vector<int32_t> w[4][4];
+        for (int s = 0; s < 4; s++)
+            for (int v = 0; v < 4; v++)
+                w[s][v] = rhythmWave(cfg, snd[s].key, allWaves(v), true, N);
+
+        double full = (double)peakOf(w[2][0]);
+        printf("  TOM wave 0 peak = %.0f\n", full);
+        for (int s = 0; s < 4; s++) {
+            printf("  %-3s rms w0..w3 = %7.1f %7.1f %7.1f %7.1f\n", snd[s].name,
+                   rmsOfBuf(w[s][0]), rmsOfBuf(w[s][1]), rmsOfBuf(w[s][2]), rmsOfBuf(w[s][3]));
+        }
+        bool neg0 = true, pos123 = true;
+        for (int s = 0; s < 4; s++) {
+            if (!anyNegative(w[s][0])) neg0 = false;
+            for (int v = 1; v < 4; v++) if (anyNegative(w[s][v])) pos123 = false;
+        }
+        check("HH, SD, TOM and CYM swing both ways on wave 0", full > 1 && neg0);
+        check("HH, SD, TOM and CYM never go negative on waves 1-3", pos123);
+
+        double hhAt = fractionAt(w[0][0], full, { sineAt(0x0D0), sineAt(0x034) });
+        double sdAt = fractionAt(w[1][0], full, { sineAt(0x100), 0.0 });
+        double cyAt = fractionAt(w[3][0], full, { sineAt(0x080) });
+        double hhHi = fractionAt(w[0][0], full, { sineAt(0x0D0) });
+        double sdHi = fractionAt(w[1][0], full, { sineAt(0x100) });
+        printf("  on wave 0: HH at 0D0h/034h %.3f (0D0h %.3f), SD at 100h/000h %.3f (100h %.3f), CYM at 080h %.3f\n",
+               hhAt, hhHi, sdAt, sdHi, cyAt);
+        check("HH plays the sine at 0D0h or 034h, SD at 100h or 000h", hhAt == 1.0 && sdAt == 1.0);
+        check("CYM plays the sine at 080h, 3dB under the peak", cyAt == 1.0);
+        check("the noise picks HH's and SD's phase, both ways",
+              hhHi > 0.3 && hhHi < 0.7 && sdHi > 0.3 && sdHi < 0.7);
+
+        /* Wave 3 drops the phases with bit 8 set and keeps the others whole.
+        ** SD's are 100h, 300h (dropped) and 000h, 200h (the sine's zero), so it
+        ** falls silent; CYM's 080h and 280h are kept, so CYM loses nothing but
+        ** its sign. */
+        printf("  SD wave 3 peak = %d, CYM rms wave 0 / wave 3 = %.1f / %.1f\n",
+               peakOf(w[1][3]), rmsOfBuf(w[3][0]), rmsOfBuf(w[3][3]));
+        check("SD falls silent on wave 3", (double)peakOf(w[1][3]) < full / 100);
+        check("CYM keeps its level on wave 3",
+              std::fabs(rmsOfBuf(w[3][3]) - rmsOfBuf(w[3][0])) < rmsOfBuf(w[3][0]) * 0.01);
+
+        std::vector<int32_t> shut = rhythmWave(cfg, CYM, allWaves(3), false, N);
+        check("a shut gate puts the rhythm sounds back on the sine", shut == w[3][0]);
+
+        /* Each sound takes the register of the slot it is played on and no
+        ** other: wave 1 on that register alone keeps it from going negative,
+        ** wave 1 on the other five leaves it swinging both ways. */
+        struct { int key; int reg; } own[] = {
+            { HH, 0xF1 }, { TOM, 0xF2 }, { SD, 0xF4 }, { CYM, 0xF5 },
+        };
+        bool ownOnly = true;
+        for (auto& o : own) {
+            unsigned mine = 1u << (2 * (o.reg - 0xF0));
+            if (anyNegative(rhythmWave(cfg, o.key, mine, true, N))) ownOnly = false;
+            if (!anyNegative(rhythmWave(cfg, o.key, allWaves(1) & ~mine, true, N))) ownOnly = false;
+        }
+        check("HH takes F1h, TOM F2h, SD F4h and CYM F5h, and no other", ownOnly);
     }
 
     /* ---- the ADPCM's pan (FFh) ------------------------------------------- */
