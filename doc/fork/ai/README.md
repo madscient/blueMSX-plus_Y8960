@@ -31,6 +31,19 @@
 git diff --name-only upstream/develop..<枝> | grep '^doc/' && echo "MIXED IN"
 ```
 
+### 上流の PR の本文は、push の CI が終わってから直す
+
+上流の `.github/workflows/ci.yml` は、PR の本文の編集（`edited`）でも実行を起こし、`concurrency` で同じ PR の走っている実行を取り消す。
+起きた実行は `jobs.build.if` で `build` を飛ばすので、push で走り始めた CI は結果を残さずに消える。再実行は上流の管理者にしかできない。
+
+push の後に本文を直すときは、CI が終わるのを待ってからにする。コメントの投稿と編集は CI を起こさない。
+
+```sh
+gh pr checks <番号> -R Hesoten/blueMSX-plus --watch
+```
+
+前提: 上流の `ci.yml` の起動条件と `concurrency` が今の形であること。
+
 ## 作業の記録と確度
 
 主題ごとに作業計画と実行経緯の文書を持ち、決定・却下・訂正はその都度書く。
