@@ -14,9 +14,15 @@
 **      opllex-bank-probe.c %SRC%\SoundChips\Y8960OpllCore.c
 **   opllex-bank-probe.exe
 **
+** A core that takes its presets from outside (Y8960OPLL_ROM_VOICES_SIZE is
+** defined) has none of its own, so give it the voice file:
+**
+**   opllex-bank-probe.exe ..\..\..\..\blueMSX\ReleaseFiles\Machines\"Shared Roms"\y8960_opll_voices.bin
+**
 ** Exit status is non-zero if any check fails.
 */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <math.h>
 #include "Y8960OpllCore.h"
@@ -102,12 +108,39 @@ static void check(const char *what, int ok)
     if (!ok) fails++;
 }
 
-int main(void)
+#ifdef Y8960OPLL_ROM_VOICES_SIZE
+static void loadRomVoices(int argc, char **argv)
 {
-    Y8960OPLL *o = Y8960OPLL_new(3579545, RATE);
+    static uint8_t voices[Y8960OPLL_ROM_VOICES_SIZE + 1];
+    FILE *f = argc > 1 ? fopen(argv[1], "rb") : NULL;
+    size_t n;
+    if (f == NULL) {
+        printf("give the path of y8960_opll_voices.bin\n");
+        exit(2);
+    }
+    n = fread(voices, 1, sizeof(voices), f);
+    fclose(f);
+    if (n != Y8960OPLL_ROM_VOICES_SIZE) {
+        printf("%s: %u bytes, expected %u\n", argv[1], (unsigned)n, (unsigned)Y8960OPLL_ROM_VOICES_SIZE);
+        exit(2);
+    }
+    Y8960OPLL_setRomVoices(voices);
+}
+#endif
+
+int main(int argc, char **argv)
+{
+    Y8960OPLL *o;
     double rms[4];
     int b, ch;
     uint8_t dump[4][8];
+
+#ifdef Y8960OPLL_ROM_VOICES_SIZE
+    loadRomVoices(argc, argv);
+#else
+    (void)argc; (void)argv;
+#endif
+    o = Y8960OPLL_new(3579545, RATE);
 
     /* 1. every bank sounds, and the four differ from one another */
     for (b = 0; b < 4; b++) {

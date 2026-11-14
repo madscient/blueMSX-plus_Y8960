@@ -19,10 +19,20 @@
 **      opllex-state-probe.c %SRC%\SoundChips\Y8960OpllCore.c
 **   opllex-state-probe.exe
 **
+** A tree whose block takes its presets from outside also needs
+** %SRC%\SoundChips\Emu2413\emu2413.c, which it falls back to; the probe gives
+** it no voice file.
+**
 ** Exit status is non-zero if any check fails.
 */
 #include "Y8960Opllex.c"
 #include <math.h>
+
+#ifdef Y8960OPLL_ROM_VOICES_SIZE
+#define createBlock(name) y8960OpllexCreate(NULL, name, NULL, 0)
+#else
+#define createBlock(name) y8960OpllexCreate(NULL, name)
+#endif
 
 /* ---- stubs ------------------------------------------------------------ */
 
@@ -232,13 +242,13 @@ int main(void)
     double ra, rc, rr, full0, replay0;
 
     probeRate = 44100;
-    a = y8960OpllexCreate(NULL, "a");
+    a = createBlock("a");
     keyNotes(a);
     run(a, lead, LEAD);
     y8960OpllexSaveState(a);
     run(a, refA, AFTER);
 
-    b = y8960OpllexCreate(NULL, "b");
+    b = createBlock("b");
     y8960OpllexLoadState(b);
     run(b, outB, AFTER);
     for (diff = 0, i = 0; i < 2 * AFTER; i++) if (outB[i] != refA[i]) diff++;
@@ -250,7 +260,7 @@ int main(void)
     /* Saved at 44100Hz, loaded into a block running at 48000Hz: the
     ** resampler starts afresh, but the envelopes carry on. */
     probeRate = 48000;
-    c = y8960OpllexCreate(NULL, "c");
+    c = createBlock("c");
     y8960OpllexLoadState(c);
     run(c, outC, AFTER);
     rc = rms(outC, 1088);
@@ -259,20 +269,20 @@ int main(void)
           fabs(rc - ra) < ra * 0.05);
 
     probeRate = 44100;
-    f = y8960OpllexCreate(NULL, "f");
+    f = createBlock("f");
     y8960OpllexLoadState(f);
     full0 = rmsChannel0(f, 1000);
 
     /* The same state with only the registers in it, as older builds saved. */
     keepOnlyRegisters();
-    r = y8960OpllexCreate(NULL, "r");
+    r = createBlock("r");
     y8960OpllexLoadState(r);
     run(r, outR, AFTER);
     rr = rms(outR + 2 * 3000, 1000);
     printf("  register replay: rms of frames 3000-3999 %.1f\n", rr);
     check("a state of registers only still loads and sounds", rr > 100.0);
 
-    r0 = y8960OpllexCreate(NULL, "r0");
+    r0 = createBlock("r0");
     y8960OpllexLoadState(r0);
     replay0 = rmsChannel0(r0, 1000);
     printf("  channel 0 over the first 1000 frames: full state %.1f, registers only %.1f\n", full0, replay0);
