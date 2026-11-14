@@ -74,8 +74,9 @@ void y8960MixerWriteMaster(UInt8 value)
 ** its line output (SSG -0.89dB, SCC -3.60dB, OPLL -3.60dB, OPL2 -3.00dB,
 ** fundamental at about 1kHz). The OPM, the loudest, is held at unity, which
 ** keeps it at the level of an SFG; the card is never mixed with the MSX's own
-** sound, so nothing else sets the overall level. Measured again with
-** doc/fork/y8960/level/ if the hardware's balance changes. */
+** sound, so nothing else sets the overall level. To be measured again,
+** with the tone sequences in madscient/openMSX_Y8960 (level/), if the
+** hardware's balance changes. */
 static const Int32 blockLevel[Y8960_VOL_COUNT] = {
     8324,   /* SSGS */
     5831,   /* OPLL */

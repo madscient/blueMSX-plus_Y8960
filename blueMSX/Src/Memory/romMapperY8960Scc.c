@@ -121,9 +121,9 @@ int y8960IoEnabled(Y8960IoBlock block)
 {
     RomMapperY8960Scc* rm = theY8960Scc;
 
-    /* The enablers live in the memory mapped window. A machine that leaves
-    ** the SCC block out has no way to reach them, and its blocks answer
-    ** rather than stay shut for good. */
+    /* The enablers live in the memory mapped window, which belongs to the
+    ** SCC block. Without it there is no way to reach them, and the blocks
+    ** answer rather than stay shut for good. */
     if (rm == NULL) {
         return 1;
     }
@@ -171,7 +171,7 @@ static int sccPanAddress(UInt16 address)
 ** bits of the bank number as the RTL does: #32-#47 count as ROM, and the SCC
 ** (#63) does not, so 7FF0-7FFF then belong to the SCC. In compatibility mode
 ** a bank number from 16 up cannot be written and is not RAM here, as
-** openMSX_Y8960 has it. */
+** madscient/openMSX_Y8960 has it. */
 static int mmioVisible(RomMapperY8960Scc* rm)
 {
     return !(rm->ramMode && (rm->bankReg[1] & 0x1F) >= Y8960_ROM_BANKS);
@@ -417,7 +417,8 @@ static void write(RomMapperY8960Scc* rm, UInt16 address, UInt8 value)
     }
 
     /* 4000-5FFF holds the mode and bank registers, and is not written to
-    ** memory even when a RAM bank shows there, as openMSX_Y8960 has it. */
+    ** memory even when a RAM bank shows there, as madscient/openMSX_Y8960
+    ** has it. */
     bank = rm->bankReg[region] & 0x1F;
     if (rm->ramMode && region != 0 && bank >= Y8960_ROM_BANKS) {
         rm->memory[bank * Y8960_BANK_SIZE + (address & 0x1FFF)] = value;

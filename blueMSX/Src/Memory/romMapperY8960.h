@@ -90,8 +90,8 @@ void  y8960MixerWriteMaster(UInt8 value);
 ** but the OPM. */
 Int32 y8960MixerGain(Y8960Volume channel);
 
-/* One block per RomType, so a machine configuration can carry them
-** independently while the cartridge hardware is still being designed.
+/* The blocks are separate devices, which the whole card below creates
+** together.
 **
 ** The Destroy entry points exist for the whole-card cartridge below. These
 ** blocks hold no slot, so ejecting the cartridge cannot reach them the way
