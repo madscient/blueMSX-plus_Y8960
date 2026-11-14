@@ -41,6 +41,8 @@ Y8960 対応は upstream には存在しない、このフォーク固有の機�
 | `tests/opllex-bank-probe.c` | OPLLEX のコア単体試験（ヘッドレス）。バンクとパン |
 | `tests/opl2ex-probe.cpp` + `opl2ex-host-stub.c` | OPL2EX のコア単体試験（ヘッドレス） |
 | `tests/ssgs-probe.c` + `ssgs-host-stub.c` | SSGS のコア単体試験（ヘッドレス）。配置・音量・パン・GPIO・6 ビットの番号・A2h の読み |
+| `tests/opllex-state-probe.c` | OPLLEX のステートの単体試験（ヘッドレス）。ラッパーのソースを取り込む |
+| `tests/msx-timer-probe.c` + `opl2ex-host-stub.c` | MSX-TIMER の単体試験（ヘッドレス）。分解能を下げたときの終わり |
 | `tests/MSX2+ - C-BIOS + Y8960/` | 8 ブロックを置いた構成。**`y8960bas.rom` が要る** |
 | `tests/MSX2+ - C-BIOS + Y8960 (banktest)/` | 同じ構成で、Y8960 SCC に `banktest.rom` を載せたもの。本体 MSX-MUSIC は外してある |
 | `tests/MSX2+ - C-BIOS + Y8960 (cartridge)/` | Y8960 SCC を**外した**構成。`/rom1 <rom> /romtype1 Y8960SCC` でカートリッジとして挿す |
