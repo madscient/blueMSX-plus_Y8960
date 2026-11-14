@@ -37,11 +37,6 @@
 ** giving eight steps from 23.839156us to 390580.739545us. */
 #define Y8960_TIMER_FREQ    42954540u
 
-/* The Y8960 blocks take bits from the top of the pending mask downwards
-** (this one, OPL2EX, OPM), away from the bottom-up order the other devices
-** are given theirs in. Bit 31 is left alone: the mask is kept in a signed int. */
-#define Y8960_TIMER_IRQ     0x40000000
-
 #define Y8960_TIMER_COUNT   4
 
 typedef struct RomMapperY8960Timer RomMapperY8960Timer;
@@ -120,10 +115,10 @@ static void timerUpdateIrq(RomMapperY8960Timer* rm)
     }
 
     if (any) {
-        boardSetInt(Y8960_TIMER_IRQ);
+        boardSetInt(BOARD_INT_Y8960_TIMER);
     }
     else {
-        boardClearInt(Y8960_TIMER_IRQ);
+        boardClearInt(BOARD_INT_Y8960_TIMER);
     }
 }
 
@@ -356,7 +351,7 @@ static void reset(RomMapperY8960Timer* rm)
     rm->registerLatch = 0;
     rm->counterSelect = 0;
 
-    boardClearInt(Y8960_TIMER_IRQ);
+    boardClearInt(BOARD_INT_Y8960_TIMER);
 }
 
 static void saveState(RomMapperY8960Timer* rm)
@@ -426,7 +421,7 @@ static void destroy(RomMapperY8960Timer* rm)
         boardTimerDestroy(rm->core[i].boardTimer);
     }
 
-    boardClearInt(Y8960_TIMER_IRQ);
+    boardClearInt(BOARD_INT_Y8960_TIMER);
     deviceManagerUnregister(rm->deviceHandle);
 
     free(rm);

@@ -45,10 +45,6 @@ extern "C" {
 /* 256kB, the whole of the cartridge's sample RAM. */
 #define Y8960_OPL2EX_SAMPLE_RAM (256 * 1024)
 
-/* Second of the bits the Y8960 blocks take from the top of the pending mask;
-** romMapperY8960Timer.c says why. */
-#define Y8960_OPL2EX_IRQ 0x20000000
-
 /* The same << 1 the machine's own Y8950 port applies, so the block lands where
 ** the chip it stands in for would. The balance against the other Y8960 blocks
 ** is set on top of it, in the mixer block's gain (romMapperY8960Mixer.c). */
@@ -71,7 +67,7 @@ struct Y8960Opl2ex {
 
     Y8960Opl2ex(Mixer* mixer_, const std::string& name, y8960opl2::EmuTime time)
         : mixer(mixer_), cfg(mb), ram(Y8960_OPL2EX_SAMPLE_RAM)
-        , chip(name, cfg, ram, Y8960_OPL2EX_IRQ, time)
+        , chip(name, cfg, ram, BOARD_INT_Y8960_OPL2EX, time)
         , handle(0), debugHandle(0), mixerRate(SAMPLERATE)
         , off(0), o1{0, 0}, o2{0, 0}, latchedAddr(0)
     {

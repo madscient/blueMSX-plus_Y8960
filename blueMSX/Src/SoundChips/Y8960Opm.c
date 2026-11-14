@@ -43,10 +43,6 @@
 /* One timer A step is 64 master clocks, one sample. */
 #define TIMER_FREQUENCY  (boardFrequency() / SAMPLERATE)
 
-/* Third of the bits the Y8960 blocks take from the top of the pending mask;
-** romMapperY8960Timer.c says why. */
-#define Y8960_OPM_IRQ    0x10000000
-
 /* The factor ym2151.c applies, so the block lands at the level of an SFG
 ** rather than at one nobody has measured. The other Y8960 blocks are set
 ** against it in the mixer block's gain (romMapperY8960Mixer.c). */
@@ -97,7 +93,7 @@ void y8960OpmSetIrq(void* ref, int timer)
     Y8960OpmChip* chip = (Y8960OpmChip*)ref;
 
     if (chip->irqState == 0) {
-        boardSetInt(Y8960_OPM_IRQ);
+        boardSetInt(BOARD_INT_Y8960_OPM);
     }
     chip->irqState |= timer;
 }
@@ -108,7 +104,7 @@ void y8960OpmClearIrq(void* ref, int timer)
 
     chip->irqState &= ~timer;
     if (chip->irqState == 0) {
-        boardClearInt(Y8960_OPM_IRQ);
+        boardClearInt(BOARD_INT_Y8960_OPM);
     }
 }
 
@@ -290,7 +286,7 @@ void y8960OpmReset(Y8960OpmChip* chip)
     chip->s2r = 0;
     chip->latch = 0;
     chip->irqState = 0;
-    boardClearInt(Y8960_OPM_IRQ);
+    boardClearInt(BOARD_INT_Y8960_OPM);
 }
 
 Y8960OpmChip* y8960OpmCreate(Mixer* mixer)
@@ -315,7 +311,7 @@ Y8960OpmChip* y8960OpmCreate(Mixer* mixer)
 
 void y8960OpmDestroy(Y8960OpmChip* chip)
 {
-    boardClearInt(Y8960_OPM_IRQ);
+    boardClearInt(BOARD_INT_Y8960_OPM);
     mixerUnregisterChannel(chip->mixer, chip->handle);
     boardTimerDestroy(chip->timer1);
     boardTimerDestroy(chip->timer2);
