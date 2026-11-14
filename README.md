@@ -1,14 +1,15 @@
 # blueMSX+
 
 > **This repository is an unofficial fork of [blueMSX+](https://github.com/Hesoten/blueMSX-plus)
-> that adds emulation of the Y8960 sound cartridge.**
+> that added emulation of the Y8960 sound cartridge. It is now archived and kept for reference.**
+>
+> The Y8960 emulation is now part of blueMSX+
+> ([Hesoten/blueMSX-plus#152](https://github.com/Hesoten/blueMSX-plus/pull/152)).
+> Please use blueMSX+, and report Y8960-related issues there.
 >
 > The Y8960 is a sound cartridge for MSX whose hardware is still under development
 > ([hra1129/Y8960_Cartridge](https://github.com/hra1129/Y8960_Cartridge)).
-> The emulation follows its current specification and will change as the hardware does.
-> How to use it is described in the [Y8960 user guide](doc/fork/y8960/user-guide.md) (Japanese).
->
-> Please report Y8960-related issues to this repository, not to blueMSX+.
+> The releases of this repository are described in the [Y8960 user guide](doc/fork/y8960/user-guide.md) (Japanese).
 > The rest of this page is blueMSX+'s own description.
 
 blueMSX+ is an unofficial fork of the MSX emulator [blueMSX](https://msxblue.com/bluemsx/).  
