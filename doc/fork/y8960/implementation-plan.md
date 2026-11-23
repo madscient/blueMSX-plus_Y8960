@@ -2564,6 +2564,43 @@ OPL2EX の `0x2000` と OPM の `0x4000` とも重なった。
 
 ## 11. 実行経緯
 
+### 2026-11-23 (77) — Y8950 の BD の CON = 1（Y8960 と openMSX バックエンド）と、openMSX バックエンドの SD・CYM・HH を、上流へ出す枝で直した
+
+(76) を受けたユーザーの判断:「1 古いバックエンドにも同じ問題があるが修正規模が大きいのですぐには直していないことはコメントで伝える」
+「openMSXバックエンドは2までやる。fmoplバックエンドは保留する。」。emu8950 は、写しが上流の直しだけを取り込む形なので、emu8950 の #18 を待つ。
+
+**枝** `fix/y8950-rhythm-bd-connect`（`upstream/develop` `62368a34` の上に 2 コミット。#190 の枝とは衝突しない、**確認済み**: `git merge-tree`）
+
+- `cb6da6a9`: BD は、`ch[6].alg`（C6h の CON）が 1 ならキャリアに FM を入れない。変調器の計算は続ける。`Y8960Opl2Core.cpp` と `OpenMsxY8950Latest.cpp`。
+  openMSX の `b2cee02cd` と同じ形
+- `50a21e2d`: openMSX バックエンドの SD・CYM・HH を、HH と CYM の位相のビットと 23 ビットの雑音（Nuked-OPL3 の形）から作る。CYM の位相は 0x100 / 0x300。
+  openMSX の `be67238b6` を写した。ステートは `noise` を足し、古い 5 つのキーをやめた。`noise` の無いステートは 1 から始める
+
+**確かめたこと**（**確認済み**。どれも `/hidden`。ビルドは Release / x64、`msvc2022`、CI と同じ 5 ターゲットで 0 エラー）
+
+- Y8960: `opl2ex-probe` に BD の 3 項目を足した（実物の測定と同じ音色と基準。キャリア MULT 2、変調器 MULT 3、FM の線は f と 5f、変調器の線は 3f）。
+  直す前は CON 1 の FM が -1.9dB で落ち、直した後は -70.9dB、変調器 -78.1dB で通る。CON 1 でキャリアに変調器を足す壊した版は、変調器が -12.3dB で
+  変調器の項目だけが落ちる。この枝には #190 が無いので、PCM_BSY の 4 項目は落ちる（v0.9.17 の期待値のため）
+- openMSX バックエンド: 本体に MSX-AUDIO を持つ `MSX2+ - C-BIOS + MSX-AUDIO` に、openMSX_Y8960 の `mkbd.py --tones`・`mkform.py --tones` の音列を
+  `make-tones-rom.py --target MSXAUDIO` で組んだ ROM を、カード全体（207）として挿し、`bluemsx.ini` の `sound.chip.y8950BackendActive=2` で録った。
+  判定はあちらの `anabd.py`・`anaform.py`（実物を判定した道具と基準）
+
+  | | 直す前 | BD だけ | 両方 | 実物の Y8950・YM3812（あちらの記録） |
+  |---|---|---|---|---|
+  | BD CON0 / CON1 | FM / FM | FM / carrier only | FM / carrier only | FM / carrier only |
+  | SD・HH | current Y8950 form | current Y8950 form | YM3812 form | YM3812 form |
+  | CY | undecided（4 打中 3 打が Y8950） | 同じ | undecided（4 打中 3 打が YM3812） | undecided（YM3812 か「?」） |
+  | CY・HH の SD-a との差 | — | — | -1.6〜-1.7dB・-3.5dB | -1.6〜-2.0dB・-3.5〜-3.6dB |
+
+  - バックエンドが選ばれていたことは、同じ両方の版を emu8950（`=1`）で録ると BD CON1 が `carrier + modulator`（emu8950 の #18 の形）になることで見た。
+    終了時の ini では見られない（`run-sndtest.ps1` がプロセスを止めるので、書き戻されない）
+  - BD と ch0 だけの音列は、BD だけの版と両方の版でサンプル単位で一致（93 万フレーム）。SD・CY・HH の音列は、直す前と BD だけの版で一致。
+    直す前と BD だけの版の BD の音列は 15 万フレームが違う（比べ方に判別力がある）
+  - **最初の SD・CY・HH の録音は、Y8960 の OPL2 も鳴っていた。** `mkform.py --tones` は 7FFFh を開ける行を `only MSXAUDIO` で書くので、
+    `--target MSXAUDIO` で組むとカードの OPL2 のポートが開く（`mkbd.py` は `only Y8960`）。直す前の版が `undecided` で CY が「MULT が効く」と出て気づき、
+    その行を外して録り直した（上の表）。あちらの使い方（openMSX と MGA に MSX-AUDIO として流す）では害が無い
+- **未検証**: openMSX バックエンドのセーブステートの往復と、`noise` の無い古いステートの読み込み。fmopl・emu8950 は触っていない
+
 ### 2026-11-23 (76) — ユーザーが各上流に出した Y8950 の修正と issue が、上流 blueMSX+ の 4 つの Y8950 に当たるかを読んだ
 
 ユーザーの指示:「openMSXではY8950の挙動についてもいくつか修正してPRを送ってるので、こっちにも当たらないか確認して」

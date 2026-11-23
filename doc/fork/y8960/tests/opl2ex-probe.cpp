@@ -616,6 +616,65 @@ int main()
               melody > 1 && std::fabs(drum - 2 * melody) < melody * 0.04);
     }
 
+    /* ---- the rhythm BD with connect = 1 is the carrier alone -------------- */
+    {
+        /* A real Y8950, a real YM3812 and the Y8960 play the rhythm BD as the
+        ** carrier alone when connect (C6h bit 0) is 1, and with FM when it is
+        ** 0. The carrier runs at 2f and the modulator at 3f, so FM puts lines
+        ** at f and 5f, and the modulator mixed into the output would put one
+        ** at 3f. f is 224.5Hz (block 3, F-number 250h). The voice and the
+        ** limits are those of the measurement on the real chips. */
+        const int N = 8192;
+        const double rate = 3579545.0 / 72;
+        const double f = 0x250 * rate / (1 << 17);
+        const double PI = 3.14159265358979323846;
+        auto lines = [&](uint8_t c6, double& fm, double& mod) {
+            SampleRam ram(256 * 1024);
+            Y8950 chip("probe", cfg, ram, 0x2000, T);
+            chip.reset(T);
+            chip.writeReg(0x30, 0x23, T);   /* modulator (slot 10h): EG-TYP, MULT 3 */
+            chip.writeReg(0x33, 0x22, T);   /* carrier (slot 13h): EG-TYP, MULT 2 */
+            chip.writeReg(0x50, 0x20, T);   /* TL 32 */
+            chip.writeReg(0x53, 0x10, T);   /* TL 16 */
+            chip.writeReg(0x70, 0xF0, T);   /* AR 15, DR 0: it holds the attack's level */
+            chip.writeReg(0x73, 0xF0, T);
+            chip.writeReg(0x90, 0xF8, T);
+            chip.writeReg(0x93, 0xF8, T);
+            chip.writeReg(0xA6, 0x50, T);
+            chip.writeReg(0xB6, 0x0E, T);   /* block 3, F-number 250h, not keyed */
+            chip.writeReg(0xC6, c6, T);
+            chip.writeReg(0xBD, 0x30, T);   /* rhythm mode, BD */
+            std::vector<int32_t> buf((size_t)N);
+            chip.generateMono(buf.data(), 2000);
+            chip.generateMono(buf.data(), (unsigned)N);
+            /* Blackman-Harris window, then the DFT at k * f. */
+            auto power = [&](double hz) {
+                double re = 0.0, im = 0.0;
+                for (int i = 0; i < N; i++) {
+                    double x = 2 * PI * i / (N - 1);
+                    double w = 0.35875 - 0.48829 * std::cos(x) + 0.14128 * std::cos(2 * x)
+                             - 0.01168 * std::cos(3 * x);
+                    double a = 2 * PI * hz * i / rate;
+                    re += w * buf[i] * std::cos(a);
+                    im -= w * buf[i] * std::sin(a);
+                }
+                return re * re + im * im;
+            };
+            double p[9], total = 0.0;
+            for (int k = 1; k <= 8; k++) { p[k] = power(k * f); total += p[k]; }
+            fm  = 10 * std::log10((p[1] + p[5]) / total);
+            mod = 10 * std::log10(p[3] / total);
+        };
+        double fm0, mod0, fm1, mod1;
+        lines(0x00, fm0, mod0);
+        lines(0x01, fm1, mod1);
+        printf("  BD connect 0: FM %.1f dB, modulator %.1f dB; connect 1: FM %.1f dB, modulator %.1f dB\n",
+               fm0, mod0, fm1, mod1);
+        check("BD with connect = 0 plays with FM", fm0 >= -15.0);
+        check("BD with connect = 1 plays the carrier alone, without FM", fm1 <= -35.0);
+        check("and without the modulator in the output", mod1 <= -40.0);
+    }
+
     /* ---- the rhythm sounds take the waveform of their slot ---------------- */
     {
         /* HH, SD and CYM play a phase the chip builds from the noise and from
