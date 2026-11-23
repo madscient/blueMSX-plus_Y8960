@@ -11,8 +11,11 @@
 ;   2 OPL2 READ  C1h reads FFh for a register other than 0Fh, and 00h for
 ;                0Fh with the ADPCM stopped; the status reads 06h in its low
 ;                three bits, which software looks for to find the card
-;   3 PCM_BSY    status bit 0: 1 after 80h, 0 after 81h; 1 while a short
-;                sample plays and 0 once it has ended by itself
+;   3 PCM_BSY    status bit 0 is bit 7 of the last write to 07h, as the
+;                cartridge read with its v0.9.17 logic: 1 after 80h and
+;                after 81h, 0 after 01h; 1 while a short sample plays, still
+;                1 once it has ended by itself and after 04h = 80h, 0 after
+;                00h
 ;   4 TIMER REG  register 3 of a core reads 00h; B3h reads FFh once a value
 ;                other than 0-3 has selected no counter
 ;   5 TIMER CLK  core 0 at resolution 3 counts for six frames; the count is
@@ -143,13 +146,21 @@ init:
         out     (OPL_DT), a
         in      a, (OPL_ST)
         and     001h
-        ld      de, 00200h
+        ld      de, 00201h
+        call    expect
+        ld      a, 001h         ; RESET alone
+        out     (OPL_DT), a
+        in      a, (OPL_ST)
+        and     001h
+        ld      de, 00300h
         call    expect
         ld      hl, tbl_short
         call    send
+; From here EOS is read along with PCM_BSY, so that the reading after the
+; wait is known to come after the end of the sample.
         in      a, (OPL_ST)
-        and     001h
-        ld      de, 00301h
+        and     011h
+        ld      de, 00401h
         call    expect
         ld      d, 4            ; about 4 ms; the sample lasts 0.2 ms
 t3_wait:
@@ -160,8 +171,24 @@ t3_inner:
         dec     d
         jr      nz, t3_wait
         in      a, (OPL_ST)
+        and     011h
+        ld      de, 00511h
+        call    expect
+        ld      a, 004h
+        out     (OPL_ST), a
+        ld      a, 080h         ; flag reset
+        out     (OPL_DT), a
+        in      a, (OPL_ST)
+        and     011h
+        ld      de, 00601h
+        call    expect
+        ld      a, 007h
+        out     (OPL_ST), a
+        xor     a
+        out     (OPL_DT), a
+        in      a, (OPL_ST)
         and     001h
-        ld      de, 00400h
+        ld      de, 00700h
         call    expect
         push    bc
         ld      hl, tbl_quiet
@@ -442,9 +469,10 @@ tbl_quiet:
         db      0ffh
 
 ; Four bytes from address 0 at DELTA-N FFFFh: eight nibbles, about 0.2 ms.
+; EOS is left unmasked so that the status shows it; interrupts are off.
 tbl_short:
         db      004h, 080h
-        db      004h, 078h
+        db      004h, 068h
         db      008h, 000h
         db      009h, 000h
         db      00ah, 000h

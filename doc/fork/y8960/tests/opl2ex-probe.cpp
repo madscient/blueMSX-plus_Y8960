@@ -10,7 +10,8 @@
 ** by itself: on time, with its interrupt, whatever the software is doing
 ** meanwhile. And they cover where the Y8960 parts from a Y8950 or from the
 ** specification: SP-OFF, which the hardware keeps although the specification
-** drops it, the ROM bit of 08h, and PCM_BSY.
+** drops it, and the ROM bit of 08h. PCM_BSY, which the hardware has moved
+** back and forth, is checked against the latest readings.
 **
 ** Every check is written so that it fails if the change were not there. The
 ** waveform checks compare the four against each other before trusting any of
@@ -738,27 +739,38 @@ int main()
               endWith > 0 && endWith == endWithout);
     }
 
-    /* ---- PCM_BSY follows START ------------------------------------------ */
+    /* ---- PCM_BSY is bit 7 of the last write to 07h ---------------------- */
     {
-        /* A Y8950 keeps PCM_BSY set after a sample ends and after 81h, as
-        ** real hardware was measured to do. The Y8960 drops it with START. */
+        /* The cartridge shows START as written, as a Y8950 does: RESET in
+        ** the same write does not clear it, nor does the end of a sample or
+        ** the flag reset of 04h. The expectations are the readings taken on
+        ** a cartridge running the v0.9.17 logic. */
         *boardSysTime = 1000;
         Player p(cfg);
+        auto bsy = [&p] { return (p.chip.peekRawStatus() & 0x01) != 0; };
+        bool afterReset = bsy();
         p.playShort(0xA0);
-        bool busy = (p.chip.peekRawStatus() & 0x01) != 0;
+        bool busy = bsy();
         long at = p.eosTick(3000);
-        bool idleAtEnd = (p.chip.peekRawStatus() & 0x01) == 0;
-        p.wr(0x07, 0x80);
-        bool busyAgain = (p.chip.peekRawStatus() & 0x01) != 0;
-        p.wr(0x07, 0x81);
-        bool idleAfterReset = (p.chip.peekRawStatus() & 0x01) == 0;
-        p.wr(0x07, 0x80);
+        bool atEnd = bsy();
+        p.wr(0x04, 0x80);
+        bool afterFlagReset = bsy();
         p.wr(0x07, 0x00);
-        bool idleAfterStop = (p.chip.peekRawStatus() & 0x01) == 0;
-        check("PCM_BSY shows while a sample plays", busy);
-        check("and drops when the sample ends by itself", at > 0 && idleAtEnd);
-        check("81h, START with RESET, leaves it clear", busyAgain && idleAfterReset);
-        check("00h clears it", idleAfterStop);
+        bool after00 = bsy();
+        p.wr(0x07, 0x81);
+        bool after81 = bsy();
+        p.wr(0x07, 0x01);
+        bool after01 = bsy();
+        p.wr(0x07, 0xA1);
+        bool afterA1 = bsy();
+        check("PCM_BSY is clear after a reset", !afterReset);
+        check("it shows while a sample plays", busy);
+        check("and stays when the sample ends by itself", at > 0 && atEnd);
+        check("04h = 80h leaves it", afterFlagReset);
+        check("00h clears it", !after00);
+        check("81h, START with RESET, sets it", after81);
+        check("01h, RESET alone, clears it", !after01);
+        check("A1h sets it", afterA1);
     }
 
     /* ---- what the mixer is given ---------------------------------------- */
