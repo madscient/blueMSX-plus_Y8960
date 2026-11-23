@@ -6,7 +6,7 @@ unofficial fork である。blueMSX+ 自身が blueMSX の非公式フォーク�
 
 **Y8960 は上流に入った（PR #152、2026-11-15）。このリポジトリは、上流へ PR を出すためのフォークとして維持する。**
 上流へ出す枝は `upstream/develop` から切る（`doc/fork/README.md` の「上流へ出すとき」）。
-統合の枝 `feature/y8960` をこの先どう扱うかは決まっていない。経緯は `doc/fork/README.md` の「上流との関係」。
+統合の枝 `feature/y8960` は、上流を取り込みながら維持する。経緯は `doc/fork/README.md` の「上流との関係」。
 
 **本書は索引である。規則の中身はここに書かない。**
 
