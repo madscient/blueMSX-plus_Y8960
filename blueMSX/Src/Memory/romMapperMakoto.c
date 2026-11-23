@@ -41,8 +41,8 @@
 #define MAKOTO_ADPCM_RAM     0x40000
 
 /* The YM2608's internal rhythm ROM cannot be distributed; it is read from
-** here when the user has put it there, and the rhythm is silent otherwise. */
-#define MAKOTO_RHYTHM_ROM    "Machines/Shared Roms/ym2608_rhythm.rom"
+** Shared Roms when the user has put it there, and the rhythm is silent otherwise. */
+#define MAKOTO_RHYTHM_ROM    "ym2608_rhythm.rom"
 
 typedef struct {
     YM2608* ym2608;
@@ -97,6 +97,7 @@ static UInt8 peek(RomMapperMakoto* rm, UInt16 ioPort)
 
 static void write(RomMapperMakoto* rm, UInt16 ioPort, UInt8 value)
 {
+    boardCheckOpnaBoostKill(ioPort & 3, value);
     ym2608Write(rm->ym2608, ioPort & 3, value);
 }
 
@@ -128,9 +129,12 @@ int romMapperMakotoCreate(int slot, int sslot)
     rm->deviceHandle = deviceManagerRegister(ROM_MAKOTO, &callbacks, rm);
     rm->debugHandle = debugDeviceRegister(DBGTYPE_AUDIO, "Makoto", &dbgCallbacks, rm);
 
-    rhythmRom = romLoad(MAKOTO_RHYTHM_ROM, NULL, &rhythmRomSize);
+    rhythmRom = romLoadShared(ROM_MAKOTO, MAKOTO_RHYTHM_ROM, &rhythmRomSize);
     rm->ym2608 = ym2608Create(boardGetMixer(), MAKOTO_CLOCK, MAKOTO_ADPCM_RAM,
                               rhythmRom, rhythmRomSize, BOARD_INT_MAKOTO);
+    if (rhythmRom != NULL && !ym2608HasRhythmRom(rm->ym2608)) {
+        romRejectShared(ROM_MAKOTO, MAKOTO_RHYTHM_ROM);
+    }
     free(rhythmRom);
 
     for (i = 0; i < 4; i++) {

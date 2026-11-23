@@ -28,6 +28,7 @@
 #include "ControlMemory.h"
 #include "SlotManager.h"
 #include "VDP.h"
+#include "DebugDeviceManager.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -138,6 +139,7 @@ static int collectSpaces(HuntSpace* out, int max, UInt32* totalSize, int vramMod
     }
 
     vram = vdpDebugGetVram(&vramSize);
+    vramSize = ctrlVramSpan(vdpDebugGetVramBanks(), vramSize);
     *vramLeftOut = ctrlVramLacksBank(vramMode);
     if (vram != NULL && vramSize > 0 && count < max && !*vramLeftOut) {
         out[count].space       = CTRL_SPACE_VRAM;
@@ -217,8 +219,8 @@ static int straddlesSegment(const HuntSpace* space, UInt32 offsetInSpace, int by
     return (offsetInSpace % segmentSize) + (UInt32)bytes > segmentSize;
 }
 
-/* Video memory in program order for the hunt's screen mode, so a value reads in the bytes the
-** program addresses; in an interleaving mode the two 64 kB banks alternate below 0x20000. */
+/* Video memory in program order for the hunt's VRAM layout, so a value reads in the bytes the
+** program addresses. An address with no byte behind it reads as 0. */
 static void sampleVram(const CtrlHunt* hunt, const HuntSpace* space, UInt8* into)
 {
     UInt32 k;
@@ -229,11 +231,11 @@ static void sampleVram(const CtrlHunt* hunt, const HuntSpace* space, UInt8* into
         memcpy(into, space->live, space->size);
         return;
     }
-    for (k = 0; k < 0x10000; k++) {
-        into[2 * k]     = space->live[k];
-        into[2 * k + 1] = space->live[0x10000 + k];
+    for (k = 0; k < space->size; k++) {
+        UInt32 index = (UInt32)debugDeviceVramIndex(hunt->vramMode, (int)k);
+
+        into[k] = index < space->size ? space->live[index] : 0;
     }
-    memcpy(into + 0x20000, space->live + 0x20000, space->size - 0x20000);
 }
 
 static void sample(CtrlHunt* hunt, UInt8* into)
@@ -278,7 +280,7 @@ CtrlHunt* ctrlHuntStart(CtrlView* view, int width, int stride)
     hunt->isSigned   = widthIsSigned(width);
     /* Every byte offset by default: Z80 programs keep words at odd addresses. */
     hunt->stride     = stride > 0 ? stride : 1;
-    hunt->vramMode   = vdpDebugGetScreenMode();
+    hunt->vramMode   = vdpDebugGetVramLayout();
     hunt->spaceCount = collectSpaces(hunt->space, HUNT_SPACES_MAX, &hunt->totalSize,
                                      hunt->vramMode, &hunt->vramLeftOut);
 

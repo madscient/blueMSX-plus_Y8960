@@ -70,6 +70,18 @@
 #define METER_BARRIER()
 #endif
 
+/* The instance list can change on two threads at once (a printer type
+** change runs on the UI thread unsuspended), so bump its generation
+** atomically and never leave it stuck odd. */
+#if defined(_MSC_VER)
+#define LAYOUT_BUMP(gen) _InterlockedIncrement((volatile long*)&(gen))
+#elif defined(__GNUC__)
+#define LAYOUT_BUMP(gen) __sync_fetch_and_add(&(gen), 1)
+#else
+#define LAYOUT_BUMP(gen) ((gen)++)
+#endif
+#define LAYOUT_TRIES 1000
+
 
 static int mixerCPUFrequency;
 static int mixerConnector;
@@ -140,23 +152,49 @@ typedef struct {
     DoubleT meterDc[2];     /* that offset, followed slowly */
     Int32  meterDcSet[2];   /* blocks seen: the first may be partial */
     UInt32 active;
-    // Instance
-    Int32 instEnable;
-    Int32 instVolume;
-    Int32 instPan;
-    Int32 pending;      // registered inside a device bracket not yet ended
-    Int32 location;
+    // Where the chip sits, for the detailed mixer; index tells apart
+    // chips of one type at one slot and stays fixed once registered
     Int32 slot;
     Int32 sslot;
-    Int32 port;
-    Int32 ordinal;
-    char  name[MIXER_CHANNEL_NAME_LENGTH];
-    char  id[MIXER_CHANNEL_ID_LENGTH];
-    // This channel's part of each meter block, by block sequence like the
-    // ring of MeterBlock, which sums by type. Kept in the channel so it moves
-    // with it when the array grows or a channel is removed.
-    float meterRing[METER_RING][2];
+    Int32 index;
+    Int32 voices;       // slot in the voice pool, -1 without voices
+    char  name[16];
+    Int32 device;
 } MixerChannel;
+
+/* Detailed mixer settings of one chip instance. They live apart from the
+** channels, which get compacted and are rebuilt on every machine start. */
+typedef struct {
+    Int32   used;
+    Int32   type;
+    Int32   slot;
+    Int32   sslot;
+    Int32   index;
+    DoubleT gain;       /* 1.0 leaves the chip as the type mixer sets it */
+    Int32   mute;
+    Int32   solo;
+    DoubleT voiceGain[MIXER_MAX_VOICES];
+    UInt64  voiceMute;  /* one bit per voice */
+    UInt64  voiceSolo;
+    /* The voice table the voice settings were made for; NULL if not known */
+    Int32   voiceCount;
+    const char* const* voiceNames;
+} InstanceSetting;
+
+#define INSTANCE_SETTINGS 32
+
+/* Per-voice levels of every chip over at least VOICE_FRAME mixed frames,
+** as mean squares in output units. The UI averages the frames around what
+** plays now. */
+typedef struct {
+    UInt32 startFrame;
+    UInt32 endFrame;
+    Int32  owner[MAX_CHANNELS];         /* handle of the chip in each pool slot */
+    float  level[MAX_CHANNELS][MIXER_MAX_VOICES];
+} VoiceFrame;
+
+#define VOICE_RING  64
+#define VOICE_FRAME 512     /* ~12 ms; mixerSync can run for a handful of frames */
 
 /* One meter block as the emulator thread produced it: mean square in
 ** output units (32767 = 0 dBFS). Channel levels leave out the master. */
@@ -166,12 +204,27 @@ typedef struct {
     float  type[MIXER_CHANNEL_TYPE_COUNT][2];
 } MeterBlock;
 
+/* The same block per chip, keyed by handle. */
+typedef struct {
+    Int32  instances;
+    Int32  handle[MAX_CHANNELS];
+    float  instance[MAX_CHANNELS][2];
+} MeterInstances;
+
 /* A block the UI has taken from the ring, and when it did. */
 typedef struct {
     MeterBlock block;
     UInt32     takenAt;
-    UInt32     seq;
 } MeterHeard;
+
+/* The meters per chip and voice, which exist only while enabled. Indexes
+** follow the meter ring and the heard blocks. */
+typedef struct {
+    MeterInstances  ring[METER_RING];
+    MeterInstances  heard[METER_HEARD];
+    VoiceFrame      voiceRing[VOICE_RING];
+    volatile UInt32 voiceSeq;
+} DetailMeters;
 
 struct Mixer
 { 
@@ -189,24 +242,9 @@ struct Mixer
     UInt32 index;
     UInt32 volIndex;
     Int16   buffer[AUDIO_STEREO_BUFFER_SIZE];
-    Int32   mixBuffer[AUDIO_STEREO_BUFFER_SIZE];
     AudioTypeInfo audioTypeInfo[MIXER_CHANNEL_TYPE_COUNT];
-    /* Grows as devices register, and growing frees the old array. The UI
-    ** thread reads meters and changes volumes while the emulator thread
-    ** mixes, so every walk of the array holds lock (see mixerLock). */
-    MixerChannel* channels;
-    Int32** chBuff;
-    Int32   channelCapacity;
-    void*   lock;
+    MixerChannel channels[MAX_CHANNELS];
     Int32   channelCount;
-    UInt32  generation;
-    Int32   deviceOpen;
-    Int32   deviceSlot;
-    Int32   deviceSslot;
-    Int32   devicePort;
-    UInt32  deviceSlotRegistrations;
-    MixerChannelSettingsCallback settingsCallback;
-    void*   settingsRef;
     Int32   handleCount;
     Int32   logging;
     Int32   stereo;
@@ -215,6 +253,33 @@ struct Mixer
     Int32   masterEnable;
     FILE*   file;
     int     enable;
+
+    /* Instances for the detailed mixer. The list changes at machine start,
+    ** on a cartridge swap and on a printer type change; the generation is
+    ** odd while it changes so readers retry (see LAYOUT_BUMP). */
+    Int32   createSlot;
+    Int32   createSslot;
+    char    createName[16];
+    Int32   createDevice;
+    Int32   deviceCount;
+    volatile UInt32 layoutGen;
+    /* Held while channels or voice tables come and go, and by the UI calls
+    ** that would read a freed voice table or race on the settings. */
+    void*   layoutLock;
+    InstanceSetting instances[INSTANCE_SETTINGS];
+    Int32   soloCount;
+
+    /* Voice tables lent to chips; owner 0 means free */
+    MixerVoices voicePool[MAX_CHANNELS];
+    Int32   voiceOwner[MAX_CHANNELS];
+    const char* const* voiceNames[MAX_CHANNELS];
+    const UInt8* voiceGroups[MAX_CHANNELS];
+    UInt32  voiceFrameStart;            /* where the frame being summed began */
+
+    /* Set and freed by the UI thread under the layout lock, which the
+    ** emulator thread takes to write into it. */
+    DetailMeters* detail;
+    volatile Int32 detailFresh;         /* the chips' sums predate it */
 
     /* Level meter, emulator thread side */
     UInt32  meterFrames;
@@ -235,26 +300,17 @@ struct Mixer
     UInt32  meterHeardFrame;
     MeterHeard meterHeard[METER_HEARD];
     UInt32  meterHeardPos;
+    UInt32  meterLastTaken;     /* when a block last reached the speakers */
     UInt32  meterMidiAt;
     int     meterMidiLit;
 };
 
 
 static void recalculateChannelVolume(Mixer* mixer, MixerChannel* channel);
-
-/* Public functions that touch the channel array take the lock; the static
-** helpers below them do not, so a public function never calls another
-** public one while holding it. The lock is never held across the audio
-** driver's write callback. */
-static void mixerLock(Mixer* mixer)
-{
-    archSemaphoreWait(mixer->lock, -1);
-}
-
-static void mixerUnlock(Mixer* mixer)
-{
-    archSemaphoreSignal(mixer->lock);
-}
+static void recalculateInstances(Mixer* mixer);
+static void releaseVoices(Mixer* mixer, int pool);
+static void layoutLock(Mixer* mixer);
+static void layoutUnlock(Mixer* mixer);
 
 
 ///////////////////////////////////////////////////////
@@ -271,10 +327,6 @@ static void mixerRecalculateType(Mixer* mixer, int audioType)
         channel.enable = type->enable;
         channel.volume = type->volume;
         channel.pan    = type->pan;
-        /* No instance either: recalculateChannelVolume multiplies these in. */
-        channel.instEnable = 1;
-        channel.instVolume = 100;
-        channel.instPan    = 50;
         recalculateChannelVolume(mixer, &channel);
         archMidiUpdateVolume(channel.volumeLeft, channel.volumeRight);
     }
@@ -302,63 +354,51 @@ void mixerSetStereo(Mixer* mixer, Int32 stereo)
     int i;
 
     /* Output is always 2ch; toggle just retunes per-channel volume. */
-    mixerLock(mixer);
     mixer->stereo = stereo;
 
     for (i = 0; i < MIXER_CHANNEL_TYPE_COUNT; i++) {
         mixerRecalculateType(mixer, i);
     }
-    mixerUnlock(mixer);
 }
 
 void mixerSetMasterVolume(Mixer* mixer, Int32 volume)
 {
     int i;
 
-    mixerLock(mixer);
     mixer->masterVolume = pow(10.0, (volume - 100) / 60.0) - pow(10.0, -100 / 60.0);
-
+    
     for (i = 0; i < MIXER_CHANNEL_TYPE_COUNT; i++) {
         mixerRecalculateType(mixer, i);
     }
-    mixerUnlock(mixer);
 }
 
 void mixerEnableMaster(Mixer* mixer, Int32 enable)
 {
     int i;
 
-    mixerLock(mixer);
     mixer->masterEnable = enable ? 1 : 0;
 
     for (i = 0; i < MIXER_CHANNEL_TYPE_COUNT; i++) {
         mixerRecalculateType(mixer, i);
     }
-    mixerUnlock(mixer);
 }
 
 void mixerSetChannelTypeVolume(Mixer* mixer, Int32 type, Int32 volume)
 {
-    mixerLock(mixer);
     mixer->audioTypeInfo[type].volume = volume;
     mixerRecalculateType(mixer, type);
-    mixerUnlock(mixer);
 }
 
 void mixerSetChannelTypePan(Mixer* mixer, Int32 type, Int32 pan)
 {
-    mixerLock(mixer);
     mixer->audioTypeInfo[type].pan = pan;
     mixerRecalculateType(mixer, type);
-    mixerUnlock(mixer);
 }
 
-void mixerEnableChannelType(Mixer* mixer, Int32 type, Int32 enable)
+void mixerEnableChannelType(Mixer* mixer, Int32 type, Int32 enable) 
 {
-    mixerLock(mixer);
     mixer->audioTypeInfo[type].enable = enable;
     mixerRecalculateType(mixer, type);
-    mixerUnlock(mixer);
 }
 
 Int32 mixerIsChannelTypeActive(Mixer* mixer, Int32 type, Int32 reset)
@@ -366,7 +406,6 @@ Int32 mixerIsChannelTypeActive(Mixer* mixer, Int32 type, Int32 reset)
     int i;
     Int32 active = 0;
 
-    mixerLock(mixer);
     for (i = 0; i < mixer->channelCount; i++) {
         if (mixer->channels[i].type == type) {
             if (mixer->channels[i].active) {
@@ -377,32 +416,193 @@ Int32 mixerIsChannelTypeActive(Mixer* mixer, Int32 type, Int32 reset)
             }
         }
     }
-    mixerUnlock(mixer);
 
     return active;
 }
 
 ///////////////////////////////////////////////////////
 
-static DoubleT volumeCurve(Int32 volume)
+static InstanceSetting* findInstance(Mixer* mixer, Int32 type, Int32 slot, Int32 sslot, Int32 index)
 {
-    return pow(10.0, (volume - 100) / 60.0) - pow(10.0, -100 / 60.0);
+    int i;
+
+    for (i = 0; i < INSTANCE_SETTINGS; i++) {
+        InstanceSetting* s = mixer->instances + i;
+        if (s->used && s->type == type && s->slot == slot &&
+            s->sslot == sslot && s->index == index) {
+            return s;
+        }
+    }
+    return NULL;
+}
+
+/* The chip now plugged in under an instance key, or NULL. */
+static MixerChannel* findChannel(Mixer* mixer, Int32 type, Int32 slot, Int32 sslot, Int32 index)
+{
+    int i;
+
+    for (i = 0; i < mixer->channelCount; i++) {
+        MixerChannel* channel = mixer->channels + i;
+        if (channel->type == type && channel->slot == slot &&
+            channel->sslot == sslot && channel->index == index) {
+            return channel;
+        }
+    }
+    return NULL;
+}
+
+/* Detailed mixer gain of a channel. Mute wins over solo; while anything is
+** soloed, only soloed instances play. A channel without an index (MIDI's
+** stand-in) is never affected. */
+static DoubleT instanceGain(Mixer* mixer, MixerChannel* channel)
+{
+    InstanceSetting* s;
+
+    if (channel->index < 1) {
+        return 1.0;
+    }
+    s = findInstance(mixer, channel->type, channel->slot, channel->sslot, channel->index);
+    if (s != NULL && s->mute) {
+        return 0.0;
+    }
+    if (mixer->soloCount > 0 && (s == NULL || (!s->solo && !s->voiceSolo))) {
+        return 0.0;
+    }
+    return s != NULL ? s->gain : 1.0;
+}
+
+/* Gain of one voice on top of its chip's: a voice solo silences the other
+** voices of that chip unless the whole chip is soloed. */
+static DoubleT voiceGain(Mixer* mixer, InstanceSetting* s, int voice)
+{
+    UInt64 bit = (UInt64)1 << voice;
+
+    if (s == NULL) {
+        return 1.0;
+    }
+    if (s->voiceMute & bit) {
+        return 0.0;
+    }
+    if (mixer->soloCount > 0 && !s->solo && s->voiceSolo && !(s->voiceSolo & bit)) {
+        return 0.0;
+    }
+    return s->voiceGain[voice];
+}
+
+static int instanceIsDefault(InstanceSetting* s)
+{
+    int i;
+
+    if (s->gain != 1.0 || s->mute || s->solo || s->voiceMute || s->voiceSolo) {
+        return 0;
+    }
+    for (i = 0; i < MIXER_MAX_VOICES; i++) {
+        if (s->voiceGain[i] != 1.0) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+/* What a removed chip leaves for when it comes back: its own volume and mute
+** (gain, mute) stay, its voice settings and solos go. */
+static void forgetRemovedInstance(InstanceSetting* s)
+{
+    int v;
+
+    s->solo      = 0;
+    s->voiceSolo = 0;
+    s->voiceMute = 0;
+    for (v = 0; v < MIXER_MAX_VOICES; v++) {
+        s->voiceGain[v] = 1.0;
+    }
+}
+
+/* Write the effective voice gains of a chip into the table it reads. */
+static void recalculateVoices(Mixer* mixer, MixerChannel* channel)
+{
+    MixerVoices* voices;
+    InstanceSetting* s;
+    Int32 active = 0;
+    int i;
+
+    if (channel->voices < 0) {
+        return;
+    }
+    voices = mixer->voicePool + channel->voices;
+    s = findInstance(mixer, channel->type, channel->slot, channel->sslot, channel->index);
+    for (i = 0; i < voices->count; i++) {
+        DoubleT gain = voiceGain(mixer, s, i);
+        voices->gainF[i] = (float)gain;
+        voices->gain[i]  = (Int32)(gain * 4096 + 0.5);
+        active |= voices->gain[i] != 4096;
+    }
+    voices->active = active;
+}
+
+/* A fresh setting for an instance, or NULL when the table is full. */
+static InstanceSetting* addInstance(Mixer* mixer, Int32 type, Int32 slot, Int32 sslot, Int32 index)
+{
+    InstanceSetting* s = findInstance(mixer, type, slot, sslot, index);
+    int i;
+
+    for (i = 0; s == NULL && i < INSTANCE_SETTINGS; i++) {
+        if (!mixer->instances[i].used) {
+            MixerChannel* channel;
+            int v;
+            s = mixer->instances + i;
+            s->type      = type;
+            s->slot      = slot;
+            s->sslot     = sslot;
+            s->index     = index;
+            s->gain      = 1.0;
+            s->mute      = 0;
+            s->solo      = 0;
+            s->voiceMute = 0;
+            s->voiceSolo = 0;
+            for (v = 0; v < MIXER_MAX_VOICES; v++) {
+                s->voiceGain[v] = 1.0;
+            }
+            channel = findChannel(mixer, type, slot, sslot, index);
+            s->voiceCount = channel != NULL && channel->voices >= 0 ? mixer->voicePool[channel->voices].count : 0;
+            s->voiceNames = channel != NULL && channel->voices >= 0 ? mixer->voiceNames[channel->voices] : NULL;
+            s->used      = 1;
+        }
+    }
+    return s;
+}
+
+/* The type mixer's curve, scaled so that 100 is exactly unchanged. */
+static DoubleT detailGain(Int32 volume)
+{
+    DoubleT bottom = pow(10.0, -100 / 60.0);
+
+    volume = MAX(0, MIN(100, volume));
+    return volume == 100 ? 1.0 : (pow(10.0, (volume - 100) / 60.0) - bottom) / (1.0 - bottom);
+}
+
+/* The volume detailGain was given back from its gain. */
+static Int32 detailVolume(DoubleT gain)
+{
+    DoubleT bottom = pow(10.0, -100 / 60.0);
+
+    if (gain >= 1.0) {
+        return 100;
+    }
+    return MAX(0, (Int32)floor(100 + 60 * log10(gain * (1.0 - bottom) + bottom) + 0.5));
 }
 
 static void recalculateChannelVolume(Mixer* mixer, MixerChannel* channel)
 {
-    /* The instance factor is normalised to 1 at volume 100, so an instance
-    ** left at its defaults gives bit for bit the type's own gain. */
-    DoubleT volume        = volumeCurve(channel->volume) * (volumeCurve(channel->instVolume) / volumeCurve(100));
-    Int32   pan           = MAX(0, MIN(100, channel->pan + channel->instPan - 50));
-    Int32   enable        = channel->enable && channel->instEnable;
-    DoubleT panLeft       = pow(10.0, (MIN(100 - pan, 50) - 50) / 30.0) - pow(10.0, -50 / 30.0);
-    DoubleT panRight      = pow(10.0, (MIN(pan, 50) - 50) / 30.0) - pow(10.0, -50 / 30.0);
+    DoubleT volume        = (pow(10.0, (channel->volume - 100) / 60.0) - pow(10.0, -100 / 60.0)) *
+                            instanceGain(mixer, channel);
+    DoubleT panLeft       = pow(10.0, (MIN(100 - channel->pan, 50) - 50) / 30.0) - pow(10.0, -50 / 30.0);
+    DoubleT panRight      = pow(10.0, (MIN(channel->pan, 50) - 50) / 30.0) - pow(10.0, -50 / 30.0);
 
-    channel->unmutedLeft    = enable * (Int32)(1024 * mixer->masterVolume * volume * panLeft);
-    channel->unmutedRight   = enable * (Int32)(1024 * mixer->masterVolume * volume * panRight);
-    channel->meterGainLeft  = enable * (Int32)(1024 * volume * panLeft);
-    channel->meterGainRight = enable * (Int32)(1024 * volume * panRight);
+    channel->unmutedLeft    = channel->enable * (Int32)(1024 * mixer->masterVolume * volume * panLeft);
+    channel->unmutedRight   = channel->enable * (Int32)(1024 * mixer->masterVolume * volume * panRight);
+    channel->meterGainLeft  = channel->enable * (Int32)(1024 * volume * panLeft);
+    channel->meterGainRight = channel->enable * (Int32)(1024 * volume * panRight);
 
     if (!mixer->stereo) {
         Int32 tmp = (channel->unmutedLeft + channel->unmutedRight) / 2;
@@ -442,21 +642,45 @@ static DoubleT acPower(UInt64 energy, Int64 sum, DoubleT* dc, Int32* seen)
     return power > 0 ? power : 0;
 }
 
+/* Emulator thread: the meters per chip and voice with the layout lock
+** held, or NULL without it when they are off. */
+static DetailMeters* lockDetail(Mixer* mixer)
+{
+    DetailMeters* detail;
+
+    if (mixer->detail == NULL) {
+        return NULL;
+    }
+    layoutLock(mixer);
+    detail = mixer->detail;
+    if (detail == NULL) {
+        layoutUnlock(mixer);
+    }
+    return detail;
+}
+
+static void unlockDetail(Mixer* mixer, DetailMeters* detail)
+{
+    if (detail != NULL) {
+        layoutUnlock(mixer);
+    }
+}
+
 /* Emulator thread: close the current block and publish it. */
 static void meterPushBlock(Mixer* mixer)
 {
     UInt32 seq = mixer->meterSeq;
     MeterBlock* block = mixer->meterRing + (seq & (METER_RING - 1));
+    DetailMeters* detail = lockDetail(mixer);
+    MeterInstances* inst = detail != NULL ? detail->ring + (seq & (METER_RING - 1)) : NULL;
     int i;
 
     memset(block->type, 0, sizeof(block->type));
-    /* No chip runs while the turboR PCM mutes the mixer: show silence and
-    ** take the offsets afresh once it is back, dropping the block across. */
+    /* The turboR PCM mute silences the machine: show silence and take the
+    ** offsets afresh once it is back, dropping the block across. */
     if (!mixer->enable) {
         for (i = 0; i < mixer->channelCount; i++) {
             MixerChannel* channel = mixer->channels + i;
-            channel->meterRing[seq & (METER_RING - 1)][0] = 0;
-            channel->meterRing[seq & (METER_RING - 1)][1] = 0;
             channel->meterDcSet[0]  = 0;
             channel->meterDcSet[1]  = 0;
             channel->meterEnergy[0] = 0;
@@ -478,16 +702,23 @@ static void meterPushBlock(Mixer* mixer)
         float   left      = (float)(powerLeft * gainLeft * gainLeft);
         float   right     = (float)(powerRight * gainRight * gainRight);
 
-        channel->meterRing[seq & (METER_RING - 1)][0] = left;
-        channel->meterRing[seq & (METER_RING - 1)][1] = right;
         /* Chips of one type add up like the mixer adds them: in power. */
         block->type[channel->type][0] += left;
         block->type[channel->type][1] += right;
+        if (inst != NULL) {
+            inst->instance[i][0] = left;
+            inst->instance[i][1] = right;
+            inst->handle[i]      = channel->handle;
+        }
         channel->meterEnergy[0] = 0;
         channel->meterEnergy[1] = 0;
         channel->meterSum[0]    = 0;
         channel->meterSum[1]    = 0;
     }
+    if (inst != NULL) {
+        inst->instances = i;
+    }
+    unlockDetail(mixer, detail);
     block->master[0] = !mixer->enable ? 0 :
                        (float)acPower(mixer->meterEnergy[0], mixer->meterSum[0], mixer->meterDc + 0, mixer->meterDcSet + 0);
     block->master[1] = !mixer->enable ? 0 :
@@ -511,6 +742,92 @@ static void meterCountFrame(Mixer* mixer)
     if (++mixer->meterBlockFill == METER_BLOCK) {
         meterPushBlock(mixer);
     }
+}
+
+/* Emulator thread: drop what the chips summed for their voices. */
+static void clearVoiceSums(Mixer* mixer)
+{
+    int i;
+
+    for (i = 0; i < mixer->channelCount; i++) {
+        int pool = mixer->channels[i].voices;
+        if (pool >= 0) {
+            MixerVoices* voices = mixer->voicePool + pool;
+            memset(voices->sum, 0, voices->count * sizeof(voices->sum[0]));
+            memset(voices->sumSq, 0, voices->count * sizeof(voices->sumSq[0]));
+            voices->samples = 0;
+        }
+    }
+}
+
+/* Emulator thread, after each update: once VOICE_FRAME frames went by,
+** publish what the chips summed for their voices. The variance is used,
+** so steady DC reads as silence. */
+static void meterPushVoices(Mixer* mixer)
+{
+    DetailMeters* detail;
+    UInt32 seq;
+    VoiceFrame* frame;
+    int i;
+    int v;
+
+    if (mixer->detail == NULL) {
+        return;
+    }
+    /* The chips run on through the turboR PCM mute; their voices read as
+    ** silent then, like the chips' own meters. */
+    if (mixer->detailFresh || !mixer->enable) {
+        clearVoiceSums(mixer);
+        if (mixer->detailFresh) {
+            mixer->detailFresh     = 0;
+            mixer->voiceFrameStart = mixer->meterFrames;
+        }
+    }
+    if (mixer->meterFrames - mixer->voiceFrameStart < VOICE_FRAME) {
+        return;
+    }
+    detail = lockDetail(mixer);
+    if (detail == NULL) {
+        return;
+    }
+
+    seq   = detail->voiceSeq;
+    frame = detail->voiceRing + (seq & (VOICE_RING - 1));
+    memset(frame->owner, 0, sizeof(frame->owner));
+    for (i = 0; i < mixer->channelCount; i++) {
+        MixerChannel* channel = mixer->channels + i;
+        int pool = channel->voices;
+        MixerVoices* voices;
+        DoubleT samples;
+        DoubleT gain;
+        DoubleT scale;
+
+        if (pool < 0) {
+            continue;
+        }
+        voices  = mixer->voicePool + pool;
+        samples = voices->samples;
+        scale   = voices->scale;
+        gain    = ((DoubleT)channel->meterGainLeft * channel->meterGainLeft +
+                   (DoubleT)channel->meterGainRight * channel->meterGainRight) / 2 / (4096.0 * 4096.0);
+        frame->owner[pool] = channel->handle;
+        for (v = 0; v < voices->count; v++) {
+            DoubleT level = 0;
+            if (samples > 0) {
+                DoubleT mean = voices->sum[v] / samples;
+                level = voices->sumSq[v] / samples - mean * mean;
+            }
+            frame->level[pool][v] = (float)(MAX(level, 0) * scale * scale * gain);
+        }
+    }
+    clearVoiceSums(mixer);
+    frame->startFrame      = mixer->voiceFrameStart;
+    frame->endFrame        = mixer->meterFrames;
+    mixer->voiceFrameStart = mixer->meterFrames;
+
+    METER_BARRIER();
+    detail->voiceSeq = seq + 1;
+    unlockDetail(mixer, detail);
 }
 
 /* UI thread: take the blocks up to half a window past the frame playing
@@ -545,7 +862,11 @@ static void meterAdvance(Mixer* mixer)
     while (mixer->meterReadSeq != seq) {
         UInt32 s = mixer->meterReadSeq;
         MeterBlock block = mixer->meterRing[s & (METER_RING - 1)];
+        MeterInstances inst;
 
+        if (mixer->detail != NULL) {
+            inst = mixer->detail->ring[s & (METER_RING - 1)];
+        }
         METER_BARRIER();
         if (mixer->meterSeq - s >= METER_RING) {
             /* Overwritten while copying: the writer lapped us. */
@@ -558,8 +879,11 @@ static void meterAdvance(Mixer* mixer)
         }
         mixer->meterHeard[mixer->meterHeardPos & (METER_HEARD - 1)].block   = block;
         mixer->meterHeard[mixer->meterHeardPos & (METER_HEARD - 1)].takenAt = now;
-        mixer->meterHeard[mixer->meterHeardPos & (METER_HEARD - 1)].seq     = s;
+        if (mixer->detail != NULL) {
+            mixer->detail->heard[mixer->meterHeardPos & (METER_HEARD - 1)] = inst;
+        }
         mixer->meterHeardPos++;
+        mixer->meterLastTaken = now;
         mixer->meterReadSeq = s + 1;
     }
 
@@ -571,10 +895,8 @@ static void meterAdvance(Mixer* mixer)
 
 /* RMS over the window centred on the frame playing now, in output units.
 ** Blocks stop counting a while after they were taken, so a paused or
-** stopped emulator reads as silence. type < 0 asks for the master. A
-** channel, if given, is read from its own ring instead, with the lock
-** held so the emulator thread neither moves the array nor pushes. */
-static DoubleT meterLevel(Mixer* mixer, Int32 type, const MixerChannel* channel, int side)
+** stopped emulator reads as silence. type < 0 asks for the master. */
+static DoubleT meterLevel(Mixer* mixer, Int32 type, int side)
 {
     UInt32 from = mixer->meterHeardFrame - METER_WINDOW / 2;
     DoubleT energy = 0;
@@ -588,16 +910,38 @@ static DoubleT meterLevel(Mixer* mixer, Int32 type, const MixerChannel* channel,
             (Int32)(heard->block.endFrame - from) <= 0) {
             continue;
         }
-        if (channel != NULL) {
-            /* The ring copy is gone once the writer has lapped it, which
-            ** only an emulator running far ahead of the sound does. */
-            if (mixer->meterSeq - heard->seq > METER_RING) {
-                continue;
-            }
-            energy += channel->meterRing[heard->seq & (METER_RING - 1)][side];
+        energy += type < 0 ? heard->block.master[side] : heard->block.type[type][side];
+        count++;
+    }
+    return count > 0 ? sqrt(energy / count) : 0;
+}
+
+/* Same as meterLevel for one chip; a block without the chip counts as
+** silence. */
+static DoubleT meterInstanceLevel(Mixer* mixer, Int32 handle, int side)
+{
+    UInt32 from = mixer->meterHeardFrame - METER_WINDOW / 2;
+    DoubleT energy = 0;
+    int count = 0;
+    int i;
+    int j;
+
+    if (mixer->detail == NULL) {
+        return 0;
+    }
+    for (i = 0; i < METER_HEARD; i++) {
+        MeterHeard* heard = mixer->meterHeard + i;
+        const MeterInstances* inst = mixer->detail->heard + i;
+
+        if (mixer->meterTick - heard->takenAt >= METER_HOLD_MS ||
+            (Int32)(heard->block.endFrame - from) <= 0) {
+            continue;
         }
-        else {
-            energy += type < 0 ? heard->block.master[side] : heard->block.type[type][side];
+        for (j = 0; j < inst->instances; j++) {
+            if (inst->handle[j] == handle) {
+                energy += inst->instance[j][side];
+                break;
+            }
         }
         count++;
     }
@@ -632,9 +976,6 @@ static DoubleT meterMidiLevel(Mixer* mixer, int side)
     channel.enable = type->enable;
     channel.volume = type->volume;
     channel.pan    = type->pan;
-    channel.instEnable = 1;
-    channel.instVolume = 100;
-    channel.instPan    = 50;
     recalculateChannelVolume(mixer, &channel);
     return 32767.0 * (side ? channel.meterGainRight : channel.meterGainLeft) / 1024.0;
 }
@@ -651,13 +992,72 @@ Int32 mixerMeterGetTypePercent(Mixer* mixer, Int32 type, int leftRight)
     if (type == MIXER_CHANNEL_MIDI) {
         return meterPercent(meterMidiLevel(mixer, leftRight ? 1 : 0));
     }
-    return meterPercent(meterLevel(mixer, type, NULL, leftRight ? 1 : 0));
+    return meterPercent(meterLevel(mixer, type, leftRight ? 1 : 0));
 }
 
 Int32 mixerMeterGetMasterPercent(Mixer* mixer, int leftRight)
 {
     meterAdvance(mixer);
-    return meterPercent(meterLevel(mixer, -1, NULL, leftRight ? 1 : 0));
+    return meterPercent(meterLevel(mixer, -1, leftRight ? 1 : 0));
+}
+
+Int32 mixerMeterGetInstancePercent(Mixer* mixer, Int32 handle, int leftRight)
+{
+    meterAdvance(mixer);
+    return meterPercent(meterInstanceLevel(mixer, handle, leftRight ? 1 : 0));
+}
+
+/* Average of the voice frames overlapping the window around the frame
+** playing now, weighted by how much of each falls inside the window. */
+Int32 mixerMeterGetVoicePercent(Mixer* mixer, Int32 handle, Int32 voice)
+{
+    DetailMeters* detail = mixer->detail;
+    UInt32 from;
+    UInt32 to;
+    UInt32 seq;
+    UInt32 k;
+    DoubleT energy = 0;
+    DoubleT weight = 0;
+    int j;
+
+    meterAdvance(mixer);
+    if (detail == NULL || voice < 0 || voice >= MIXER_MAX_VOICES ||
+        mixer->meterTick - mixer->meterLastTaken >= METER_HOLD_MS) {
+        return 0;
+    }
+    from = mixer->meterHeardFrame - METER_WINDOW / 2;
+    to   = mixer->meterHeardFrame + METER_WINDOW / 2;
+    seq  = detail->voiceSeq;
+    METER_BARRIER();
+
+    for (k = 1; k <= VOICE_RING / 2 && k <= seq; k++) {
+        const VoiceFrame* frame = detail->voiceRing + ((seq - k) & (VOICE_RING - 1));
+        UInt32 start = frame->startFrame;
+        UInt32 end   = frame->endFrame;
+        UInt32 inStart;
+        UInt32 inEnd;
+
+        if ((Int32)(end - from) <= 0) {
+            break;
+        }
+        if ((Int32)(start - to) >= 0) {
+            continue;
+        }
+        inStart = (Int32)(start - from) > 0 ? start : from;
+        inEnd   = (Int32)(end - to) < 0 ? end : to;
+        for (j = 0; j < MAX_CHANNELS; j++) {
+            if (frame->owner[j] == handle) {
+                energy += frame->level[j][voice] * (DoubleT)(inEnd - inStart);
+                weight += inEnd - inStart;
+                break;
+            }
+        }
+    }
+    METER_BARRIER();
+    if (detail->voiceSeq - seq >= VOICE_RING / 2 || weight <= 0) {
+        return 0;
+    }
+    return meterPercent(sqrt(energy / weight));
 }
 
 static Mixer* globalMixer = NULL;
@@ -674,7 +1074,9 @@ Mixer* mixerCreate()
     mixer->fragmentSize = 512;
     mixer->enable = 1;
     mixer->rate = AUDIO_SAMPLERATE;
-    mixer->lock = archSemaphoreCreate(1);
+    mixer->createSlot  = -1;
+    mixer->createSslot = -1;
+    mixer->layoutLock  = archSemaphoreCreate(1);
 
     if (globalMixer == NULL) globalMixer = mixer;
 
@@ -685,10 +1087,51 @@ void mixerDestroy(Mixer* mixer)
 {
     mixerStopLog(mixer);
     globalMixer = NULL;
-    archSemaphoreDestroy(mixer->lock);
-    free(mixer->channels);
-    free(mixer->chBuff);
+    archSemaphoreDestroy(mixer->layoutLock);
+    free(mixer->detail);
     free(mixer);
+}
+
+void mixerEnableDetailMeters(Mixer* mixer, Int32 enable)
+{
+    DetailMeters* detail = NULL;
+    DetailMeters* old;
+    int i;
+
+    if ((mixer->detail != NULL) == (enable != 0)) {
+        return;
+    }
+    if (enable) {
+        detail = (DetailMeters*)calloc(1, sizeof(DetailMeters));
+        if (detail == NULL) {
+            return;
+        }
+    }
+    layoutLock(mixer);
+    old = mixer->detail;
+    mixer->detail = detail;
+    mixer->detailFresh = detail != NULL;
+    for (i = 0; i < MAX_CHANNELS; i++) {
+        mixer->voicePool[i].metering = detail != NULL;
+    }
+    layoutUnlock(mixer);
+    free(old);
+}
+
+void mixerResetLayoutLock(Mixer* mixer)
+{
+    archSemaphoreDestroy(mixer->layoutLock);
+    mixer->layoutLock = archSemaphoreCreate(1);
+}
+
+static void layoutLock(Mixer* mixer)
+{
+    archSemaphoreWait(mixer->layoutLock, -1);
+}
+
+static void layoutUnlock(Mixer* mixer)
+{
+    archSemaphoreSignal(mixer->layoutLock);
 }
 
 UInt32 mixerGetSampleRate(Mixer* mixer)
@@ -699,14 +1142,12 @@ UInt32 mixerGetSampleRate(Mixer* mixer)
 void mixerSetSampleRate(Mixer* mixer, UInt32 rate)
 {
     int i;
-    mixerLock(mixer);
     mixer->rate = rate;
     for(i = 0; i < mixer->channelCount; i++) {
         if (mixer->channels[i].rateCallback != NULL) {
             mixer->channels[i].rateCallback(mixer->channels[i].ref, rate);
         }
     }
-    mixerUnlock(mixer);
 }
 
 void mixerSetWriteCallback(Mixer* mixer, MixerWriteCallback callback, void* ref, int fragmentSize)
@@ -726,250 +1167,17 @@ void mixerSetTapCallback(Mixer* mixer, MixerWriteCallback callback, void* ref)
     mixer->tapRef = ref;
 }
 
-static void resolveChannel(Mixer* mixer, MixerChannel* channel, Int32 location, Int32 slot, Int32 sslot, Int32 port)
+static Int32 registerChannel(Mixer* mixer, Int32 audioType, Int32 stereo, MixerUpdateCallback callback, MixerSetSampleRateCallback rateCallback, void* ref)
 {
-    char* id = channel->id;
-    int i;
-
-    channel->location = location;
-    channel->slot     = location == MIXER_LOCATION_SLOT ? slot  : 0;
-    channel->sslot    = location == MIXER_LOCATION_SLOT ? sslot : 0;
-    channel->port     = location == MIXER_LOCATION_BOARD ? port : -1;
-    channel->ordinal  = 1;
-
-    for (i = 0; i < mixer->channelCount; i++) {
-        MixerChannel* other = mixer->channels + i;
-        if (other != channel && !other->pending &&
-            other->type     == channel->type     &&
-            other->location == channel->location &&
-            other->slot     == channel->slot     &&
-            other->sslot    == channel->sslot    &&
-            other->port     == channel->port     &&
-            strcmp(other->name, channel->name) == 0 &&
-            other->ordinal  >= channel->ordinal)
-        {
-            channel->ordinal = other->ordinal + 1;
-        }
-    }
-
-    if (location == MIXER_LOCATION_SLOT) {
-        id += sprintf(id, "slot%d-%d", channel->slot, channel->sslot);
-    }
-    else {
-        id += sprintf(id, "board");
-        if (channel->port >= 0) {
-            id += sprintf(id, "-%02x", channel->port & 0xff);
-        }
-    }
-    if (channel->name[0]) {
-        id += sprintf(id, ".%s", channel->name);
-    }
-    if (channel->ordinal > 1) {
-        sprintf(id, ".n%d", channel->ordinal);
-    }
-
-    channel->pending = 0;
-
-    if (mixer->settingsCallback != NULL) {
-        mixer->settingsCallback(mixer->settingsRef, channel->type, channel->id,
-                                &channel->instEnable, &channel->instVolume, &channel->instPan);
-    }
-    recalculateChannelVolume(mixer, channel);
-}
-
-static void endDevice(Mixer* mixer, UInt32 slotRegistrations)
-{
-    Int32 location;
-    int i;
-
-    if (!mixer->deviceOpen) {
-        return;
-    }
-
-    location = slotRegistrations != mixer->deviceSlotRegistrations ? MIXER_LOCATION_SLOT : MIXER_LOCATION_BOARD;
-
-    for (i = 0; i < mixer->channelCount; i++) {
-        if (mixer->channels[i].pending) {
-            resolveChannel(mixer, mixer->channels + i, location,
-                           mixer->deviceSlot, mixer->deviceSslot, mixer->devicePort);
-        }
-    }
-
-    mixer->deviceOpen = 0;
-    mixer->generation++;
-}
-
-void mixerBeginDevice(Mixer* mixer, int slot, int sslot, UInt32 slotRegistrations)
-{
-    mixerLock(mixer);
-    /* An open device's count belongs to its own slot, which the caller did
-    ** not pass, so its channels go to the board rather than stay unlisted. */
-    endDevice(mixer, mixer->deviceSlotRegistrations);
-    mixer->deviceOpen              = 1;
-    mixer->deviceSlot              = slot;
-    mixer->deviceSslot             = sslot;
-    mixer->devicePort              = -1;
-    mixer->deviceSlotRegistrations = slotRegistrations;
-    mixerUnlock(mixer);
-}
-
-void mixerSetDevicePort(Mixer* mixer, int port)
-{
-    mixerLock(mixer);
-    if (mixer->deviceOpen) {
-        mixer->devicePort = port;
-    }
-    mixerUnlock(mixer);
-}
-
-void mixerEndDevice(Mixer* mixer, UInt32 slotRegistrations)
-{
-    mixerLock(mixer);
-    endDevice(mixer, slotRegistrations);
-    mixerUnlock(mixer);
-}
-
-void mixerSetChannelSettingsCallback(Mixer* mixer, MixerChannelSettingsCallback callback, void* ref)
-{
-    mixerLock(mixer);
-    mixer->settingsCallback = callback;
-    mixer->settingsRef      = ref;
-    mixerUnlock(mixer);
-}
-
-UInt32 mixerGetChannelGeneration(Mixer* mixer)
-{
-    return mixer->generation;
-}
-
-int mixerGetChannelInfo(Mixer* mixer, MixerChannelInfo* info, int maxCount)
-{
-    int count = 0;
-    int i;
-
-    mixerLock(mixer);
-    for (i = 0; i < mixer->channelCount; i++) {
-        MixerChannel* channel = mixer->channels + i;
-        if (channel->pending) {
-            continue;
-        }
-        if (count < maxCount) {
-            MixerChannelInfo* entry = info + count;
-            entry->handle   = channel->handle;
-            entry->type     = channel->type;
-            entry->stereo   = channel->stereo;
-            entry->location = channel->location;
-            entry->slot     = channel->slot;
-            entry->sslot    = channel->sslot;
-            entry->port     = channel->port;
-            entry->ordinal  = channel->ordinal;
-            entry->enable   = channel->instEnable;
-            entry->volume   = channel->instVolume;
-            entry->pan      = channel->instPan;
-            strcpy(entry->name, channel->name);
-            strcpy(entry->id, channel->id);
-        }
-        count++;
-    }
-    mixerUnlock(mixer);
-
-    return count;
-}
-
-static MixerChannel* findChannel(Mixer* mixer, Int32 handle)
-{
-    int i;
-    for (i = 0; i < mixer->channelCount; i++) {
-        if (mixer->channels[i].handle == handle) {
-            return mixer->channels + i;
-        }
-    }
-    return NULL;
-}
-
-void mixerSetChannelVolume(Mixer* mixer, Int32 handle, Int32 volume)
-{
-    MixerChannel* channel;
-    mixerLock(mixer);
-    channel = findChannel(mixer, handle);
-    if (channel != NULL) {
-        channel->instVolume = volume;
-        recalculateChannelVolume(mixer, channel);
-    }
-    mixerUnlock(mixer);
-}
-
-void mixerSetChannelPan(Mixer* mixer, Int32 handle, Int32 pan)
-{
-    MixerChannel* channel;
-    mixerLock(mixer);
-    channel = findChannel(mixer, handle);
-    if (channel != NULL) {
-        channel->instPan = pan;
-        recalculateChannelVolume(mixer, channel);
-    }
-    mixerUnlock(mixer);
-}
-
-void mixerEnableChannel(Mixer* mixer, Int32 handle, Int32 enable)
-{
-    MixerChannel* channel;
-    mixerLock(mixer);
-    channel = findChannel(mixer, handle);
-    if (channel != NULL) {
-        channel->instEnable = enable ? 1 : 0;
-        recalculateChannelVolume(mixer, channel);
-    }
-    mixerUnlock(mixer);
-}
-
-Int32 mixerMeterGetChannelPercent(Mixer* mixer, Int32 handle, int leftRight)
-{
-    MixerChannel* channel;
-    Int32 percent = 0;
-
-    mixerLock(mixer);
-    meterAdvance(mixer);
-    channel = findChannel(mixer, handle);
-    if (channel != NULL) {
-        percent = meterPercent(meterLevel(mixer, 0, channel, leftRight ? 1 : 0));
-    }
-    mixerUnlock(mixer);
-    return percent;
-}
-
-Int32 mixerRegisterChannel(Mixer* mixer, Int32 audioType, Int32 stereo, MixerUpdateCallback callback, MixerSetSampleRateCallback rateCallback, void* ref)
-{
-    return mixerRegisterChannelNamed(mixer, audioType, stereo, callback, rateCallback, ref, NULL);
-}
-
-Int32 mixerRegisterChannelNamed(Mixer* mixer, Int32 audioType, Int32 stereo, MixerUpdateCallback callback, MixerSetSampleRateCallback rateCallback, void* ref, const char* name)
-{
-    MixerChannel*  channel;
+    MixerChannel*  channel = mixer->channels + mixer->channelCount;
     AudioTypeInfo* type    = mixer->audioTypeInfo + audioType;
-    Int32          handle;
+    int i;
 
-    mixerLock(mixer);
-
-    if (mixer->channelCount == mixer->channelCapacity) {
-        Int32 capacity = mixer->channelCapacity ? 2 * mixer->channelCapacity : 16;
-        MixerChannel* channels = (MixerChannel*)realloc(mixer->channels, capacity * sizeof(MixerChannel));
-        Int32** chBuff = (Int32**)realloc(mixer->chBuff, capacity * sizeof(Int32*));
-        if (channels != NULL) {
-            mixer->channels = channels;
-        }
-        if (chBuff != NULL) {
-            mixer->chBuff = chBuff;
-        }
-        if (channels == NULL || chBuff == NULL) {
-            mixerUnlock(mixer);
-            return 0;
-        }
-        mixer->channelCapacity = capacity;
+    if (mixer->channelCount >= MAX_CHANNELS) {
+        return 0;
     }
 
-    channel = mixer->channels + mixer->channelCount;
-    memset(channel, 0, sizeof(MixerChannel));
+    LAYOUT_BUMP(mixer->layoutGen);
     mixer->channelCount++;
 
     channel->updateCallback = callback;
@@ -981,33 +1189,44 @@ Int32 mixerRegisterChannelNamed(Mixer* mixer, Int32 audioType, Int32 stereo, Mix
     channel->volume         = type->volume;
     channel->pan            = type->pan;
     channel->handle         = ++mixer->handleCount;
-    channel->instEnable     = 1;
-    channel->instVolume     = 100;
-    channel->instPan        = 50;
-    if (name != NULL) {
-        strncpy(channel->name, name, MIXER_CHANNEL_NAME_LENGTH - 1);
+    channel->meterEnergy[0] = 0;
+    channel->meterEnergy[1] = 0;
+    channel->meterSum[0]    = 0;
+    channel->meterSum[1]    = 0;
+    channel->meterDcSet[0]  = 0;
+    channel->meterDcSet[1]  = 0;
+    channel->slot           = mixer->createSlot;
+    channel->sslot          = mixer->createSslot;
+    channel->device         = mixer->createDevice;
+    channel->voices         = -1;
+    memcpy(channel->name, mixer->createName, sizeof(channel->name));
+    /* The lowest index not taken, so a re-plugged chip gets back the one
+    ** it would get on the next machine start. */
+    channel->index          = 1;
+    for (i = 0; i < mixer->channelCount - 1; i++) {
+        MixerChannel* other = mixer->channels + i;
+        if (other->type == audioType && other->slot == channel->slot &&
+            other->sslot == channel->sslot && other->index == channel->index) {
+            channel->index++;
+            i = -1;
+        }
     }
 
-    if (mixer->deviceOpen) {
-        channel->pending = 1;
-        recalculateChannelVolume(mixer, channel);
-    }
-    else {
-        resolveChannel(mixer, channel, MIXER_LOCATION_BOARD, 0, 0, -1);
-    }
-    mixer->generation++;
+    recalculateInstances(mixer);
 
-    handle = channel->handle;
-    mixerUnlock(mixer);
+    LAYOUT_BUMP(mixer->layoutGen);
 
-    return handle;
+    return channel->handle;
 }
 
-void mixerUnregisterChannel(Mixer* mixer, Int32 handle)
+static void unregisterChannel(Mixer* mixer, Int32 handle)
 {
+    MixerChannel removed;
     int i;
 
-    mixerLock(mixer);
+    if (mixer->channelCount == 0) {
+        return;
+    }
 
     for (i = 0; i < mixer->channelCount; i++) {
         if (mixer->channels[i].handle == handle) {
@@ -1015,16 +1234,351 @@ void mixerUnregisterChannel(Mixer* mixer, Int32 handle)
         }
     }
 
-    if (i < mixer->channelCount) {
-        mixer->channelCount--;
-        while (i < mixer->channelCount) {
-            mixer->channels[i] = mixer->channels[i + 1];
-            i++;
-        }
-        mixer->generation++;
+    if (i == mixer->channelCount) {
+        return;
     }
 
-    mixerUnlock(mixer);
+    removed = mixer->channels[i];
+    LAYOUT_BUMP(mixer->layoutGen);
+    mixer->channelCount--;
+    while (i < mixer->channelCount) {
+        mixer->channels[i] = mixer->channels[i + 1];
+        i++;
+    }
+    LAYOUT_BUMP(mixer->layoutGen);
+
+    if (removed.voices >= 0) {
+        releaseVoices(mixer, removed.voices);
+    }
+    recalculateInstances(mixer);
+}
+
+/* Free a voice table and the levels summed for it. */
+static void releaseVoices(Mixer* mixer, int pool)
+{
+    mixer->voiceOwner[pool]  = 0;
+    mixer->voiceGroups[pool] = NULL;
+    memset(mixer->voicePool + pool, 0, sizeof(MixerVoices));
+    mixer->voicePool[pool].metering = mixer->detail != NULL;
+}
+
+static MixerVoices* attachVoices(Mixer* mixer, Int32 handle, Int32 count,
+                                 const char* const* names, float scale)
+{
+    MixerChannel* channel = NULL;
+    InstanceSetting* s;
+    int i;
+    int pool;
+
+    for (i = 0; i < mixer->channelCount; i++) {
+        if (mixer->channels[i].handle == handle) {
+            channel = mixer->channels + i;
+        }
+    }
+    if (channel == NULL || handle == 0 || count <= 0 || count > MIXER_MAX_VOICES) {
+        return NULL;
+    }
+    if (channel->voices >= 0) {
+        return mixer->voicePool + channel->voices;
+    }
+    for (pool = 0; pool < MAX_CHANNELS && mixer->voiceOwner[pool] != 0; pool++) {
+    }
+    if (pool == MAX_CHANNELS) {
+        return NULL;
+    }
+
+    releaseVoices(mixer, pool);
+    mixer->voicePool[pool].count = count;
+    mixer->voiceNames[pool]      = names;
+    mixer->voicePool[pool].scale = scale;
+    mixer->voicePool[pool].live  = 1;
+    mixer->voiceOwner[pool]      = handle;
+    channel->voices              = pool;
+    /* Another chip under the same key (a machine switch swaps the PSG for an
+    ** SN76489) starts with fresh voices, as if the old one had been removed. */
+    s = findInstance(mixer, channel->type, channel->slot, channel->sslot, channel->index);
+    if (s != NULL && s->voiceNames != NULL && (s->voiceCount != count || s->voiceNames != names)) {
+        forgetRemovedInstance(s);
+        if (instanceIsDefault(s)) {
+            s->used = 0;
+        }
+    }
+    if (s != NULL) {
+        s->voiceCount = count;
+        s->voiceNames = names;
+    }
+    recalculateInstances(mixer);
+    return mixer->voicePool + pool;
+}
+
+static int getVoices(Mixer* mixer, Int32 handle, MixerVoiceInfo* out, int max)
+{
+    int pool;
+    UInt32 idle;
+    int count;
+    int i;
+
+    for (pool = 0; pool < MAX_CHANNELS && mixer->voiceOwner[pool] != handle; pool++) {
+    }
+    if (handle == 0 || pool == MAX_CHANNELS) {
+        return 0;
+    }
+    count = mixer->voicePool[pool].count;
+    idle  = mixer->voicePool[pool].idle;
+    for (i = 0; i < count && i < max; i++) {
+        const char* name = mixer->voiceNames[pool] != NULL ? mixer->voiceNames[pool][i] : NULL;
+        strncpy(out[i].name, name != NULL ? name : "", sizeof(out[i].name) - 1);
+        out[i].name[sizeof(out[i].name) - 1] = 0;
+        out[i].live = mixer->voicePool[pool].live;
+        out[i].idle = i < 32 && ((idle >> i) & 1);
+        out[i].group = mixer->voiceGroups[pool] != NULL ? mixer->voiceGroups[pool][i] : -1;
+    }
+    return count;
+}
+
+/* The emulator thread changes the channels while the detailed mixer reads
+** them from the UI thread; these take the layout lock around it. */
+Int32 mixerRegisterChannel(Mixer* mixer, Int32 audioType, Int32 stereo, MixerUpdateCallback callback, MixerSetSampleRateCallback rateCallback, void* ref)
+{
+    Int32 handle;
+    layoutLock(mixer);
+    handle = registerChannel(mixer, audioType, stereo, callback, rateCallback, ref);
+    layoutUnlock(mixer);
+    return handle;
+}
+
+void mixerUnregisterChannel(Mixer* mixer, Int32 handle)
+{
+    layoutLock(mixer);
+    unregisterChannel(mixer, handle);
+    layoutUnlock(mixer);
+}
+
+MixerVoices* mixerAttachVoices(Mixer* mixer, Int32 handle, Int32 count,
+                               const char* const* names, float scale)
+{
+    MixerVoices* voices;
+    layoutLock(mixer);
+    voices = attachVoices(mixer, handle, count, names, scale);
+    layoutUnlock(mixer);
+    return voices;
+}
+
+void mixerSetVoiceGroups(Mixer* mixer, Int32 handle, const UInt8* groups)
+{
+    int pool;
+
+    layoutLock(mixer);
+    for (pool = 0; pool < MAX_CHANNELS; pool++) {
+        if (handle != 0 && mixer->voiceOwner[pool] == handle) {
+            mixer->voiceGroups[pool] = groups;
+        }
+    }
+    layoutUnlock(mixer);
+}
+
+int mixerGetVoices(Mixer* mixer, Int32 handle, MixerVoiceInfo* out, int max)
+{
+    int count;
+    layoutLock(mixer);
+    count = getVoices(mixer, handle, out, max);
+    layoutUnlock(mixer);
+    return count;
+}
+
+void mixerSetCreateSlot(Mixer* mixer, int slot, int sslot)
+{
+    mixer->createSlot   = slot < 0 ? -1 : slot;
+    mixer->createSslot  = slot < 0 ? -1 : sslot;
+    mixer->createDevice = slot < 0 ? 0 : ++mixer->deviceCount;
+    mixer->createName[0] = 0;
+}
+
+void mixerSetCreateName(Mixer* mixer, const char* name)
+{
+    strncpy(mixer->createName, name != NULL ? name : "", sizeof(mixer->createName) - 1);
+    mixer->createName[sizeof(mixer->createName) - 1] = 0;
+}
+
+int mixerGetInstances(Mixer* mixer, MixerInstanceInfo* out, int max, UInt32* generation)
+{
+    MixerChannel channels[MAX_CHANNELS];
+    UInt32 gen;
+    int tries = 0;
+    int count;
+    int i;
+
+    /* Copy the list between two equal, even generations; give up retrying
+    ** after a while so a stalled writer cannot hang the UI. */
+    do {
+        gen = mixer->layoutGen;
+        METER_BARRIER();
+        count = MIN(mixer->channelCount, MAX_CHANNELS);
+        memcpy(channels, mixer->channels, count * sizeof(MixerChannel));
+        METER_BARRIER();
+    } while (((gen & 1) || gen != mixer->layoutGen) && ++tries < LAYOUT_TRIES);
+
+    for (i = 0; i < count && i < max; i++) {
+        out[i].handle = channels[i].handle;
+        out[i].type   = channels[i].type;
+        out[i].stereo = channels[i].stereo;
+        out[i].slot   = channels[i].slot;
+        out[i].sslot  = channels[i].sslot;
+        out[i].index  = channels[i].index;
+        out[i].device = channels[i].device;
+        memcpy(out[i].name, channels[i].name, sizeof(out[i].name));
+    }
+    if (generation != NULL) {
+        *generation = gen;
+    }
+    return count;
+}
+
+/* Only solos of chips plugged in now count, so a chip gone by any path
+** cannot leave the others silent. Run it whenever a chip comes or goes. */
+static void recalculateInstances(Mixer* mixer)
+{
+    int i;
+
+    mixer->soloCount = 0;
+    for (i = 0; i < INSTANCE_SETTINGS; i++) {
+        InstanceSetting* s = mixer->instances + i;
+        if (s->used && (s->solo || s->voiceSolo) &&
+            findChannel(mixer, s->type, s->slot, s->sslot, s->index) != NULL) {
+            mixer->soloCount++;
+        }
+    }
+    for (i = 0; i < mixer->channelCount; i++) {
+        recalculateChannelVolume(mixer, mixer->channels + i);
+        recalculateVoices(mixer, mixer->channels + i);
+    }
+}
+
+int mixerSetInstance(Mixer* mixer, Int32 type, Int32 slot, Int32 sslot, Int32 index,
+                     Int32 volume, Int32 mute, Int32 solo)
+{
+    InstanceSetting* s;
+
+    layoutLock(mixer);
+    s = addInstance(mixer, type, slot, sslot, index);
+    if (s == NULL) {
+        layoutUnlock(mixer);
+        return 0;
+    }
+    s->gain = detailGain(volume);
+    s->mute = mute ? 1 : 0;
+    s->solo = solo ? 1 : 0;
+    if (instanceIsDefault(s)) {
+        s->used = 0;
+    }
+    recalculateInstances(mixer);
+    layoutUnlock(mixer);
+    return 1;
+}
+
+void mixerGetInstanceSetting(Mixer* mixer, Int32 type, Int32 slot, Int32 sslot, Int32 index,
+                             Int32 voice, Int32* volume, Int32* mute, Int32* solo)
+{
+    InstanceSetting* s = findInstance(mixer, type, slot, sslot, index);
+    UInt64 bit = voice >= 0 && voice < MIXER_MAX_VOICES ? (UInt64)1 << voice : 0;
+
+    *volume = 100;
+    *mute   = 0;
+    *solo   = 0;
+    if (s == NULL || (voice >= 0 && bit == 0)) {
+        return;
+    }
+    if (voice < 0) {
+        *volume = detailVolume(s->gain);
+        *mute   = s->mute;
+        *solo   = s->solo;
+    }
+    else {
+        *volume = detailVolume(s->voiceGain[voice]);
+        *mute   = (s->voiceMute & bit) != 0;
+        *solo   = (s->voiceSolo & bit) != 0;
+    }
+}
+
+/* Read without the layout lock, as mixerGetInstanceSetting is: the Sound
+** Mixer polls this many times a second. */
+UInt32 mixerGetPartlyMutedTypes(Mixer* mixer)
+{
+    UInt32 types = 0;
+    UInt32 present = 0;
+    UInt32 cut = 0;
+    int i;
+
+    for (i = 0; i < mixer->channelCount; i++) {
+        MixerChannel* channel = mixer->channels + i;
+        InstanceSetting* s;
+        UInt64 voices = 0;
+
+        if (channel->index < 1 || channel->type < 0 || channel->type >= 32) {
+            continue;
+        }
+        s = findInstance(mixer, channel->type, channel->slot, channel->sslot, channel->index);
+        if (channel->voices >= 0) {
+            Int32 count = mixer->voicePool[channel->voices].count;
+            voices = count >= 64 ? ~(UInt64)0 : ((UInt64)1 << count) - 1;
+        }
+        present |= 1u << channel->type;
+        if (s == NULL || (!s->solo && (voices == 0 || (s->voiceSolo & voices) != voices))) {
+            cut |= 1u << channel->type;
+        }
+        if (s != NULL && (s->mute || (s->voiceMute & voices))) {
+            types |= 1u << channel->type;
+        }
+    }
+    if (mixer->soloCount > 0) {
+        types |= ((1u << MIXER_CHANNEL_TYPE_COUNT) - 1) & ~(present & ~cut);
+    }
+    return types;
+}
+
+int mixerSetVoice(Mixer* mixer, Int32 type, Int32 slot, Int32 sslot, Int32 index,
+                  Int32 voice, Int32 volume, Int32 mute, Int32 solo)
+{
+    InstanceSetting* s;
+    UInt64 bit;
+
+    if (voice < 0 || voice >= MIXER_MAX_VOICES) {
+        return 0;
+    }
+    layoutLock(mixer);
+    s = addInstance(mixer, type, slot, sslot, index);
+    if (s == NULL) {
+        layoutUnlock(mixer);
+        return 0;
+    }
+    bit = (UInt64)1 << voice;
+    s->voiceGain[voice] = detailGain(volume);
+    s->voiceMute = mute ? s->voiceMute | bit : s->voiceMute & ~bit;
+    s->voiceSolo = solo ? s->voiceSolo | bit : s->voiceSolo & ~bit;
+    if (instanceIsDefault(s)) {
+        s->used = 0;
+    }
+    recalculateInstances(mixer);
+    layoutUnlock(mixer);
+    return 1;
+}
+
+void mixerForgetRemovedInstances(Mixer* mixer)
+{
+    int i;
+
+    layoutLock(mixer);
+    for (i = 0; i < INSTANCE_SETTINGS; i++) {
+        InstanceSetting* s = mixer->instances + i;
+        if (s->used && findChannel(mixer, s->type, s->slot, s->sslot, s->index) == NULL) {
+            forgetRemovedInstance(s);
+            if (instanceIsDefault(s)) {
+                s->used = 0;
+            }
+        }
+    }
+    recalculateInstances(mixer);
+    layoutUnlock(mixer);
 }
 
 void mixerReset(Mixer* mixer)
@@ -1037,11 +1591,8 @@ void mixerSync(Mixer* mixer)
 {
     UInt32 systemTime = boardSystemTime();
     Int16* buffer   = mixer->buffer;
-    Int32** chBuff;
-    Int32* mix;
+    Int32* chBuff[MAX_CHANNELS];
     UInt32 count;
-    UInt32 frames;
-    UInt32 frameNo;
     UInt64 elapsed;
     int i;
 
@@ -1056,47 +1607,6 @@ void mixerSync(Mixer* mixer)
 
     /* Output is always interleaved stereo; mono is dual-mono via
     ** recalculateChannelVolume, so no driver tear-down on toggle. */
-    if (!mixer->enable) {
-        /* Counting a frame can close a meter block, which walks the channels. */
-        frameNo = mixer->meterFrames;
-        frames  = count;
-        mixerLock(mixer);
-        while (frames--) {
-            meterCountFrame(mixer);
-        }
-        mixerUnlock(mixer);
-
-        while (count--) {
-            buffer[mixer->index++] = 0;
-            buffer[mixer->index++] = 0;
-
-            frameNo++;
-            if (mixer->index == mixer->fragmentSize) {
-                if (mixer->writeCallback != NULL) {
-                    mixer->writeCallback(mixer->writeRef, buffer, mixer->fragmentSize);
-                }
-                mixer->meterDelivered = frameNo;
-                if (mixer->tapCallback != NULL) {
-                    mixer->tapCallback(mixer->tapRef, buffer, mixer->fragmentSize);
-                }
-                if (mixer->logging) {
-                    fwrite(buffer, 2 * mixer->fragmentSize, 1, mixer->file);
-                }
-                mixer->index = 0;
-            }
-        }
-        return;
-    }
-
-    /* Mix under the lock into mixBuffer, then hand the result to the audio
-    ** driver without it: the driver may block, and the UI thread would wait
-    ** on the lock for as long. */
-    mixerLock(mixer);
-    chBuff  = mixer->chBuff;
-    frames  = count;
-    frameNo = mixer->meterFrames;
-    mix     = mixer->mixBuffer;
-
     for (i = 0; i < mixer->channelCount; i++) {
         if (mixer->channels[i].updateCallback != NULL) {
             chBuff[i] = mixer->channels[i].updateCallback(mixer->channels[i].ref, count);
@@ -1148,7 +1658,8 @@ void mixerSync(Mixer* mixer)
         mixer->meterSum[0]    += left;
         mixer->meterSum[1]    += right;
 
-        if (!mixer->masterEnable) {
+        /* The turboR PCM mute silences the output; the chips run on. */
+        if (!mixer->masterEnable || !mixer->enable) {
             left  = 0;
             right = 0;
         }
@@ -1157,10 +1668,24 @@ void mixerSync(Mixer* mixer)
         if (right >  32767) { right = 32767; }
         if (right < -32767) { right = -32767; }
 
-        *mix++ = left;
-        *mix++ = right;
+        buffer[mixer->index++] = (Int16)left;
+        buffer[mixer->index++] = (Int16)right;
 
         meterCountFrame(mixer);
+        if (mixer->index == mixer->fragmentSize) {
+            if (mixer->writeCallback != NULL) {
+                mixer->writeCallback(mixer->writeRef, buffer, mixer->fragmentSize);
+            }
+            mixer->meterDelivered = mixer->meterFrames;
+            if (mixer->tapCallback != NULL) {
+                mixer->tapCallback(mixer->tapRef, buffer, mixer->fragmentSize);
+            }
+            if (mixer->logging) {
+                fwrite(buffer, 2 * mixer->fragmentSize, 1, mixer->file);
+            }
+            mixer->index = 0;
+        }
+
         mixer->volIndex++;
     }
 
@@ -1173,30 +1698,7 @@ void mixerSync(Mixer* mixer)
         mixer->volIndex = 0;
     }
 
-    mixerUnlock(mixer);
-
-    mix = mixer->mixBuffer;
-    while (frames--) {
-        buffer[mixer->index++] = (Int16)*mix++;
-        buffer[mixer->index++] = (Int16)*mix++;
-
-        frameNo++;
-        if (mixer->index == mixer->fragmentSize) {
-            if (mixer->writeCallback != NULL) {
-                mixer->writeCallback(mixer->writeRef, buffer, mixer->fragmentSize);
-            }
-            /* meterFrames already counts the whole batch mixed above; only
-            ** the frames handed over so far are delivered. */
-            mixer->meterDelivered = frameNo;
-            if (mixer->tapCallback != NULL) {
-                mixer->tapCallback(mixer->tapRef, buffer, mixer->fragmentSize);
-            }
-            if (mixer->logging) {
-                fwrite(buffer, 2 * mixer->fragmentSize, 1, mixer->file);
-            }
-            mixer->index = 0;
-        }
-    }
+    meterPushVoices(mixer);
 }
 
 void mixerStartLog(Mixer* mixer, char* fileName) 

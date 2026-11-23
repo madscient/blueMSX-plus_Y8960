@@ -1,7 +1,7 @@
 /*****************************************************************************
 **
-** A window with one row per sound mixer channel instance.
-** Copyright (C) 2026 madscient
+** Detailed mixer window: volume, mute, solo and meters per chip and voice.
+** Copyright (C) 2026 Hesoten
 ** See https://github.com/Hesoten/blueMSX-plus for change history.
 **
 ** This program is free software; you can redistribute it and/or modify
@@ -20,12 +20,18 @@
 **
 ******************************************************************************
 */
-#ifndef WIN32_MIXER_DEVICES_H
-#define WIN32_MIXER_DEVICES_H
+#ifndef DETAILED_MIXER_H
+#define DETAILED_MIXER_H
 
-#include <windows.h>
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-/* Opens the window, or brings it to the front if it is open. */
-void mixerDevicesShow(HWND owner);
+/* Open the detailed mixer window, or bring it to the front. */
+void detailedMixerShow(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

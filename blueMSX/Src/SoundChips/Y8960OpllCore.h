@@ -178,6 +178,10 @@ typedef struct __Y8960OPLL {
   int16_t mix_out[2];
 
   Y8960OPLL_RateConv *conv;
+
+  /* blueMSX addition: see Y8960OPLL_setVoiceHook. */
+  void (*voice_hook)(void *ref, int16_t *ch_out, int count);
+  void *voice_hook_ref;
 } Y8960OPLL;
 
 Y8960OPLL *Y8960OPLL_new(uint32_t clk, uint32_t rate);
@@ -190,6 +194,10 @@ void Y8960OPLL_resetPatch(Y8960OPLL *);
 /* blueMSX addition: re-link Y8960OPLL_SLOT pointers after a bulk Y8960OPLL memcpy
 ** (save-state restore) leaves them dangling. */
 void Y8960OPLL_relinkAfterRestore(Y8960OPLL *opll);
+
+/* blueMSX addition: before the channels are panned and summed, hand a copy
+** of them to hook, which may scale them; NULL restores the plain sum. */
+void Y8960OPLL_setVoiceHook(Y8960OPLL *opll, void (*hook)(void *, int16_t *, int), void *ref);
 
 /**
  * Set output wave sampling rate.
@@ -257,6 +265,17 @@ void Y8960OPLL_forceRefresh(Y8960OPLL *);
 void Y8960OPLL_dumpToPatch(const uint8_t *dump, Y8960OPLL_PATCH *patch);
 void Y8960OPLL_patchToDump(const Y8960OPLL_PATCH *patch, uint8_t *dump);
 void Y8960OPLL_getDefaultPatch(int32_t type, int32_t num, Y8960OPLL_PATCH *);
+
+/* Each bank of preset voices holds voices 1-15 and then the three rhythm
+** entries, eight register bytes apiece in the order of registers 00h-07h. */
+#define Y8960OPLL_ROM_VOICES_PER_BANK 18
+#define Y8960OPLL_ROM_VOICES_SIZE (Y8960OPLL_BANK_COUNT * Y8960OPLL_ROM_VOICES_PER_BANK * 8)
+
+/**
+ * Set the preset voices of the four banks, in BANK register order, for every
+ * chip created afterwards. Until this is called the presets are silent.
+ */
+void Y8960OPLL_setRomVoices(const uint8_t *voices);
 
 /**
  *  Set channel mask

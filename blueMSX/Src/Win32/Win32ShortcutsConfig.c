@@ -1410,7 +1410,6 @@ static Shortcuts* loadShortcuts(char* profileName)
     LOAD_SHORTCUT(shortcutFile, toolsShowShorcutEditor);
     LOAD_SHORTCUT(shortcutFile, toolsShowKeyboardEditor);
     LOAD_SHORTCUT(shortcutFile, toolsShowMixer);
-    LOAD_SHORTCUT(shortcutFile, toolsShowMixerDevices);
     LOAD_SHORTCUT(shortcutFile, toolsShowDebugger);
     LOAD_SHORTCUT(shortcutFile, toolsShowTrainer);
     LOAD_SHORTCUT(shortcutFile, helpShowHelp);
@@ -1543,7 +1542,6 @@ static int saveShortcuts(char* profileName, Shortcuts* shortcuts)
     SAVE_SHORTCUT(shortcutFile, toolsShowShorcutEditor);
     SAVE_SHORTCUT(shortcutFile, toolsShowKeyboardEditor);
     SAVE_SHORTCUT(shortcutFile, toolsShowMixer);
-    SAVE_SHORTCUT(shortcutFile, toolsShowMixerDevices);
     SAVE_SHORTCUT(shortcutFile, toolsShowDebugger);
     SAVE_SHORTCUT(shortcutFile, toolsShowTrainer);
     SAVE_SHORTCUT(shortcutFile, helpShowHelp);
@@ -1749,7 +1747,6 @@ static void shortcutsForEachAction(Shortcuts* s, ShortcutActionVisitor visit, vo
     ADD_SHORTCUT(toolsShowShorcutEditor, langShortcutShowShortcuts());
     ADD_SHORTCUT(toolsShowKeyboardEditor, langShortcutShowKeyboard());
     ADD_SHORTCUT(toolsShowMixer, langShortcutShowMixer());
-    ADD_SHORTCUT(toolsShowMixerDevices, langShortcutShowMixerDevices());
     ADD_SHORTCUT(toolsShowDebugger, langShortcutShowDebugger());
     ADD_SHORTCUT(toolsShowTrainer, langShortcutShowTrainer());
     

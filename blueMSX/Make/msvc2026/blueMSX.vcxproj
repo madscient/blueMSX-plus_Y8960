@@ -689,6 +689,10 @@
       <AdditionalIncludeDirectories>..\..\Src\ThirdParty\imgui;..\..\Src\Win32\ImGui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>IMGUI_USER_CONFIG=&quot;imconfig_bluemsx.h&quot;;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
+    <ClCompile Include="..\..\Src\Win32\ImGui\DetailedMixer\DetailedMixer.cpp">
+      <AdditionalIncludeDirectories>..\..\Src\ThirdParty\imgui;..\..\Src\Win32\ImGui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>IMGUI_USER_CONFIG=&quot;imconfig_bluemsx.h&quot;;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
     <ClCompile Include="..\..\Src\Win32\ImGui\ImGuiWindow.cpp">
       <AdditionalIncludeDirectories>..\..\Src\ThirdParty\imgui;..\..\Src\Win32\ImGui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>IMGUI_USER_CONFIG=&quot;imconfig_bluemsx.h&quot;;%(PreprocessorDefinitions)</PreprocessorDefinitions>
@@ -757,6 +761,10 @@
       <AdditionalIncludeDirectories>..\..\Src\ThirdParty\imgui;..\..\Src\Win32\ImGui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>IMGUI_USER_CONFIG=&quot;imconfig_bluemsx.h&quot;;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
+    <ClCompile Include="..\..\Src\Win32\ImGui\VdpViewer\VdpBanks.cpp">
+      <AdditionalIncludeDirectories>..\..\Src\ThirdParty\imgui;..\..\Src\Win32\ImGui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>IMGUI_USER_CONFIG=&quot;imconfig_bluemsx.h&quot;;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
     <ClCompile Include="..\..\Src\Win32\ImGui\VdpViewer\ChipFeed.cpp">
       <AdditionalIncludeDirectories>..\..\Src\ThirdParty\imgui;..\..\Src\Win32\ImGui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>IMGUI_USER_CONFIG=&quot;imconfig_bluemsx.h&quot;;%(PreprocessorDefinitions)</PreprocessorDefinitions>
@@ -822,7 +830,6 @@
     <ClCompile Include="..\..\Src\Win32\Win32ShortcutsConfig.c" />
     <ClCompile Include="..\..\Src\Win32\Win32snd.c" />
     <ClCompile Include="..\..\Src\Win32\Win32ThemeClassic.c" />
-    <ClCompile Include="..\..\Src\Win32\Win32MixerDevices.c" />
     <ClCompile Include="..\..\Src\Win32\Win32Thread.c" />
     <ClCompile Include="..\..\Src\Win32\Win32Timer.c" />
     <ClCompile Include="..\..\Src\Win32\Win32Toast.cpp" />
@@ -1108,7 +1115,6 @@
     <ClCompile Include="..\..\Src\SoundChips\Y8960OpllCore.c" />
     <ClCompile Include="..\..\Src\SoundChips\Y8960Opllex.c" />
     <ClCompile Include="..\..\Src\SoundChips\Y8960Opm.c" />
-    <ClCompile Include="..\..\Src\SoundChips\Y8960OpmCore.c" />
     <ClCompile Include="..\..\Src\SoundChips\Y8960Ssgs.c" />
     <ClCompile Include="..\..\Src\SoundChips\Y8960Opl2Core.cpp">
       <LanguageStandard>stdcpp20</LanguageStandard>
@@ -1143,6 +1149,7 @@
     <ClCompile Include="..\..\Src\Board\Coleco.c" />
     <ClCompile Include="..\..\Src\Board\Machine.c" />
     <ClCompile Include="..\..\Src\Board\MSX.c" />
+    <ClCompile Include="..\..\Src\Board\RewindInput.c" />
     <ClCompile Include="..\..\Src\Board\SG1000.c" />
     <ClCompile Include="..\..\Src\Board\SVI.c" />
     <ClCompile Include="..\..\Src\Media\Crc32Calc.c" />
@@ -1180,10 +1187,16 @@
     <ClCompile Include="..\..\Src\Control\ControlOpSymbol.c" />
     <ClCompile Include="..\..\Src\Control\ControlOpInput.c" />
     <ClCompile Include="..\..\Src\Control\ControlOpScreen.c" />
+    <ClCompile Include="..\..\Src\Control\ControlOpVdp.c" />
+    <ClCompile Include="..\..\Src\Control\ControlOpDevices.c" />
+    <ClCompile Include="..\..\Src\Control\ControlOpTrace.c" />
+    <ClCompile Include="..\..\Src\Control\ControlGeo3d.c" />
     <ClCompile Include="..\..\Src\Control\ControlOpMachine.c" />
     <ClCompile Include="..\..\Src\Control\ControlView.c" />
     <ClCompile Include="..\..\Src\Control\ControlHello.c" />
     <ClCompile Include="..\..\Src\Control\ControlBreak.c" />
+    <ClCompile Include="..\..\Src\Control\ControlBreakCond.c" />
+    <ClCompile Include="..\..\Src\Control\ControlExpr.c" />
     <ClCompile Include="..\..\Src\Win32\Win32ControlInstance.c" />
     <ClCompile Include="..\..\Src\Win32\Win32ControlPeer.c" />
     <ClCompile Include="..\..\Src\Control\ControlAddressArg.c" />
@@ -1278,8 +1291,10 @@
     <ClInclude Include="..\..\Src\Win32\ImGui\VdpViewer\Geo3DRunLog.h" />
     <ClInclude Include="..\..\Src\Win32\ImGui\VdpViewer\VdpRaster.h" />
     <ClInclude Include="..\..\Src\Win32\ImGui\VdpViewer\VdpParts.h" />
+    <ClInclude Include="..\..\Src\Win32\ImGui\VdpViewer\VdpBanks.h" />
     <ClInclude Include="..\..\Src\Win32\ImGui\VdpViewer\V9990Decode.h" />
     <ClInclude Include="..\..\Src\Win32\ImGui\VdpViewer\V9990Sprite.h" />
+    <ClInclude Include="..\..\Src\Win32\ImGui\DetailedMixer\DetailedMixer.h" />
     <ClInclude Include="..\..\Src\Win32\Win32Cdrom.h" />
     <ClInclude Include="..\..\Src\Win32\Win32Common.h" />
     <ClInclude Include="..\..\Src\Win32\Win32Dir.h" />
@@ -1302,7 +1317,6 @@
     <ClInclude Include="..\..\Src\Win32\Win32Sound.h" />
     <ClInclude Include="..\..\Src\Win32\Win32TextUtf8.h" />
     <ClInclude Include="..\..\Src\Win32\Win32ThemeClassic.h" />
-    <ClInclude Include="..\..\Src\Win32\Win32MixerDevices.h" />
     <ClInclude Include="..\..\Src\Win32\Win32Toast.h" />
     <ClInclude Include="..\..\Src\Win32\Win32ToolLoader.h" />
     <ClInclude Include="..\..\Src\Win32\Win32Uart.h" />
@@ -1585,7 +1599,6 @@
     <ClInclude Include="..\..\Src\SoundChips\Y8960OpllCore.h" />
     <ClInclude Include="..\..\Src\SoundChips\Y8960Opllex.h" />
     <ClInclude Include="..\..\Src\SoundChips\Y8960Opm.h" />
-    <ClInclude Include="..\..\Src\SoundChips\Y8960OpmCore.h" />
     <ClInclude Include="..\..\Src\SoundChips\Y8960Ssgs.h" />
     <ClInclude Include="..\..\Src\SoundChips\Y8960Opl2Core.h" />
     <ClInclude Include="..\..\Src\SoundChips\Y8960Opl2Adpcm.h" />
@@ -1615,6 +1628,7 @@
     <ClInclude Include="..\..\Src\Board\Coleco.h" />
     <ClInclude Include="..\..\Src\Board\Machine.h" />
     <ClInclude Include="..\..\Src\Board\MSX.h" />
+    <ClInclude Include="..\..\Src\Board\RewindInput.h" />
     <ClInclude Include="..\..\Src\Board\SG1000.h" />
     <ClInclude Include="..\..\Src\Board\SVI.h" />
     <ClInclude Include="..\..\Src\Arch\ArchBitmap.h" />
@@ -1668,6 +1682,8 @@
     <ClInclude Include="..\..\Src\Control\ControlView.h" />
     <ClInclude Include="..\..\Src\Control\ControlHello.h" />
     <ClInclude Include="..\..\Src\Control\ControlBreak.h" />
+    <ClInclude Include="..\..\Src\Control\ControlBreakCond.h" />
+    <ClInclude Include="..\..\Src\Control\ControlExpr.h" />
     <ClInclude Include="..\..\Src\Control\ControlInstance.h" />
     <ClInclude Include="..\..\Src\Control\ControlPeer.h" />
     <ClInclude Include="..\..\Src\Control\ControlAddressArg.h" />

@@ -38,6 +38,7 @@
 #include "DebugDeviceManager.h"
 #include "FrameBuffer.h"
 #include "ArchVideoIn.h"
+#include "ArchEvent.h"
 #include "Language.h"
 #include "VdpDebug.h"
 #include "Geo3DDevice.h"
@@ -143,12 +144,15 @@ void vdpUnregisterDaConverter(int vdpDaHandle)
 #define HPERIOD      1368
 
 #define VRAM_SIZE (256 * 1024)
+/* The V9968 has sixteen 256kB banks; a bank number sits above A17. */
+#define VRAM_BANKS_V9968 VDP_DEBUG_BANKS
+#define VRAM_BANK_SHIFT  18
 /* What a state holds of every VDP but the V9968, as before the V9968. */
 #define VRAM_STATE_SIZE (192 * 1024)
 
 static int vramAddr;
 /* A17 sits outside the odd/even rotation and picks a 128kB half. */
-#define VDP_ILV(vdp, a) ((vdp)->vramA17 ? (((a) & 0x20000) | VDP_VRAM_INDEX((a) & 0x1ffff)) : VDP_VRAM_INDEX(a))
+#define VDP_ILV(vdp, a) VDP_VRAM_INDEX_A17((vdp)->vramA17, a)
 #define vdpIsPairedBitmap(vdp) (VDP_VRAM_INTERLEAVED((vdp)->screenMode))
 #define vdpIsInterleaved(vdp)  (vdpIsPairedBitmap(vdp) && !(vdp)->sprMode3)
 #define vdpIsBitmapLinear(vdp) (vdpIsPairedBitmap(vdp) && (vdp)->sprMode3)
@@ -167,6 +171,14 @@ static int vramAddr;
 #define vdpIsV9968(vdp)              ((vdp)->vdpVersion == VDP_V9968)
 // R#21 bit0 V58: set means behave as a V9958, clear means as a V9968.
 #define vdpIsV9968Native(vdp)        (vdpIsV9968(vdp) && !((vdp)->vdpRegs[21] & 0x01))
+// R#28 bits 3-0: the bank the CPU port reaches, as an offset into vram.
+#define vdpCpuBank(vdp)              (vdpIsV9968(vdp) ? (((vdp)->vdpRegs[28] & 0x0f) << VRAM_BANK_SHIFT) : 0)
+// R#29 bits 3-0 and 7-4: the background and the sprite banks.
+#define vdpDispBank(vdp)             (vdpIsV9968(vdp) ? (((vdp)->vdpRegs[29] & 0x0f) << VRAM_BANK_SHIFT) : 0)
+#define vdpSprBank(vdp)              (vdpIsV9968(vdp) ? (((vdp)->vdpRegs[29] >> 4) << VRAM_BANK_SHIFT) : 0)
+// R#30 bits 3-0 and 7-4: the command source and destination banks.
+#define vdpCmdSrcBank(vdp)           (vdpIsV9968(vdp) ? (((vdp)->vdpRegs[30] & 0x0f) << VRAM_BANK_SHIFT) : 0)
+#define vdpCmdDstBank(vdp)           (vdpIsV9968(vdp) ? (((vdp)->vdpRegs[30] >> 4) << VRAM_BANK_SHIFT) : 0)
 // R#20 bit1 SVNS and bit2 ILNS take the sprites and the line interrupt off
 // the R#23 vertical offset; bit7 S16 raises the sprites per line to sixteen.
 #define vdpIsSpriteVScrollOff(vdp)   (((vdp)->vdpRegs[20] & 0x02) && vdpIsV9968(vdp))
@@ -228,13 +240,13 @@ static const UInt8 registerValueMaskMSX2p[64] = {
 };
 
 /* The V9958 mask, widened for the 8 bit R#16 index, the R#20 mode bits, the
-** R#25 sprite shuffle and the A17 the table bases gain: R#2 bit7, R#4 and R#6
-** bit6, R#10 bit3, R#11 bit2. */
+** R#25 sprite shuffle, the R#28-R#30 VRAM banks and the A17 the table bases
+** gain: R#2 bit7, R#4 and R#6 bit6, R#10 bit3, R#11 bit2. */
 static const UInt8 registerValueMaskV9968[64] = {
 	0x7e, 0x7f, 0xff, 0xff, 0x7f, 0xff, 0x7f, 0xff,
 	0xfb, 0xbf, 0x0f, 0x07, 0xff, 0xff, 0x0f, 0x0f,
 	0xff, 0xbf, 0xff, 0xff, 0xff, 0x3f, 0x3f, 0xff,
-    0x00, 0xff, 0x3f, 0x07, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0xff, 0x3f, 0x07, 0x0f, 0xff, 0xff, 0x00,
     0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
     0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
     0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
@@ -590,8 +602,16 @@ struct VDP {
     int    vramAccMask;
     int vramOffsets[2];
     int vramMasks[4];
-    /* The renderers read on from a line start that can be the last page. */
-    UInt8  vram[VRAM_SIZE + 1024];
+    UInt8* vram;
+    int    vramBanks;
+    /* Banks that may hold a nonzero byte; the debugger marks its own word. */
+    UInt32 vramBanksUsed;
+    UInt32 vramBanksDbg;
+    /* Where R#29 puts the background and the sprites; vram off the V9968. */
+    UInt8* vramDisp;
+    UInt8* vramSpr;
+    /* For the debugger, not saved; a debugger write racing the emulator may lose a count. */
+    UInt32 sprBankHits[VRAM_BANKS_V9968];
 
     int deviceHandle;
     int debugHandle;
@@ -693,7 +713,7 @@ static UInt8* vdpSpriteVram(VDP* vdp, int addr)
     if (!vdpIsV9968(vdp)) {
         return MAP_VRAM(vdp, addr);
     }
-    return vdp->vram + ((vdpIsInterleaved(vdp) ? VDP_ILV(vdp, addr) : addr) & vdp->vramMask);
+    return vdp->vramSpr + ((vdpIsInterleaved(vdp) ? VDP_ILV(vdp, addr) : addr) & vdp->vramMask);
 }
 
 /* Where the n'th byte of a bitmap line sits and, returned, what one pair of
@@ -709,6 +729,10 @@ static int vdpBitmapBytes(VDP* vdp, int* ofs)
     return pairStep;
 }
 
+/* A line set up again part way along keeps its column inside the line on the
+** V9968, so no read runs on into the next bank. */
+#define vdpScrollInLine(vdp, s, mask) (vdpIsV9968(vdp) ? (s) & (mask) : (s))
+
 #include "SpriteLine.h"
 #include "Common.h"
 
@@ -722,6 +746,14 @@ int vdpDebugSpriteM3Sample(int offset, int magnify, int sizeShift)
 static void digitize(VDP* vdp);
 static void updateOutputMode(VDP* vdp);
 
+/* The engine writes only to its destination bank, so marking it here covers
+** every command. */
+static void vdpUpdateCmdBanks(VDP* vdp)
+{
+    vdp->vramBanksUsed |= 1u << (vdpCmdDstBank(vdp) >> VRAM_BANK_SHIFT);
+    vdpCmdSetBanks(vdp->cmdEngine, vdpCmdSrcBank(vdp), vdpCmdDstBank(vdp));
+}
+
 /* R#21 bit0 clear is what opens the second 128kB to the CPU port and the
 ** command engine. */
 static void vdpUpdateVramMode(VDP* vdp)
@@ -732,10 +764,16 @@ static void vdpUpdateVramMode(VDP* vdp)
     vdp->vramAccMask = wide ? vdp->vramMask
                             : vdp->vramMasks[((vdp->vdpRegs[8] & 0x08) >> 2) | ((vdp->vdpRegs[0x2d] >> 6) & 1)];
     if (wide) {
-        vdp->vramPtr    = vdp->vram;
+        vdp->vramPtr    = vdp->vram + vdpCpuBank(vdp);
         vdp->vramEnable = 1;
     }
+    else if (vdpIsV9968(vdp)) {
+        vdp->vramPtr    = vdp->vram + vdp->vramOffsets[(vdp->vdpRegs[0x2d] >> 6) & 1];
+    }
+    vdp->vramDisp = vdp->vram + vdpDispBank(vdp);
+    vdp->vramSpr  = vdp->vram + vdpSprBank(vdp);
     vdpCmdSetVram256(vdp->cmdEngine, wide);
+    vdpUpdateCmdBanks(vdp);
     vdpCmdSetExtCommands(vdp->cmdEngine, vdpIsV9968Native(vdp));
     vdpCmdSetInterleave(vdp->cmdEngine, vdpIsInterleaved(vdp));
     vdpCmdSetSlotLoad(vdp->cmdEngine, vdpCmdSlotLoad(vdp));
@@ -1521,6 +1559,10 @@ static void vdpUpdateRegisters(VDP* vdp, UInt8 reg, UInt8 value)
     if (vdpIsV9968(vdp) && vdp->extRegsLocked && (reg == 20 || reg == 21)) {
         return;
     }
+    /* The bank registers load only while V58 is clear and P#4 is unlocked. */
+    if (vdpIsV9968(vdp) && reg >= 28 && reg <= 30 && (vdp->extRegsLocked || !vdpIsV9968Native(vdp))) {
+        return;
+    }
     /* SPS only loads while V58 is clear and P#4 is unlocked; the other R#25 bits always do. */
     if (reg == 25 && vdpIsV9968(vdp) && (vdp->extRegsLocked || !vdpIsV9968Native(vdp))) {
         value = (value & 0x7f) | (vdp->vdpRegs[25] & 0x80);
@@ -1677,7 +1719,7 @@ static void vdpUpdateRegisters(VDP* vdp, UInt8 reg, UInt8 value)
         break;
 
     case 12:
-        vdpCmdSetTextBackColor(vdp->cmdEngine, value & 0x0f);
+        vdpCmdSetTextBackColor(vdp->cmdEngine, value);
         break;
 
     case 14:
@@ -1731,6 +1773,10 @@ static void vdpUpdateRegisters(VDP* vdp, UInt8 reg, UInt8 value)
         break;
 
     case 21:
+        /* A command running reaches here on its old banks before they clear. */
+        if ((value & 0x01) && vdpIsV9968(vdp) && vdp->vdpRegs[30] != 0) {
+            vdpCmdExecute(vdp->cmdEngine, boardSystemTime());
+        }
         /* S#1 bits 5-1 are the id, bit0 is FH and must survive. */
         if ((change & 0x01) && vdpIsV9968(vdp)) {
             vdp->vdpStatus[1] = (vdp->vdpStatus[1] & ~0x3e) | (vdpIsV9968Native(vdp) ? 0x06 : 0x04);
@@ -1739,6 +1785,39 @@ static void vdpUpdateRegisters(VDP* vdp, UInt8 reg, UInt8 value)
         /* Every write of V58 = 1 does this, not only the change to it. */
         if ((value & 0x01) && vdpIsV9968(vdp)) {
             clearTableBaseA17(vdp);
+            if (vdp->vdpRegs[29] >> 4) {
+                vdp->sprBankHits[0]++;
+            }
+            vdp->vdpRegs[28] = 0;
+            vdp->vdpRegs[29] = 0;
+            vdp->vdpRegs[30] = 0;
+            vdpUpdateVramMode(vdp);
+        }
+        break;
+
+    /* A byte already fetched ahead is not fetched again from the new bank. */
+    case 28:
+        if (vdpIsV9968(vdp)) {
+            vdpUpdateVramMode(vdp);
+        }
+        break;
+
+    /* Not latched; the sprites take it from the next line they lay out. */
+    case 29:
+        if (vdpIsV9968(vdp)) {
+            vdp->vramDisp = vdp->vram + vdpDispBank(vdp);
+            vdp->vramSpr  = vdp->vram + vdpSprBank(vdp);
+            if (change & 0xf0) {
+                vdp->sprBankHits[value >> 4]++;
+            }
+        }
+        break;
+
+    /* Not latched, so a command running moves to the new banks from now on. */
+    case 30:
+        if (vdpIsV9968(vdp)) {
+            vdpCmdExecute(vdp->cmdEngine, boardSystemTime());
+            vdpUpdateCmdBanks(vdp);
         }
         break;
 
@@ -1850,7 +1929,8 @@ static UInt8 peekStatus(VDP* vdp, UInt16 ioPort)
         break;
 
     case 7: 
-        vdpStatus = vdpGetColor(vdp->cmdEngine);
+        /* Only a CPU read clears TR. */
+        vdpStatus = vdpCmdPeek(vdp->cmdEngine, 0x0c, 0);
         break;
 
     case 8: 
@@ -1858,7 +1938,7 @@ static UInt8 peekStatus(VDP* vdp, UInt16 ioPort)
         break;
 
     case 9: 
-        vdpStatus = (UInt8)(vdpGetBorderX(vdp->cmdEngine) >> 8);
+        vdpStatus = (UInt8)(vdpGetBorderX(vdp->cmdEngine) >> 8) | 0xfe;
         break;
     }
 
@@ -1873,6 +1953,7 @@ static const DebugTraceField tracePageFields[] = {
 static const DebugTraceField traceFrameFields[] = {
     { "page",  DEBUG_TRACE_WORD_A, 0, 32, DEBUG_TRACE_SIGNED, 0, NULL, 0 },
     { "lines", DEBUG_TRACE_WORD_B, 0, 32, DEBUG_TRACE_DEC,    0, NULL, 0 },
+    { "frame", DEBUG_TRACE_WORD_LINK, 0, 32, DEBUG_TRACE_DEC, 0, NULL, 0 },
 };
 
 static const DebugTraceField traceCpuVramFields[] = {
@@ -1882,7 +1963,7 @@ static const DebugTraceField traceCpuVramFields[] = {
 
 static const DebugTraceKindDesc traceRegKinds[] = {
     { VDPREG_TRACE_PAGE,    "page",     tracePageFields,    2 },
-    { VDPREG_TRACE_FRAME,   "frame",    traceFrameFields,   2 },
+    { VDPREG_TRACE_FRAME,   "frame",    traceFrameFields,   3 },
     { VDPREG_TRACE_CPUVRAM, "cpu vram", traceCpuVramFields, 2 },
 };
 
@@ -2002,7 +2083,8 @@ static UInt8 readStatus(VDP* vdp, UInt16 ioPort)
         break;
 
     case 9: 
-        vdpStatus = (UInt8)(vdpGetBorderX(vdp->cmdEngine) >> 8);
+        vdpStatus = (UInt8)(vdpGetBorderX(vdp->cmdEngine) >> 8) | 0xfe;
+        vdpClearBorderDetect(vdp->cmdEngine);
         break;
     }
 
@@ -2030,7 +2112,9 @@ static void write(VDP* vdp, UInt16 ioPort, UInt8 value)
     if (vdp->vramEnable) {
         int index = MAP_VRAMINDEX(vdp, (vdp->vdpRegs[14] << 14) | vdp->vramAddress);
         if (!(index & ~vdp->vramAccMask)) {
+            index += vdpCpuBank(vdp);
             vdp->vram[index] = value;
+            vdp->vramBanksUsed |= 1u << (index >> VRAM_BANK_SHIFT);
 
             if (!vdp->secondary) {
                 tryWatchpoint(DBGTYPE_VIDEO, index, value, vdp, peekVram);
@@ -2155,7 +2239,7 @@ static void digitize(VDP* vdp)
 #define videoDaGet(sm, x, y, pal, cnt) vdpDaDevice.callbacks.daRead(vdpDaDevice.ref, sm, x, y, pal, cnt)
 
     for (y = 0; y < 212; y++) {
-        UInt8* charTable = vdp->vram + (vdpBitmapBase(vdp) & (~vdpIsOddPage(vdp) << shift)
+        UInt8* charTable = vdp->vramDisp + (vdpBitmapBase(vdp) & (~vdpIsOddPage(vdp) << shift)
                                       & ((-1 << (shift + 8)) | ((y + vdpVScroll(vdp)) << shift)));
 
         switch (vdp->screenMode) {
@@ -2401,6 +2485,24 @@ UInt8* vdpDebugGetVram(UInt32* size)
     return theVdp->vram;
 }
 
+int vdpDebugGetVramBanks(void)
+{
+    return theVdp != NULL && vdpIsV9968(theVdp) ? theVdp->vramBanks : 1;
+}
+
+void vdpDebugNoteVramWrite(UInt32 address, UInt32 size)
+{
+    UInt32 bank;
+
+    if (theVdp == NULL || size == 0) {
+        return;
+    }
+    for (bank = address >> VRAM_BANK_SHIFT;
+         bank <= (address + size - 1) >> VRAM_BANK_SHIFT && bank < (UInt32)theVdp->vramBanks; bank++) {
+        theVdp->vramBanksDbg |= 1u << bank;
+    }
+}
+
 int vdpDebugGetRegisters(UInt8* registers, int max)
 {
     int count = (int)sizeof(theVdp->vdpRegs);
@@ -2415,14 +2517,35 @@ int vdpDebugGetRegisters(UInt8* registers, int max)
     return count;
 }
 
-int vdpVramInterleaved(int mode)
+static int vramLayoutOf(VDP* vdp)
 {
-    return VDP_VRAM_INTERLEAVED(mode);
+    int layout = vdp->screenMode;
+
+    if (vdpIsBitmapLinear(vdp)) {
+        layout |= VDP_LAYOUT_LINEAR;
+    }
+    /* The part's size, not V58: the viewer numbers the upper half the same way. */
+    if (vdpIsInterleaved(vdp) && vdpIsV9968(vdp) && vdp->vram256) {
+        layout |= VDP_LAYOUT_A17;
+    }
+    return layout;
 }
 
-int vdpVramSameLayout(int mode, int other)
+int vdpDebugGetVramLayout(void)
 {
-    return VDP_VRAM_INTERLEAVED(mode) == VDP_VRAM_INTERLEAVED(other);
+    return theVdp != NULL ? vramLayoutOf(theVdp) : -1;
+}
+
+int vdpVramInterleaved(int layout)
+{
+    return layout >= 0 && VDP_VRAM_INTERLEAVED(VDP_LAYOUT_MODE(layout)) &&
+           !(layout & VDP_LAYOUT_LINEAR);
+}
+
+int vdpVramSameLayout(int layout, int other)
+{
+    return vdpVramInterleaved(layout) == vdpVramInterleaved(other) &&
+           (layout >= 0 && (layout & VDP_LAYOUT_A17)) == (other >= 0 && (other & VDP_LAYOUT_A17));
 }
 
 int vdpDebugGetScreenMode(void)
@@ -2823,6 +2946,19 @@ static void loadState(VDP* vdp)
 #else
 
 
+static int vramBankUsed(VDP* vdp, int bank)
+{
+    const UInt32* p = (const UInt32*)(vdp->vram + ((size_t)bank << VRAM_BANK_SHIFT));
+    int i;
+
+    for (i = 0; i < VRAM_SIZE / 4; i++) {
+        if (p[i] != 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 static void saveState(VDP* vdp)
 {
     SaveState* state = saveStateOpenForWrite(vdp->stateName);
@@ -2915,6 +3051,13 @@ static void saveState(VDP* vdp)
     saveStateSetBuffer(state, "paletteExtReg", vdp->paletteExtReg, sizeof(vdp->paletteExtReg));
 
     saveStateSetBuffer(state, "vram", vdp->vram, vdpIsV9968(vdp) ? VRAM_SIZE : VRAM_STATE_SIZE);
+    /* Bank 0 keeps the tag every VDP uses; a bank holding only zeros is left out. */
+    for (i = 1; i < vdp->vramBanks; i++) {
+        if (((vdp->vramBanksUsed | vdp->vramBanksDbg) >> i & 1) && vramBankUsed(vdp, i)) {
+            sprintf(tag, "vramBank%d", i);
+            saveStateSetBuffer(state, tag, vdp->vram + ((size_t)i << VRAM_BANK_SHIFT), VRAM_SIZE);
+        }
+    }
 
     saveStateClose(state);
 
@@ -3051,6 +3194,19 @@ static void loadState(VDP* vdp)
     }
 
     saveStateGetBuffer(state, "vram", vdp->vram, vdpIsV9968(vdp) ? VRAM_SIZE : VRAM_STATE_SIZE);
+    for (i = 1; i < vdp->vramBanks; i++) {
+        memset(vdp->vram + ((size_t)i << VRAM_BANK_SHIFT), 0, VRAM_SIZE);
+        sprintf(tag, "vramBank%d", i);
+        saveStateGetBuffer(state, tag, vdp->vram + ((size_t)i << VRAM_BANK_SHIFT), VRAM_SIZE);
+    }
+    /* Before vdpUpdateVramMode, which marks the command bank again. */
+    vdp->vramBanksUsed = 1;
+    vdp->vramBanksDbg  = 0;
+    for (i = 1; i < vdp->vramBanks; i++) {
+        if (vramBankUsed(vdp, i)) {
+            vdp->vramBanksUsed |= 1u << i;
+        }
+    }
 
     saveStateClose(state);
 
@@ -3060,7 +3216,7 @@ static void loadState(VDP* vdp)
     vdpUpdateVramMode(vdp);
     /* The engine holds its own copies of R#12 and of the R#20 speed bit, and a
     ** command using either can be part way through. */
-    vdpCmdSetTextBackColor(vdp->cmdEngine, vdp->vdpRegs[12] & 0x0f);
+    vdpCmdSetTextBackColor(vdp->cmdEngine, vdp->vdpRegs[12]);
     vdpCmdSetHighSpeed(vdp->cmdEngine, vdpIsV9968(vdp) && (vdp->vdpRegs[20] & 0x01));
 
     vdp->canFlipFrameBuffer = 0;
@@ -3158,8 +3314,8 @@ static void dbgRegisterLayout(VDP* vdp, int* regCount, int* cmdRegCount,
     }
 }
 
-/* Raster log of theVdp: two frames in static buffers, filled on the emulator
-** thread only. A note from a new frame reuses the older buffer. */
+/* Raster log of theVdp: two frames in static buffers, filled by notes on the emulator
+** thread while it runs. A note from a new frame reuses the older buffer. */
 volatile int vdpRasterArmed;
 static int    rasterArmCount;
 static int    rasterGeneration;
@@ -3181,8 +3337,37 @@ static volatile int    rasterForeignSet[2];
 static int    rasterForeignNext;
 #define RASTER_HEAD (sizeof(VdpRasterFrame) - sizeof(rasterBuf[0].ev))
 
-void vdpRasterArm(int on)
+/* Between arms and captures on any thread. The notes take no lock: they run only while the
+** emulator thread runs, and captures, on it or under a view that parks it, take the lock. */
+static void* rasterLock;
+
+void vdpRasterCreateLock(void)
 {
+    if (rasterLock == NULL) {
+        rasterLock = archSemaphoreCreate(1);
+    }
+}
+
+static void rasterLockTake(void)
+{
+    if (rasterLock != NULL) {
+        archSemaphoreWait(rasterLock, -1);
+    }
+}
+
+static void rasterLockGive(void)
+{
+    if (rasterLock != NULL) {
+        archSemaphoreSignal(rasterLock);
+    }
+}
+
+int vdpRasterArm(int on)
+{
+    int before;
+
+    rasterLockTake();
+    before = rasterArmCount;
     if (on) {
         if (rasterArmCount++ == 0) {
             /* Wrapped by hand: a generation is never 0, which means not armed. */
@@ -3193,6 +3378,8 @@ void vdpRasterArm(int on)
     else if (rasterArmCount > 0 && --rasterArmCount == 0) {
         vdpRasterArmed = 0;
     }
+    rasterLockGive();
+    return before;
 }
 
 static int rasterIsForeign(UInt32 frameStart)
@@ -3221,7 +3408,7 @@ static void rasterBreak(VDP* vdp)
     rasterSettled = 0;
 }
 
-/* Emulator thread. Forgets the buffers when armed anew or the VDP changed. */
+/* From a note or a capture. Forgets the buffers when armed anew or the VDP changed. */
 static int rasterObserve(VDP* vdp, int reg, UInt8 old)
 {
     int    gen   = vdpRasterArmed;
@@ -3374,9 +3561,8 @@ static void rasterSetLength(VdpRasterFrame* f, VDP* vdp, int lines)
 /* At a frame tap the frame that just ended goes to [0]; while paused the one in progress
 ** does, with the beam, but as ended at the end of active display or after the early flip
 ** there. [1] is the frame before [0]. */
-static void rasterCapture(VDP* vdp, VdpDebugState* out)
+static void rasterCaptureHeld(VDP* vdp, VdpRasterFrame* r)
 {
-    VdpRasterFrame* r = out->raster;
     UInt32 now = boardSystemTime();
     UInt32 start;
     int    ended;
@@ -3440,6 +3626,13 @@ static void rasterCapture(VDP* vdp, VdpDebugState* out)
     }
 }
 
+static void rasterCapture(VDP* vdp, VdpRasterFrame* r)
+{
+    rasterLockTake();
+    rasterCaptureHeld(vdp, r);
+    rasterLockGive();
+}
+
 /* The index'th of the listed VDPs; each slot is read once. */
 static VDP* debugVdpAt(int index)
 {
@@ -3481,11 +3674,46 @@ const char* vdpDebugName(int index)
     return vdp != NULL ? VdpNames[vdp->vdpVersion] : NULL;
 }
 
+/* The bank a vdpDebugCaptureBanks request names, 0 when there is one bank. */
+static int debugBankOf(VDP* vdp, int bank, int banks)
+{
+    if (banks <= 1) {
+        return 0;
+    }
+    switch (bank) {
+    case VDP_BANK_CPU: return vdpCpuBank(vdp) >> VRAM_BANK_SHIFT;
+    case VDP_BANK_BG:  return vdpDispBank(vdp) >> VRAM_BANK_SHIFT;
+    case VDP_BANK_SPR: return vdpSprBank(vdp) >> VRAM_BANK_SHIFT;
+    case VDP_BANK_SRC: return vdpCmdSrcBank(vdp) >> VRAM_BANK_SHIFT;
+    case VDP_BANK_DST: return vdpCmdDstBank(vdp) >> VRAM_BANK_SHIFT;
+    }
+    return bank >= 0 && bank < banks ? bank : 0;
+}
+
+static int captureBanks(int index, VdpDebugState* out, int bank, int aux, int anyBank);
+
 int vdpDebugCapture(int index, VdpDebugState* out)
+{
+    return captureBanks(index, out, 0, -1, 0);
+}
+
+int vdpDebugCaptureBanks(int index, VdpDebugState* out, int bank, int aux)
+{
+    return captureBanks(index, out, bank, aux, 0);
+}
+
+int vdpDebugCaptureAnyBanks(int index, VdpDebugState* out, int bank, int aux)
+{
+    return captureBanks(index, out, bank, aux, 1);
+}
+
+/* anyBank picks among the banks the VRAM holds, not only the ones the registers switch. */
+static int captureBanks(int index, VdpDebugState* out, int bank, int aux, int anyBank)
 {
     VDP* vdp = debugVdpAt(index);
     int regCount, cmdRegCount, paletteCount, statusRegCount;
     int vramBytes;
+    int pick;
     int i;
 
     if (vdp == NULL) {
@@ -3524,7 +3752,7 @@ int vdpDebugCapture(int index, VdpDebugState* out)
         out->status[2] |= vdpGetStatus(vdp->cmdEngine);
         out->status[7]  = vdpCmdPeek(vdp->cmdEngine, 0x0c, 0);
         out->status[8]  = (UInt8)vdpGetBorderX(vdp->cmdEngine);
-        out->status[9]  = (UInt8)(vdpGetBorderX(vdp->cmdEngine) >> 8);
+        out->status[9]  = (UInt8)(vdpGetBorderX(vdp->cmdEngine) >> 8) | 0xfe;
         for (i = 0; i < cmdRegCount && i < (int)sizeof(out->cmdRegs); i++) {
             out->cmdRegs[i] = vdpCmdPeek(vdp->cmdEngine, (UInt8)i, 0);
         }
@@ -3563,6 +3791,7 @@ int vdpDebugCapture(int index, VdpDebugState* out)
     out->interleaved  = vdpIsInterleaved(vdp) != 0;
     out->bitmapLinear = vdpIsBitmapLinear(vdp) != 0;
     out->vramA17      = vdpIsV9968(vdp) && vdp->vram256 ? 0x20000 : 0;
+    out->vramLayout   = vramLayoutOf(vdp);
     out->sprPlaneStart = vdp->sprPlaneStartShown;
     for (i = 0; i < 64; i++) {
         out->sprPlaneOrder[i] = (UInt8)vdpSpritePlaneFrom(vdp, vdp->sprPlaneStartShown, i, 63);
@@ -3571,12 +3800,54 @@ int vdpDebugCapture(int index, VdpDebugState* out)
     /* A 16K VDP is created with 64K the renderer and engine can reach, so
     ** copy up to vramMask too; nothing past that is ever written. */
     vramBytes = MAX(vdp->vramSize, vdp->vramMask + 1);
-    vramBytes = MIN(vramBytes, (int)MIN(sizeof(out->vram), sizeof(vdp->vram)));
-    memcpy(out->vram, vdp->vram, vramBytes);
+    vramBytes = MIN(vramBytes, (int)MIN(sizeof(out->vram), VRAM_SIZE));
+    out->banks     = vdpIsV9968Native(vdp) ? vdp->vramBanks : 1;
+    out->vramBanks = vdpIsV9968(vdp) ? vdp->vramBanks : 1;
+    pick           = anyBank ? out->vramBanks : out->banks;
+    out->vramBank  = debugBankOf(vdp, bank, pick);
+    if (aux == out->vramBank) {
+        aux = (aux + 1) % pick;
+    }
+    out->auxBank   = pick > 1 && aux >= 0 && aux < pick ? aux : -1;
+    memset(out->sprBankHits, 0, sizeof(out->sprBankHits));
+    if (vdpIsV9968(vdp)) {
+        memcpy(out->sprBankHits, vdp->sprBankHits, sizeof(out->sprBankHits));
+    }
+    memcpy(out->vram, vdp->vram + ((size_t)out->vramBank << VRAM_BANK_SHIFT), vramBytes);
     memset(out->vram + vramBytes, 0, sizeof(out->vram) - vramBytes);
-    rasterCapture(vdp, out);
+    if (out->auxBank >= 0) {
+        memcpy(out->vramAux, vdp->vram + ((size_t)out->auxBank << VRAM_BANK_SHIFT), VRAM_SIZE);
+    }
+    /* Other threads read the raster log with vdpDebugCaptureRaster, under a view. */
+    if (emulatorIsEmuThread()) {
+        rasterCapture(vdp, out->raster);
+    }
+    else {
+        memset(&out->raster[0], 0, RASTER_HEAD);
+        memset(&out->raster[1], 0, RASTER_HEAD);
+    }
     out->frameStartTime = vdp->frameStartTime;
     geo3dDebugCapture(vdp->secondary ? vdp : NULL, &out->geo3d);
+    return 1;
+}
+
+int vdpDebugCaptureRaster(VdpRasterFrame out[2], int* displayOver)
+{
+    memset(&out[0], 0, RASTER_HEAD);
+    memset(&out[1], 0, RASTER_HEAD);
+    *displayOver = 0;
+    if (theVdp == NULL) {
+        return 0;
+    }
+    rasterCapture(theVdp, out);
+    if (out[0].valid) {
+        UInt32 t = boardSystemTime() - out[0].frameStart;
+
+        *displayOver     = out[0].ended;
+        out[0].beamLine  = (int)(t / HPERIOD);
+        out[0].beamCycle = (int)(t % HPERIOD);
+        out[0].ended     = out[0].beamLine >= out[0].lastLine;
+    }
     return 1;
 }
 
@@ -3774,7 +4045,12 @@ static void sprTabRead(VDP* vdp, int sprMode, int a, UInt8* dst, int len)
     int i;
 
     if (sprMode == 1) {
-        memcpy(dst, vdp->vram + a, len);
+        memcpy(dst, vdp->vramSpr + a, len);
+    }
+    else if (vdpIsV9968(vdp)) {
+        for (i = 0; i < len; i++) {
+            dst[i] = *vdpSpriteVram(vdp, a + i);
+        }
     }
     else if (vdp->screenMode < 7 || vdp->screenMode > 12) {
         memcpy(dst, vdp->vramPtr + (a & vdp->vramAccMask), len);
@@ -3816,7 +4092,7 @@ static int sprTabGather(VDP* vdp, VdpSprTable* t)
 /* The same layout: the bytes and the registers sprites are laid out with. */
 static int sprTabSame(const VdpSprTable* a, const VdpSprTable* b)
 {
-    static const int regs[] = { 0, 1, 5, 6, 8, 9, 11, 20, 23 };
+    static const int regs[] = { 0, 1, 5, 6, 8, 9, 11, 20, 23, 29 };
     int attr = (a->regs[5] << 7) & (a->screenMode <= 3 ? 0x380 : 0x200);
     int i;
 
@@ -4274,7 +4550,7 @@ static void getDebugInfo(VDP* vdp, DbgDevice* dbgDevice)
 
     sync(vdp, boardSystemTime());
 
-    dbgDeviceAddMemoryBlock(dbgDevice, langDbgMemVram(), 0, 0, vdp->vramSize, vdp->vram);
+    dbgDeviceAddMemoryBlock(dbgDevice, langDbgMemVram(), 0, 0, vdp->vramSize * vdp->vramBanks, vdp->vram);
 
     dbgRegisterLayout(vdp, &regCount, &cmdRegCount, &paletteCount, &statusRegCount);
 
@@ -4365,10 +4641,15 @@ static void getDebugInfo(VDP* vdp, DbgDevice* dbgDevice)
 
 static int dbgWriteMemory(VDP* vdp, char* name, void* data, int start, int size)
 {
-    if (strcmp(name, "VRAM") || start + size > vdp->vramSize) {
+    int bank;
+
+    if (strcmp(name, "VRAM") || start < 0 || size < 0 || size > vdp->vramSize * vdp->vramBanks - start) {
         return 0;
     }
 
+    for (bank = start >> VRAM_BANK_SHIFT; bank < (start + size + VRAM_SIZE - 1) >> VRAM_BANK_SHIFT; bank++) {
+        vdp->vramBanksDbg |= 1u << bank;
+    }
     memcpy(vdp->vram + start, data, size);
 
     return 1;
@@ -4551,6 +4832,7 @@ static void reset(VDP* vdp)
     memcpy(vdp->paletteReg, defaultPaletteRegs, sizeof(vdp->paletteReg));
 
     onScrModeChange(vdp, boardSystemTime());
+    vdpCmdResetState(vdp->cmdEngine);
 
     onDisplay(vdp, boardSystemTime());
 }
@@ -4623,6 +4905,7 @@ static void destroy(VDP* vdp)
 
     frameBufferDataDestroy(vdp->frameBuffer);
 
+    free(vdp->vram);
     free(vdp);
 }
 
@@ -4650,6 +4933,12 @@ static VDP* create(VdpConnector connector, VdpVersion version, VdpSyncMode sync,
     int i;
 
     VDP* vdp = (VDP*)calloc(1, sizeof(VDP));
+
+    vdp->vramBanks = version == VDP_V9968 ? VRAM_BANKS_V9968 : 1;
+    /* Spare bytes: the renderers read on from a line start that can be the last page. */
+    vdp->vram      = (UInt8*)calloc((size_t)VRAM_SIZE * vdp->vramBanks + 1024, 1);
+    vdp->vramDisp  = vdp->vram;
+    vdp->vramSpr   = vdp->vram;
 
     if (secondary == NULL) {
         theVdp = vdp;
@@ -4745,8 +5034,7 @@ static VDP* create(VdpConnector connector, VdpVersion version, VdpSyncMode sync,
         vdp->palValue = 0x00;
     }
 
-    memset(vdp->vram, 0, sizeof(vdp->vram));
-    vdp->cmdEngine = vdpCmdCreate(vramSize, vdp->vram, boardSystemTime());
+    vdp->cmdEngine = vdpCmdCreate(vramSize * vdp->vramBanks, vdp->vram, boardSystemTime());
     vdpCmdSetExpansionWindow(vdp->cmdEngine, version != VDP_V9968);
     vdpCmdSetV9968(vdp->cmdEngine, version == VDP_V9968);
     if (secondary != NULL) {

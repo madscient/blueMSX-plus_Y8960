@@ -24,6 +24,7 @@
 #define CONTROL_STOP_LOG_H
 
 #include "MsxTypes.h"
+#include "Debugger.h"
 
 #define CTRL_STOP_UNKNOWN    0
 #define CTRL_STOP_USER       1  /* somebody pressed pause                  */
@@ -41,8 +42,11 @@ typedef struct {
     UInt32 runGeneration;
     UInt8  watchType;   /* a DbgDeviceType, for CTRL_STOP_WATCH only */
     UInt32 watchAddress;
-    Int8   watchMode;   /* the screen mode at a VIDEO hit, whose layout watchAddress indexes */
+    int    watchMode;   /* the VRAM layout at a VIDEO hit, which watchAddress indexes */
     UInt8  watchKind;   /* the DBG_WATCH_ kind of watchpoint that matched */
+    UInt8  watchAccess; /* what it stops on, a DBG_WATCH_ON_ value */
+    int    watchPc;     /* for a read, the start of the instruction that read; -1 if not known */
+    DbgBreakHit breakHit;   /* for a breakpoint stop, kept if relabelled a step; else zero */
 } CtrlStop;
 
 void ctrlStopLogCreate(void);
@@ -50,9 +54,11 @@ void ctrlStopLogCreate(void);
 /* The reason a pause's cause (a DBG_STOP_ value) is logged as. */
 int ctrlStopReasonOf(int cause);
 
-/* Logs a stop of the run generation it ended; the watch fields for a watch only. */
+/* Logs a stop of the run generation it ended; the watch fields for a watch only, and
+** breakHit, or NULL, for a breakpoint only. */
 void ctrlStopPost(int reason, UInt32 runGeneration, int watchType, UInt32 watchAddress,
-                  int watchMode, int watchKind);
+                  int watchMode, int watchKind, int watchAccess, int watchPc,
+                  const DbgBreakHit* breakHit);
 
 /* The highest sequence number written so far. */
 UInt32 ctrlStopSeq(void);

@@ -613,13 +613,6 @@ static void getSlotControl(HWND hDlg)
     if (editSlotInfo.romType == SRAM_MATSUSHITA || editSlotInfo.romType == ROM_GIDE ||
         editSlotInfo.romType == SRAM_MATSUSHITA_TURBO ||
         editSlotInfo.romType == ROM_TURBORTIMER || editSlotInfo.romType == ROM_TURBORIO ||
-        editSlotInfo.romType == ROM_Y8960OPLLEX ||
-        editSlotInfo.romType == ROM_Y8960OPL2EX ||
-        editSlotInfo.romType == ROM_Y8960SSGS ||
-        editSlotInfo.romType == ROM_Y8960TIMER ||
-        editSlotInfo.romType == ROM_Y8960MIXER ||
-        editSlotInfo.romType == ROM_Y8960OPM ||
-        editSlotInfo.romType == ROM_Y8960SYSCTRL ||
         editSlotInfo.romType == SRAM_S1985 || editSlotInfo.romType == ROM_S1990 ||
         editSlotInfo.romType == ROM_F4INVERTED || editSlotInfo.romType == ROM_F4DEVICE ||
         editSlotInfo.romType == ROM_NMS8280DIGI || editSlotInfo.romType == ROM_NMS1210 || 
@@ -786,13 +779,6 @@ static void endEditControls(HWND hDlg)
     case ROM_OPCODESLOT:
     case ROM_TURBORTIMER:
     case ROM_TURBORIO:
-    case ROM_Y8960OPLLEX:
-    case ROM_Y8960OPL2EX:
-    case ROM_Y8960SSGS:
-    case ROM_Y8960TIMER:
-    case ROM_Y8960MIXER:
-    case ROM_Y8960OPM:
-    case ROM_Y8960SYSCTRL:
     case ROM_SVI328RSIDE:
     case ROM_SVI328FDC:
     case ROM_SVI328PRN:
@@ -841,7 +827,6 @@ static void endEditControls(HWND hDlg)
     case ROM_DUMAS:
     case ROM_SCC:
     case ROM_SCCPLUS:
-    case ROM_Y8960SCC:
     case ROM_MUPACK:
     case ROM_KOEI:
     case ROM_GAMEMASTER2:
@@ -978,13 +963,6 @@ static void setEditControls(HWND hDlg)
         romType != SRAM_MATSUSHITA_TURBO &&
         romType != ROM_F4INVERTED && romType != ROM_F4DEVICE && romType != ROM_NMS8280DIGI && 
         romType != ROM_TURBORTIMER && romType != ROM_TURBORIO && romType != ROM_GIDE && romType != ROM_NMS1210 && 
-        romType != ROM_Y8960OPLLEX &&
-        romType != ROM_Y8960OPL2EX &&
-        romType != ROM_Y8960SSGS &&
-        romType != ROM_Y8960TIMER &&
-        romType != ROM_Y8960MIXER &&
-        romType != ROM_Y8960OPM &&
-        romType != ROM_Y8960SYSCTRL &&
         romType != ROM_MSXAUDIODEV && romType != ROM_TURBORPCM && romType != ROM_SVI328FDC &&
         romType != ROM_MSXMIDI && romType != ROM_MSXMIDI_EXTERNAL &&
         romType != ROM_MSXPRN && romType != ROM_JOYREXPSG && romType != ROM_MAKOTO &&
@@ -1011,13 +989,6 @@ static void setEditControls(HWND hDlg)
         romType == SRAM_MATSUSHITA_TURBO ||
         romType == ROM_S1990 || romType == ROM_KANJI ||  romType == ROM_GIDE ||
         romType == ROM_TURBORTIMER || romType == ROM_TURBORIO || romType == ROM_NMS1210 ||
-        romType == ROM_Y8960OPLLEX ||
-        romType == ROM_Y8960OPL2EX ||
-        romType == ROM_Y8960SSGS ||
-        romType == ROM_Y8960TIMER ||
-        romType == ROM_Y8960MIXER ||
-        romType == ROM_Y8960OPM ||
-        romType == ROM_Y8960SYSCTRL ||
         romType == ROM_F4INVERTED || romType == ROM_F4DEVICE ||
         romType == ROM_NMS8280DIGI || 
         romType == ROM_MOONSOUND || romType == ROM_MSXMIDI || romType == ROM_MSXMIDI_EXTERNAL ||
@@ -1360,7 +1331,6 @@ static void setEditControls(HWND hDlg)
     case ROM_DUMAS:
     case ROM_SCC:
     case ROM_SCCPLUS:
-    case ROM_Y8960SCC:
     case ROM_KOEI:
     case ROM_GAMEMASTER2:
     case ROM_RTYPE:
@@ -1445,13 +1415,6 @@ static void setEditControls(HWND hDlg)
     case ROM_MSXMIDI_EXTERNAL:
     case ROM_TURBORTIMER:
     case ROM_TURBORIO:
-    case ROM_Y8960OPLLEX:
-    case ROM_Y8960OPL2EX:
-    case ROM_Y8960SSGS:
-    case ROM_Y8960TIMER:
-    case ROM_Y8960MIXER:
-    case ROM_Y8960OPM:
-    case ROM_Y8960SYSCTRL:
     case ROM_MSXAUDIODEV:
     case ROM_TURBORPCM:
     case ROM_JOYREXPSG:
@@ -1512,15 +1475,6 @@ static RomType romTypeList[] = {
     ROM_TURBORTIMER,
     ROM_TURBORIO,
     ROM_MSXPRN,
-
-    ROM_Y8960OPLLEX, /* Y8960 cartridge */
-    ROM_Y8960OPL2EX,
-    ROM_Y8960SSGS,
-    ROM_Y8960TIMER,
-    ROM_Y8960MIXER,
-    ROM_Y8960OPM,
-    ROM_Y8960SYSCTRL,
-    ROM_Y8960SCC,
     
     ROM_PAC, /* related */
     ROM_FMPAC,

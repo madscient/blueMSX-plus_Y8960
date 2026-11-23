@@ -86,6 +86,9 @@ void langInitRussian(LanguageStrings* ls)
     ls->errorNoCasInZip         = "Не нашлось .cas файла в zip архиве.";
     ls->errorUnknownFileType    = "Не удаётся открыть файл: неизвестный тип файла.";
     ls->errorCartV9968WithV9990 = "Картридж V9968 нельзя вставить вместе с GFX9000 или Video9000, так как оба берут на себя вывод изображения. Сначала извлеките другой картридж.";
+    ls->errorCartTwice          = "Картридж %s нельзя вставить в оба слота одновременно, так как оба использовали бы одни и те же порты ввода-вывода. Сначала извлеките другой картридж.";
+    ls->errorCartBuiltIn        = "В этой машине есть встроенный %s, поэтому его нельзя вставить как картридж.";
+    ls->errorCartBuiltInRemoved = "В этой машине есть встроенный %s, поэтому картридж извлечён.";
     ls->errorDirDiskTooLarge    = "Файлов, которые не поместились на диск и были пропущены: %d.";
     ls->errorDirDiskOnline      = "Пропущено файлов, доступных только в сети: %d. Чтобы включить их, сделайте их доступными на этом устройстве.";
     ls->errorDirDiskSubdirs     = "Пропущено папок, которые не поддерживает выбранный формат: %d.";
@@ -107,6 +110,8 @@ void langInitRussian(LanguageStrings* ls)
     ls->errorStartEmuMachineNotFound     = "Выбранная конфигурация машины '%s' не найдена.";
     ls->errorStartEmuConfigInvalid       = "Не удалось прочитать config.ini конфигурации машины '%s'. Возможно, файл повреждён или относится к несовместимой версии.";
     ls->errorMissingFiles       = "Не удалось загрузить следующие файлы:";
+    ls->errorSharedRomsFailed   = "Не удалось загрузить из Shared Roms:";
+    ls->errorFileUnusable       = " (несоответствие содержимого)";
     ls->errorFlashInvalid       = "Сохранение %s повреждено и не может быть загружено.";
     ls->errorFlashSramSize      = "Сохранение %s имеет неверный размер и не может быть загружено.";
     ls->errorFlashUnreadable    = "Не удалось открыть сохранение %s. Возможно, его использует другая программа.";
@@ -203,6 +208,8 @@ void langInitRussian(LanguageStrings* ls)
     ls->menuCartEseSCC          = "Ese-SCC";             // New in 2.7
     ls->menuCartMegaFlashRom    = "Mega Flash ROM";      // New in 2.7
     ls->menuCartFlashCart       = "Flash-картриджи";
+    ls->menuCartSound           = "Звуковые картриджи";
+    ls->menuCartVdp             = "VDP-картриджи";
 
     ls->menuDiskInsertNew       = "Вставить новый образ дискеты";
     ls->menuDiskInsertPhysical  = "Вставить физический диск";
@@ -292,6 +299,7 @@ void langInitRussian(LanguageStrings* ls)
     ls->menuToolsShortcuts      = "Настройка быстрого вызова";
     ls->menuToolsCtrlEditor     = "Настройка контроллеров / клавиатуры"; 
     ls->menuToolsMixer          = "Эквалайзер";
+    ls->menuToolsMixerDetailed  = "Подробный микшер";
     ls->menuToolsVdpViewer      = "Просмотр VDP";
     ls->menuToolsControlDeck    = "Управление эмуляцией";
     ls->menuToolsLoadMemory     = "Загрузить память";

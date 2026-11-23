@@ -5,6 +5,9 @@
 **
 ** Copyright (C) 2026 madscient
 **
+** Modified 2026 by Hesoten for blueMSX+ fork.
+** See https://github.com/Hesoten/blueMSX-plus for change history.
+**
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
 ** the Free Software Foundation; either version 2 of the License, or
@@ -424,8 +427,8 @@ static void write(RomMapperY8960Scc* rm, UInt16 address, UInt8 value)
     }
 }
 
-static int sccCreate(const char* filename, UInt8* romData, int size,
-                     int slot, int sslot, int startPage, SlotEject eject)
+static int sccBlockCreate(const char* filename, UInt8* romData, int size,
+                          int slot, int sslot, int startPage, SlotEject eject)
 {
     DeviceCallbacks callbacks = { destroy, reset, saveState, loadState };
     RomMapperY8960Scc* rm = (RomMapperY8960Scc*)calloc(1, sizeof(RomMapperY8960Scc));
@@ -446,7 +449,7 @@ static int sccCreate(const char* filename, UInt8* romData, int size,
     rm->sslot     = sslot;
     rm->startPage = startPage;
 
-    y8960SccSetMode(rm->scc, Y8960_SCC_REAL);
+    y8960SccSetMode(rm->scc, SCC_REAL);
 
     if (romData != NULL && size > 0) {
         int romSize = size;
@@ -455,18 +458,18 @@ static int sccCreate(const char* filename, UInt8* romData, int size,
         }
         memcpy(rm->memory, romData, romSize);
     }
+    else {
+        /* Workaround: programs locate the cartridge by its ROM header, so a
+        ** card without an image gets one; init 0 leaves the BIOS idle. */
+        rm->memory[0] = 'A';
+        rm->memory[1] = 'B';
+    }
 
     theY8960Scc = rm;
 
     reset(rm);
 
     return 1;
-}
-
-int romMapperY8960SccCreate(const char* filename, UInt8* romData,
-                            int size, int slot, int sslot, int startPage)
-{
-    return sccCreate(filename, romData, size, slot, sslot, startPage, destroy);
 }
 
 /* Ejecting the cartridge has to take the whole card, and the other blocks
@@ -490,14 +493,28 @@ static void ejectCart(RomMapperY8960Scc* rm)
 int romMapperY8960CartCreate(const char* filename, UInt8* romData,
                              int size, int slot, int sslot)
 {
-    int success = sccCreate(filename, romData, size, slot, sslot,
-                            Y8960_START_PAGE, ejectCart);
+    int success;
 
+    /* Every block is a single instance on fixed ports, so a second card is
+    ** refused. */
+    if (theY8960Scc != NULL) {
+        return 0;
+    }
+
+    mixerSetCreateName(boardGetMixer(), "SCC");
+    success = sccBlockCreate(filename, romData, size, slot, sslot,
+                             Y8960_START_PAGE, ejectCart);
+
+    mixerSetCreateName(boardGetMixer(), "OPLL");
     success &= romMapperY8960OpllexCreate();
+    mixerSetCreateName(boardGetMixer(), "OPL2");
     success &= romMapperY8960Opl2exCreate();
+    mixerSetCreateName(boardGetMixer(), "SSG");
     success &= romMapperY8960SsgsCreate();
+    mixerSetCreateName(boardGetMixer(), "OPM");
     success &= romMapperY8960TimerCreate();
     success &= romMapperY8960OpmCreate();
+    mixerSetCreateName(boardGetMixer(), NULL);
     success &= romMapperY8960MixerCreate();
     success &= romMapperY8960SysCtrlCreate();
 

@@ -38,7 +38,10 @@
 #include "Led.h"
 #include "Machine.h"
 #include "InputEvent.h"
+#include "KeyMatrixInput.h"
 #include "Actions.h"
+#include "RomTypeList.h"
+#include "Language.h"
 
 #include "ArchThread.h"
 #include "ArchEvent.h"
@@ -54,6 +57,7 @@
 #include "VideoManager.h"
 #include "FrameBuffer.h"
 #include "VDP.h"
+#include "VdpDebug.h"
 #include "RaceTest.h"
 #include <math.h>
 #include <string.h>
@@ -203,6 +207,8 @@ static volatile int      changeGaveUp;
 ** pause at the frame it shows; under emuStateLock, cleared by a pause or a stop. */
 static volatile int      holdFromPause;
 static volatile int      rwPauseReq;
+/* Reverse play begun while running has ended: the input from there on is new. */
+static volatile int      rwTakeOverReq;
 /* A step back from a pause: 1 one frame, 2 on to another picture, 3 to the display end at
 ** backTarget; frames it went back, why the last gave up (1 nothing older to stop at, 2 no other
 ** picture within the limit), that a replay of it arrived, and that it starts from one cut short. */
@@ -364,24 +370,14 @@ void emuEnableSynchronousUpdate(int enable)
     enableSynchronousUpdate = enable;
 }
 
-static void emulatorMixerChannelSettings(void* ref, Int32 mixerType, const char* id,
-                                         Int32* enable, Int32* volume, Int32* pan)
-{
-    propGetMixerInstance((Properties*)ref, mixerType, id, enable, volume, pan);
-}
-
 void emulatorInit(Properties* theProperties, Mixer* theMixer)
 {
     properties = theProperties;
     mixer      = theMixer;
-    mixerSetChannelSettingsCallback(mixer, emulatorMixerChannelSettings, properties);
 }
 
 void emulatorExit()
 {
-    if (mixer != NULL) {
-        mixerSetChannelSettingsCallback(mixer, NULL, NULL);
-    }
     properties = NULL;
     mixer      = NULL;
 }
@@ -396,6 +392,7 @@ void emulatorCreateLocks(void)
     if (emuStateLock == NULL) {
         emuStateLock = archSemaphoreCreate(1);
     }
+    vdpRasterCreateLock();
 }
 
 /* With emuStateLock held: a step waiting for a change becomes a plain frame step. */
@@ -437,6 +434,7 @@ static void writeHeld(EmuState state, int setsDebugger)
         disarmChange();
         holdFromPause = 0;
         rwPauseReq = 0;
+        rwTakeOverReq = 0;
         endBackStep();
     }
     else if (state == EMU_RUNNING) {
@@ -523,6 +521,25 @@ int emulatorResumeIfPaused(void)
     return 1;
 }
 
+/* Under the state lock, running or paused: arms a frame stop, or with change one on to the
+** first frame that differs from the picture (fromShown as frameBufferWatchShown takes it).
+** Leaving a pause sets *resumed. */
+static void armFrameStop(int change, int fromShown, int* resumed)
+{
+    if (change) {
+        frameStopChange = 1;
+        changeFrames = 0;
+        changeGaveUp = 0;
+        frameBufferWatchShown(1, fromShown);
+    }
+    frameStopReq = 1;
+    frameStopWait = 0;
+    if (emuState == EMU_PAUSED) {
+        writeHeld(EMU_RUNNING, 1);
+        *resumed = 1;
+    }
+}
+
 void emulatorRequestFrameStop(void)
 {
     int resumed = 0;
@@ -535,15 +552,8 @@ void emulatorRequestFrameStop(void)
     else if (frameStopChange) {
         disarmChange();
     }
-    else if (emuState == EMU_RUNNING) {
-        frameStopReq = 1;
-        frameStopWait = 0;
-    }
-    else if (emuState == EMU_PAUSED && !emuHoldSuspended) {
-        frameStopReq = 1;
-        frameStopWait = 0;
-        writeHeld(EMU_RUNNING, 1);
-        resumed = 1;
+    else if (emuState == EMU_RUNNING || (emuState == EMU_PAUSED && !emuHoldSuspended)) {
+        armFrameStop(0, 0, &resumed);
     }
     archSemaphoreSignal(emuStateLock);
 
@@ -575,22 +585,45 @@ void emulatorRequestChangeStop(void)
         fromShown = emuSuspendFlag ? 1 : 0;
     }
     if (fromShown >= 0) {
-        frameStopChange = 1;
-        changeFrames = 0;
-        changeGaveUp = 0;
-        frameBufferWatchShown(1, fromShown);
-        frameStopReq = 1;
-        frameStopWait = 0;
-        if (emuState == EMU_PAUSED) {
-            writeHeld(EMU_RUNNING, 1);
-            resumed = 1;
-        }
+        armFrameStop(1, fromShown, &resumed);
     }
     archSemaphoreSignal(emuStateLock);
 
     if (resumed) {
         debuggerNotifyEmulatorResume();
     }
+}
+
+int emulatorStartFrameStop(int change)
+{
+    int resumed = 0;
+    int fromShown = -1;
+
+    /* Paused a moment ago, the thread may still draw: once it stops, the picture on screen
+    ** can be the reference. */
+    if (change && emulatorGetState() == EMU_PAUSED) {
+        emulatorWaitParked(100);
+    }
+    dbgChangeBegin();
+    archSemaphoreWait(emuStateLock, -1);
+    if (backStep || frameStopReq || frameStopNow || holdFromPause || rwPauseReq) {
+        /* Another step or hold is under way: a request would end or toggle it. */
+    }
+    else if (emuState == EMU_RUNNING) {
+        fromShown = 0;
+    }
+    else if (emuState == EMU_PAUSED && !emuHoldSuspended) {
+        fromShown = emuSuspendFlag ? 1 : 0;
+    }
+    if (fromShown >= 0) {
+        armFrameStop(change, fromShown, &resumed);
+    }
+    archSemaphoreSignal(emuStateLock);
+
+    if (resumed) {
+        debuggerNotifyEmulatorResume();
+    }
+    return fromShown >= 0;
 }
 
 void emulatorRequestBackStep(int picture)
@@ -960,6 +993,27 @@ static void emulatorThread() {
 }
 //extern int xxxx;
 
+/* A cartridge chip the machine now has built in would be a second one; it is taken out. */
+static void ejectBuiltInTwins(Properties* properties)
+{
+    int i;
+
+    for (i = 0; i < PROP_MAX_CARTS; i++) {
+        RomType type = properties->media.carts[i].type;
+        char* name = properties->media.carts[i].fileName;
+        if (name[0] != 0 && romTypeListCartTwin(type, romTypeListCartFromName(name) == type, ROM_UNKNOWN,
+                                                properties->emulation.machineName) == CART_TWIN_BUILT_IN) {
+            char text[512];
+            snprintf(text, sizeof(text), langErrorCartBuiltInRemoved(), romTypeToString(type));
+            name[0] = 0;
+            properties->media.carts[i].fileNameInZip[0] = 0;
+            properties->media.carts[i].type = ROM_UNKNOWN;
+            updateExtendedRomName(i, properties->media.carts[i].fileName, properties->media.carts[i].fileNameInZip);
+            archCaptureToastInfo(text);
+        }
+    }
+}
+
 void emulatorStart(const char* stateName) {
     /* A start builds the machine an agent's hold would read. */
     dbgChangeBegin();
@@ -1005,6 +1059,9 @@ void emulatorStart(const char* stateName) {
     }
 
     boardSetMachine(machine);
+    if (stateName == NULL) {
+        ejectBuiltInTwins(properties);
+    }
 
 #ifndef NO_TIMERS
 #ifndef WII
@@ -1108,6 +1165,8 @@ void emulatorStop() {
     archMidiEnable(0);
     machineDestroy(machine);
     archThreadDestroy(emuThread);
+    /* A thread killed after the join timed out may have held it. */
+    mixerResetLayoutLock(mixer);
     {
         EmuTapFn tap = emuTap;
         if (tap) {
@@ -1305,11 +1364,23 @@ void emulatorPlayReverse(int enable)
     if (enable) {
         archSoundSuspend();
         archMidiEnable(0);
+        rwTakeOverReq = 0;
     }
-    else if (emuState == EMU_RUNNING) {
+    else {
+        int running;
+
+        /* Only reverse play that ran, and not when it ends in a pause: begun from one under
+        ** another hold, or a stop is due. Read locked, so a pause made meanwhile clears it. */
+        archSemaphoreWait(emuStateLock, -1);
+        running = emuState == EMU_RUNNING;
+        rwTakeOverReq = (running || emuState == EMU_SUSPENDED) && emuPlayReverse &&
+                        !holdFromPause && !rwPauseReq && !frameStopReq && !frameStopNow;
+        archSemaphoreSignal(emuStateLock);
         /* A rewind while paused leaves the machine paused, and silent. */
-        archSoundResume();
-        archMidiEnable(1);
+        if (running) {
+            archSoundResume();
+            archMidiEnable(1);
+        }
     }
     emuPlayReverse = enable;
     /* A rewind does not reach the sync that takes a frame stop, so a pending one
@@ -1338,6 +1409,11 @@ int  emulatorGetPlayReverse()
     return emuPlayReverse;
 }
 
+int emulatorDropsStops(void)
+{
+    return (emuPlayReverse && properties->emulation.reverseEnable) || rwPhase != 0 || backStep;
+}
+
 void emulatorHoldBegin(int reverse)
 {
     int resumed = 0;
@@ -1346,6 +1422,7 @@ void emulatorHoldBegin(int reverse)
     if (reverse) {
         archSoundSuspend();
         archMidiEnable(0);
+        rwTakeOverReq = 0;
         emuPlayReverse = 1;
     }
     archSemaphoreWait(emuStateLock, -1);
@@ -1889,7 +1966,7 @@ static int WaitForSync(int maxSpeed, int stopCause) {
     static int overflowCount = 0;
     static UInt32 kbdPollCnt = 0;
 
-    if ((emuPlayReverse && properties->emulation.reverseEnable) || rwPhase != 0 || backStep) {
+    if (emulatorDropsStops()) {
         int reverseTime = WaitReverse();
         if (reverseTime != RW_RUN_ON) {
             return reverseTime;
@@ -1900,9 +1977,18 @@ static int WaitForSync(int maxSpeed, int stopCause) {
     if (rwPauseReq) {
         takeReversePause();
     }
+    /* At the frame shown, once the replay to it is over; an agent's take over first, as
+    ** it drops what reverse play would queue again and reports what it ended. */
+    if (!emulatorDropsStops()) {
+        keyMatrixInputRunTakeOver();
+        if (rwTakeOverReq) {
+            rwTakeOverReq = 0;
+            boardRewindTakeOver(1);
+        }
+    }
 
     /* Never a snapshot of a replay under way, nor of a frame reverse play shows. */
-    if (!(emuPlayReverse && properties->emulation.reverseEnable) && rwPhase == 0 && !backStep) {
+    if (!emulatorDropsStops()) {
         boardEnableSnapshots(1);
     }
 

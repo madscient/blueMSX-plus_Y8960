@@ -25,6 +25,8 @@
 #include "ControlSymbol.h"
 #include "ControlText.h"
 #include "ControlCpu.h"
+#include "ControlVram.h"
+#include "VDP.h"
 #include "SlotManager.h"
 #include "Board.h"
 #include <stdio.h>
@@ -56,7 +58,7 @@ static int prefixIs(const char* s, const char* prefix)
 }
 
 /* Left in *value when readNumber refuses a number for its size. */
-#define TOO_LARGE 0xFFFFFFFF
+#define TOO_LARGE CTRL_ADDR_TOO_LARGE
 
 /* 0x1A30, $1A30, #1A30, 1A30h, 6704; unmarked digits are decimal. Returns the
 ** first unused character, or NULL when there is no number. */
@@ -106,7 +108,7 @@ static const char* readNumber(const char* s, UInt32* value)
     else {
         scan = start;
         while (isdigit((unsigned char)*scan)) {
-            if (result > 0x07FFFFFF) {
+            if (result > (0x7FFFFFFF - (UInt32)(*scan - '0')) / 10) {
                 *value = TOO_LARGE;
                 return NULL;
             }
@@ -120,6 +122,18 @@ static const char* readNumber(const char* s, UInt32* value)
 
     *value = result;
     return scan;
+}
+
+const char* ctrlAddrScanNumber(const char* text, UInt32* value)
+{
+    return readNumber(text, value);
+}
+
+int ctrlAddrReadNumber(const char* text, UInt32* value)
+{
+    const char* end = readNumber(text, value);
+
+    return end != NULL && *end == 0;
 }
 
 static const char* skipSpace(const char* s)
@@ -861,7 +875,7 @@ int ctrlAddrResolve(const CtrlAddr* addr, CtrlAddrInfo* info)
 
     if (addr->space == CTRL_SPACE_VRAM) {
         info->canonical  = work;
-        info->spaceSize  = boardGetVramSize();
+        info->spaceSize  = ctrlVramSpan(vdpDebugGetVramBanks(), boardGetVramSize());
         info->readable   = info->spaceSize > 0 && work.offset < info->spaceSize;
         info->writable   = info->readable;
         strcpy(info->contents, "VRAM");
@@ -915,7 +929,7 @@ int ctrlAddrAdvance(CtrlAddr* addr, UInt32 count)
         return 1;
 
     case CTRL_SPACE_VRAM:
-        if (addr->offset + count > boardGetVramSize()) {
+        if (addr->offset + count > ctrlVramSpan(vdpDebugGetVramBanks(), boardGetVramSize())) {
             return 0;
         }
         addr->offset += count;

@@ -85,6 +85,9 @@ typedef struct {
     char* errorNoCasInZip;
     char* errorUnknownFileType;
     char* errorCartV9968WithV9990;
+    char* errorCartTwice;
+    char* errorCartBuiltIn;               /* %s = chip name */
+    char* errorCartBuiltInRemoved;        /* %s = chip name */
     char* errorDirDiskTooLarge;
     char* errorDirDiskOnline;
     char* errorDirDiskSubdirs;
@@ -107,6 +110,8 @@ typedef struct {
     char* errorStartEmuMachineNotFound;   /* %s = machine name */
     char* errorStartEmuConfigInvalid;     /* %s = machine name */
     char* errorMissingFiles;
+    char* errorSharedRomsFailed;
+    char* errorFileUnusable;              /* appended to a file name */
     /* A flash save file left unused: the cause, then NotKept, a Fix line and the path. */
     char* errorFlashInvalid;              /* %s = software name */
     char* errorFlashSramSize;             /* %s = software name */
@@ -202,6 +207,8 @@ typedef struct {
     char* menuCartEseSCC;
     char* menuCartMegaFlashRom;
     char* menuCartFlashCart;
+    char* menuCartSound;
+    char* menuCartVdp;
 
     char* menuDiskInsertNew;
     char* menuDiskInsertPhysical;
@@ -291,15 +298,7 @@ typedef struct {
     char* menuToolsKeyboard;
     char* menuToolsCtrlEditor;
     char* menuToolsMixer;
-    char* menuToolsMixerDevices;
-    char* mixerDevicesTitle;
-    char* mixerDevicesNone;
-    char* mixerDevicesEnable;
-    char* mixerDevicesVolume;
-    char* mixerDevicesPan;
-    char* mixerDevicesLevel;
-    char* mixerDevicesSlot;
-    char* mixerDevicesBoard;
+    char* menuToolsMixerDetailed;
     char* menuToolsVdpViewer;
     char* menuToolsControlDeck;
     char* menuToolsLoadMemory;
@@ -892,7 +891,6 @@ typedef struct {
     char* shortcutShowShortcuts;
     char* shortcutShowKeyboard;
     char* shortcutShowMixer;
-    char* shortcutShowMixerDevices;
     char* shortcutShowDebugger;
     char* shortcutShowTrainer;
     char* shortcutShowHelp;
@@ -981,6 +979,7 @@ typedef struct {
     char* romTypeSg1000Cart;
     char* romTypeSc3000Cart;
     char* romTypeV9968Cart;
+    char* romTypeY8960Cart;
 
     char* romTypeMsxPrinter;
     char* romTypeTurborPcm;

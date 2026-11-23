@@ -70,10 +70,10 @@ struct YM2151 {
     Int32  buffer[AUDIO_STEREO_BUFFER_SIZE];
 };
 
-void ym2151TimerStart(void* ptr, int timer, int start);
+static void ym2151TimerStart(void* ptr, int timer, int start);
 
 
-void ym2151TimerSet(void* ref, int timer, int count)
+static void ym2151TimerSet(void* ref, int timer, int count)
 {
     YM2151* ym2151 = (YM2151*)ref;
 
@@ -85,26 +85,26 @@ void ym2151TimerSet(void* ref, int timer, int count)
     }
 }
 
-void ym2151SetIrq(void* ptr, int timer)
+static void ym2151SetIrq(void* ptr, int timer)
 {
     YM2151* ym2151 = (YM2151*)ptr;
     if (ym2151->irqState == 0) {
         boardSetDataBus(ym2151->irqVector, 0, 0);
-		boardSetInt(BOARD_INT_YM2151);
+		boardSetIntUnit(BOARD_INT_YM2151, ym2151);
     }
     ym2151->irqState |= timer;
 }
 
-void ym2151ClearIrq(void* ptr, int timer)
+static void ym2151ClearIrq(void* ptr, int timer)
 {
     YM2151* ym2151 = (YM2151*)ptr;
     ym2151->irqState &= ~timer;
     if (ym2151->irqState == 0) {
-		boardClearInt(BOARD_INT_YM2151);
+		boardClearIntUnit(BOARD_INT_YM2151, ym2151);
     }
 }
 
-void ym2151WritePortCallback(void* ref, UInt32 port, UInt8 value)
+static void ym2151WritePortCallback(void* ref, UInt32 port, UInt8 value)
 {
 }
 
@@ -124,7 +124,7 @@ static void onTimeout2(void* ptr, UInt32 time)
     ym2151TimerStart(ptr, 1, 1);
 }
 
-void ym2151TimerStart(void* ptr, int timer, int start)
+static void ym2151TimerStart(void* ptr, int timer, int start)
 {
     YM2151* ym2151 = (YM2151*)ptr;
 
@@ -164,6 +164,10 @@ void ym2151TimerStart(void* ptr, int timer, int start)
     }
 }
 
+static const YM2151Callbacks ym2151Callbacks = {
+    ym2151TimerSet, ym2151TimerStart, ym2151SetIrq, ym2151ClearIrq, ym2151WritePortCallback
+};
+
 void ym2151SetIrqVector(YM2151* ym2151, UInt8 irqVector)
 {
     ym2151->irqVector = irqVector;
@@ -195,6 +199,7 @@ void ym2151Write(YM2151* ym2151, UInt16 ioPort, UInt8 value)
 
 void ym2151GetDebugInfo(YM2151* ym2151, DbgDevice* dbgDevice)
 {
+    YM2151GetDebugInfo(ym2151->opl, dbgDevice);
 }
     
 static Int32* ym2151Sync(void* ref, UInt32 count) 
@@ -202,6 +207,7 @@ static Int32* ym2151Sync(void* ref, UInt32 count)
     YM2151* ym2151 = (YM2151*)ref;
     UInt32 i;
 
+    YM2151SyncVoices(ym2151->opl);
     for (i = 0; i < count; i++) {
         Int16 sl, sr;
         ym2151->off -= SAMPLERATE - ym2151->rate;
@@ -272,10 +278,20 @@ void ym2151LoadState(YM2151* ym2151)
     if (ym2151->timerRunning2) {
         boardTimerAdd(ym2151->timer2, ym2151->timeout2);
     }
+
+    /* The board does not save which unit holds the bit.
+    ** The data bus came back with the CPU. */
+    if (ym2151->irqState) {
+        boardSetIntUnit(BOARD_INT_YM2151, ym2151);
+    }
+    else {
+        boardClearIntUnit(BOARD_INT_YM2151, ym2151);
+    }
 }
 
 void ym2151Destroy(YM2151* ym2151) 
 {
+    boardClearIntUnit(BOARD_INT_YM2151, ym2151);
     mixerUnregisterChannel(ym2151->mixer, ym2151->handle);
     boardTimerDestroy(ym2151->timer1);
     boardTimerDestroy(ym2151->timer2);
@@ -301,6 +317,7 @@ void ym2151Reset(YM2151* ym2151)
     ym2151->s1r = 0;
     ym2151->s2r = 0;
     ym2151->latch = 0;
+    boardClearIntUnit(BOARD_INT_YM2151, ym2151);
     ym2151->irqState = 0;
 }
 
@@ -323,8 +340,11 @@ YM2151* ym2151Create(Mixer* mixer)
 
     ym2151->handle = mixerRegisterChannel(mixer, MIXER_CHANNEL_YAMAHA_SFG, 1, ym2151Sync, ym2151SetSampleRate, ym2151);
 
-    ym2151->opl = YM2151Create(ym2151, FREQUENCY, SAMPLERATE);
-    
+    ym2151->opl = YM2151Create(ym2151, &ym2151Callbacks, "ym2151_core", FREQUENCY, SAMPLERATE);
+
+    /* A channel sample reaches the mixer 11 times larger. */
+    YM2151AttachVoices(ym2151->opl, mixer, ym2151->handle, 11.0f);
+
     ym2151->rate = mixerGetSampleRate(mixer);
 
     ym2151Reset(ym2151);

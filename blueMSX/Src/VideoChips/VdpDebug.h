@@ -27,6 +27,10 @@
 #include "Geo3DDebug.h"
 
 #define VDP_DEBUG_VRAM_SIZE (256 * 1024)
+#define VDP_DEBUG_BANKS     16
+
+/* Banks vdpDebugCaptureBanks copies besides 0-15: the one a register picks at the capture. */
+enum { VDP_BANK_CPU = 16, VDP_BANK_BG, VDP_BANK_SPR, VDP_BANK_SRC, VDP_BANK_DST };
 #define VDP_RASTER_MAX      4096
 
 /* Trace kinds of class VDPREG. PAGE: R#2 written, a = new, b = old. */
@@ -67,7 +71,7 @@ typedef struct {
     int    displayOffset;   /* line of framebuffer row 0 */
     int    field;           /* S#2 bit 1 during the frame */
     int    blinkFlag;       /* at the frame's first event; R#13 and line blink change it within */
-    int    beamLine;        /* lastLine and 0 once ended */
+    int    beamLine;        /* lastLine and 0 once ended (vdpDebugCaptureRaster: the beam's) */
     int    beamCycle;
     UInt8  startRegs[64];   /* R#0-31 as the frame began; ev turns it into the end, bar R#14-17 */
     int    count;           /* entries of ev that are filled, in the order noted */
@@ -96,7 +100,7 @@ typedef struct {
     UInt8  cmdRegs[32];     /* the engine's own, R#32 onwards: counters move as a command runs */
     UInt16 paletteReg[16];  /* G in bits 8-10, R in 4-6, B in 0-2 */
     UInt32 paletteRgb[16];  /* 0x00RRGGBB; the fixed colours on a TMS VDP; 5 bit ones EPAL wrote */
-    int    paletteExtCount; /* 256 while a V9968's EPAL makes the 256 colour modes read paletteExt, else 0 */
+    int    paletteExtCount; /* 256 while a V9968's EPAL (R#20 bit 4) is on, else 0 */
     UInt32 paletteExt[256]; /* 0x00RRGGBB on a V9968 (SP3 sprites read it either way), else 0 */
     UInt16 paletteExtReg[256]; /* EPAL's 5 bit R in bits 10-14, G in 5-9, B in 0-4 */
     /* How the display reads SCREEN 7-12 now. Interleaved on a 256K V9968,
@@ -104,6 +108,7 @@ typedef struct {
     int    interleaved;     /* odd bytes come from the other 64K bank */
     int    bitmapLinear;    /* V9968 SP3: laid out in address order instead */
     int    vramA17;         /* 0x20000 on a 256K V9968, else 0 */
+    int    vramLayout;      /* as vdpDebugGetVramLayout gives it, for debugDeviceVramIndex */
     /* The sprite scan of the frame that just ended (paused: the one in
     ** progress is taken to start the same way): plane at each step. */
     int    sprPlaneStart;
@@ -116,7 +121,14 @@ typedef struct {
     ** the one just ended), then the geo3d beside it, if any. Kept together. */
     UInt32 frameStartTime;
     Geo3DDebugState geo3d;
+    int    banks;           /* VRAM banks the registers switch: 16 on a V9968 with V58 clear, else 1 */
+    int    vramBanks;       /* VRAM banks the chip holds: 16 on a V9968, else 1 */
+    int    vramBank;        /* the bank vram holds */
     UInt8  vram[VDP_DEBUG_VRAM_SIZE];  /* physical order; zero past what the VDP reaches */
+    /* Times R#29 pointed the sprites at each bank since the VDP was made; only counts up. */
+    UInt32 sprBankHits[VDP_DEBUG_BANKS];
+    int    auxBank;         /* the bank vramAux holds, -1 none and vramAux stale */
+    UInt8  vramAux[VDP_DEBUG_VRAM_SIZE];
 } VdpDebugState;
 
 #define VDP_SHOT_ROWS  240
@@ -212,18 +224,30 @@ int vdpDebugIsCartridge(int index);
 /* The name vdpDebugCapture gives VDP number index, or NULL when there is none. */
 const char* vdpDebugName(int index);
 
-/* Copies VDP number index without syncing it or touching any latch, so call
-** it only on the emulator thread at a frame boundary or while it waits.
-** Returns 0 and clears valid when there is no such VDP. */
+/* Copies VDP number index without syncing it or touching any latch: on the emulator thread
+** at a frame boundary or while it waits, or under a debugger view, which parks it (raster
+** then empty). Returns 0 and clears valid when there is no such VDP. */
 int vdpDebugCapture(int index, VdpDebugState* out);
+/* The same with bank (0-15 or VDP_BANK_*) in vram and bank aux (the next one when the same,
+** -1 none) in vramAux; with one bank, bank 0 in vram and vramAux is left alone. */
+int vdpDebugCaptureBanks(int index, VdpDebugState* out, int bank, int aux);
+/* The same, picking bank and aux among vramBanks, so any bank also while V58 is set. */
+int vdpDebugCaptureAnyBanks(int index, VdpDebugState* out, int bank, int aux);
+
+/* The raster log of the machine's VDP under a debugger view, raster then being empty in
+** vdpDebugCapture. ended and the beam of [0] are the beam's, not the viewer's, which
+** *displayOver gets. Returns 0, with both not valid, when there is no machine VDP. */
+int vdpDebugCaptureRaster(VdpRasterFrame out[2], int* displayOver);
 
 /* Copies the picture of VDP number index, on the same terms; with pixels 0
 ** all but the samples. Returns 0 and clears valid when there is none. */
 int vdpDebugCaptureFrame(int index, VdpFrameShot* out, int pixels);
 
-/* Starts (on) or stops logging raster events of the machine's VDP; calls
-** nest. UI thread only. Each new start forgets what was logged before. */
-void vdpRasterArm(int on);
+/* Starts (on) or stops logging raster events of the machine's VDP; calls nest, and it
+** returns how many were armed before. Any thread. Each new start forgets what was logged. */
+int  vdpRasterArm(int on);
+/* Once, with the emulator's other locks, before any thread arms or captures the log. */
+void vdpRasterCreateLock(void);
 
 /* Nonzero while armed: the generation of the current start. */
 extern volatile int vdpRasterArmed;

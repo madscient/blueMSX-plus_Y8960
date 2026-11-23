@@ -4,6 +4,9 @@
 **
 ** Copyright (C) 2026 madscient
 **
+** Modified 2026 by Hesoten for blueMSX+ fork.
+** See https://github.com/Hesoten/blueMSX-plus for change history.
+**
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
 ** the Free Software Foundation; either version 2 of the License, or
@@ -22,6 +25,7 @@
 */
 #include "Y8960Opllex.h"
 #include "Y8960OpllCore.h"
+#include "Emu2413/emu2413.h"
 #include "Y8960Pan.h"
 #include "romMapperY8960.h"
 #include "SaveState.h"
@@ -53,8 +57,36 @@ struct Y8960OpllexChip {
 
     Y8960OPLL*    opll;
     UInt8         address;
+    MixerVoices*  voices;           /* lent by the mixer; NULL leaves the channels alone */
+    Int32         voicesActive;     /* gains to apply, read once per update */
+    Int32         voicesMetered;    /* levels to sum, likewise */
     Int32         buffer[AUDIO_STEREO_BUFFER_SIZE];
 };
+
+/* The chip's channels in its ch_out order: 9 FM, then the rhythm. */
+static const char* const voiceNames[14] = {
+    "1", "2", "3", "4", "5", "6", "7", "8", "9", "BD", "HH", "SD", "TOM", "CYM"
+};
+
+/* Called for every chip sample with a copy of the 14 channel outputs. */
+static void voiceHook(void* ref, int16_t* chOut, int count)
+{
+    Y8960OpllexChip* chip = (Y8960OpllexChip*)ref;
+    MixerVoices* voices = chip->voices;
+    int i;
+
+    for (i = 0; i < count; i++) {
+        if (chip->voicesActive) {
+            chOut[i] = (int16_t)(((Int64)chOut[i] * voices->gain[i]) >> 12);
+        }
+        if (chip->voicesMetered) {
+            mixerMeterVoice(voices, i, chOut[i]);
+        }
+    }
+    if (chip->voicesMetered) {
+        voices->samples++;
+    }
+}
 
 /* Stereo, because the pan registers place each channel; the mixer's own pan
 ** could only move the block as a whole. */
@@ -64,6 +96,14 @@ static Int32* y8960OpllexSync(void* ref, UInt32 count)
     Int64 gain = (Int64)y8960MixerGain(Y8960_VOL_OPLL) * Y8960_OPLLEX_VOLUME;
     UInt32 i;
 
+    if (chip->voices != NULL) {
+        chip->voicesActive  = chip->voices->active;
+        chip->voicesMetered = chip->voices->metering;
+        chip->voices->scale = (float)gain / (Y8960_OPLLEX_VOLUME_DIV * Y8960_GAIN_ONE);
+        /* Rhythm mode takes FM 7-9; without it the rhythm voices are idle. */
+        chip->voices->idle  = chip->opll->rhythm_mode ? 0x1C0u : 0x3E00u;
+    }
+    Y8960OPLL_setVoiceHook(chip->opll, mixerVoicesWanted(chip->voices) ? voiceHook : NULL, chip);
     for (i = 0; i < count; i++) {
         int32_t out[2];
         Y8960OPLL_calcStereo(chip->opll, out);
@@ -238,29 +278,37 @@ void y8960OpllexLoadState(Y8960OpllexChip* chip)
     p->short_noise     = (uint8_t)saveStateGet(state, "short_noise",     p->short_noise);
     saveStateGetBuffer(state, "patch_number", p->patch_number, sizeof(p->patch_number));
     saveStateGetBuffer(state, "patch_bank",   p->patch_bank,   sizeof(p->patch_bank));
-    saveStateGetBuffer(state, "user_patch",   p->user_patch,   sizeof(p->user_patch));
+    /* A bank write re-points the voice from patch_number, so it must stay a voice. */
+    for (i = 0; i < 9; i++) {
+        if (p->patch_number[i] < 0 || p->patch_number[i] >= 19) p->patch_number[i] = 0;
+    }
+    /* The user voice is rebuilt from its registers rather than read back. */
+    Y8960OPLL_dumpToPatch(p->reg, p->user_patch);
 
+    /* Values that index tables, count shifts or pick the paired slot are
+    ** cut to what the core can produce: type is the slot parity or 3. */
     for (i = 0; i < 18; i++) {
         Y8960OPLL_SLOT* sl = &p->slot[i];
         sprintf(t, "s%02d_number",  i); sl->number          = (uint8_t) saveStateGet(state, t, sl->number);
         sprintf(t, "s%02d_type",    i); sl->type            = (uint8_t) saveStateGet(state, t, sl->type);
+        if (sl->type != 3) sl->type = (uint8_t)(i & 1);
         sprintf(t, "s%02d_out0",    i); sl->output[0]       = (int32_t) saveStateGet(state, t, (UInt32)sl->output[0]);
         sprintf(t, "s%02d_out1",    i); sl->output[1]       = (int32_t) saveStateGet(state, t, (UInt32)sl->output[1]);
         sprintf(t, "s%02d_pgph",    i); sl->pg_phase        =           saveStateGet(state, t, sl->pg_phase);
         sprintf(t, "s%02d_pgout",   i); sl->pg_out          =           saveStateGet(state, t, sl->pg_out);
         sprintf(t, "s%02d_pgkeep",  i); sl->pg_keep         = (uint8_t) saveStateGet(state, t, sl->pg_keep);
-        sprintf(t, "s%02d_blkfnum", i); sl->blk_fnum        = (uint16_t)saveStateGet(state, t, sl->blk_fnum);
+        sprintf(t, "s%02d_blkfnum", i); sl->blk_fnum        = (uint16_t)(saveStateGet(state, t, sl->blk_fnum) & 0xfff);
         sprintf(t, "s%02d_fnum",    i); sl->fnum            = (uint16_t)saveStateGet(state, t, sl->fnum);
-        sprintf(t, "s%02d_blk",     i); sl->blk             = (uint8_t) saveStateGet(state, t, sl->blk);
+        sprintf(t, "s%02d_blk",     i); sl->blk             = (uint8_t) (saveStateGet(state, t, sl->blk) & 7);
         sprintf(t, "s%02d_egst",    i); sl->eg_state        = (uint8_t) saveStateGet(state, t, sl->eg_state);
-        sprintf(t, "s%02d_vol",     i); sl->volume          = (int32_t) saveStateGet(state, t, (UInt32)sl->volume);
+        sprintf(t, "s%02d_vol",     i); sl->volume          = (int32_t) (saveStateGet(state, t, (UInt32)sl->volume) & 63);
         sprintf(t, "s%02d_key",     i); sl->key_flag        = (uint8_t) saveStateGet(state, t, sl->key_flag);
         sprintf(t, "s%02d_sus",     i); sl->sus_flag        = (uint8_t) saveStateGet(state, t, sl->sus_flag);
         sprintf(t, "s%02d_tll",     i); sl->tll             = (uint16_t)saveStateGet(state, t, sl->tll);
         sprintf(t, "s%02d_rks",     i); sl->rks             = (uint8_t) saveStateGet(state, t, sl->rks);
         sprintf(t, "s%02d_egrh",    i); sl->eg_rate_h       = (uint8_t) saveStateGet(state, t, sl->eg_rate_h);
-        sprintf(t, "s%02d_egrl",    i); sl->eg_rate_l       = (uint8_t) saveStateGet(state, t, sl->eg_rate_l);
-        sprintf(t, "s%02d_egsh",    i); sl->eg_shift        =           saveStateGet(state, t, sl->eg_shift);
+        sprintf(t, "s%02d_egrl",    i); sl->eg_rate_l       = (uint8_t) (saveStateGet(state, t, sl->eg_rate_l) & 3);
+        sprintf(t, "s%02d_egsh",    i); sl->eg_shift        =           saveStateGet(state, t, sl->eg_shift) & 15;
         sprintf(t, "s%02d_egout",   i); sl->eg_out          =           saveStateGet(state, t, sl->eg_out);
         sprintf(t, "s%02d_upd",     i); sl->update_requests =           saveStateGet(state, t, sl->update_requests);
     }
@@ -320,16 +368,44 @@ static void getDebugInfo(Y8960OpllexChip* chip, DbgDevice* dbgDevice)
     }
 }
 
-Y8960OpllexChip* y8960OpllexCreate(Mixer* mixer, const char* name)
+/* Without the voice file, emu2413's presets stand in. emu2413 has no YM2423,
+** so its YM2413 voices take that bank too. */
+static void setRomVoices(const UInt8* romVoices, int romVoicesSize)
+{
+    static const int emuTone[Y8960OPLL_BANK_COUNT] = {
+        OPLL_2413_TONE, OPLL_2413_TONE, OPLL_281B_TONE, OPLL_VRC7_TONE
+    };
+    UInt8 voices[Y8960OPLL_ROM_VOICES_SIZE];
+    int bank;
+    int i;
+
+    if (romVoices != NULL && romVoicesSize == Y8960OPLL_ROM_VOICES_SIZE) {
+        Y8960OPLL_setRomVoices(romVoices);
+        return;
+    }
+    for (bank = 0; bank < Y8960OPLL_BANK_COUNT; bank++) {
+        for (i = 0; i < Y8960OPLL_ROM_VOICES_PER_BANK; i++) {
+            OPLL_PATCH patch[2];
+            OPLL_getDefaultPatch(emuTone[bank], i + 1, patch);
+            OPLL_patchToDump(patch, voices + (bank * Y8960OPLL_ROM_VOICES_PER_BANK + i) * 8);
+        }
+    }
+    Y8960OPLL_setRomVoices(voices);
+}
+
+Y8960OpllexChip* y8960OpllexCreate(Mixer* mixer, const char* name,
+                                   const UInt8* romVoices, int romVoicesSize)
 {
     DebugCallbacks dbgCallbacks = { getDebugInfo, NULL, NULL, NULL };
     Y8960OpllexChip* chip = (Y8960OpllexChip*)calloc(1, sizeof(Y8960OpllexChip));
 
     chip->mixer = mixer;
+    setRomVoices(romVoices, romVoicesSize);
     chip->opll  = Y8960OPLL_new(Y8960_OPLLEX_CLOCK, mixerGetSampleRate(mixer));
 
-    chip->handle      = mixerRegisterChannelNamed(mixer, MIXER_CHANNEL_Y8960, 1,
-                                                  y8960OpllexSync, y8960OpllexSetSampleRate, chip, "opll");
+    chip->handle      = mixerRegisterChannel(mixer, MIXER_CHANNEL_Y8960, 1,
+                                             y8960OpllexSync, y8960OpllexSetSampleRate, chip);
+    chip->voices      = mixerAttachVoices(mixer, chip->handle, 14, voiceNames, 1.0f);
     chip->debugHandle = debugDeviceRegister(DBGTYPE_AUDIO, name, &dbgCallbacks, chip);
 
     y8960OpllexReset(chip);

@@ -170,7 +170,6 @@ int cartridgeInsert(int cartNo, RomType romType, const char* cart, const char* c
         return 0;
     }
 
-    mixerBeginDevice(boardGetMixer(), slot, sslot, slotGetRegistrationCount(slot, sslot));
     /* Named here because no mapper keeps the file it was built from. */
     {
         const char* leaf = strrchr(romName, '\\');
@@ -191,6 +190,14 @@ int cartridgeInsert(int cartNo, RomType romType, const char* cart, const char* c
             sprintf(text, "%.48s (%.40s)", leaf, romTypeToString(romType));
         }
         slotAddContents(slot, sslot, text);
+    }
+
+    /* I/O-port devices plugged as a cartridge do not occupy the slot. */
+    if (romType == ROM_JOYREXPSG || romType == ROM_MOONSOUND) {
+        mixerSetCreateSlot(boardGetMixer(), -1, -1);
+    }
+    else {
+        mixerSetCreateSlot(boardGetMixer(), slot, sslot);
     }
 
     switch (romType) {
@@ -342,9 +349,12 @@ int cartridgeInsert(int cartNo, RomType romType, const char* cart, const char* c
 
     case ROM_FMPAC:
         if (cart[strlen(cart) - 4] != '.') {
-            buf = romLoad("Machines/Shared Roms/FMPAC.rom", "", &size);
+            buf = romLoadShared(ROM_FMPAC, "FMPAC.rom", &size);
             if (buf != NULL) {
-                success &= romMapperFMPACCreate("FmPacA.rom", buf, size, slot, sslot, 2);
+                if (!romMapperFMPACCreate("FmPacA.rom", buf, size, slot, sslot, 2)) {
+                    romRejectShared(ROM_FMPAC, "FMPAC.rom");
+                    success = 0;
+                }
                 free(buf);
             }
             else {
@@ -362,7 +372,7 @@ int cartridgeInsert(int cartNo, RomType romType, const char* cart, const char* c
     default:
         // Load roms for Special Carts
         if (strcmp(cart, "Sunrise IDE") == 0) {
-            buf = romLoad("Machines/Shared Roms/SUNRISEIDE.rom", cartZip, &size);
+            buf = romLoadShared(ROM_SUNRISEIDE, "SUNRISEIDE.rom", &size);
             if (buf == 0) {
                 success &= romMapperSunriseIdeCreate(cartNo, romName, NULL, 0, slot, sslot, 0);
                 break;
@@ -370,7 +380,7 @@ int cartridgeInsert(int cartNo, RomType romType, const char* cart, const char* c
         }
         // Load roms for Special Carts
         else if (strcmp(cart, "Beer IDE") == 0) {
-            buf = romLoad("Machines/Shared Roms/beeride.rom", cartZip, &size);
+            buf = romLoadShared(ROM_BEERIDE, "beeride.rom", &size);
             if (buf == 0) {
                 success &= romMapperBeerIdeCreate(cartNo, romName, NULL, 0, slot, sslot, 0);
                 break;
@@ -378,7 +388,7 @@ int cartridgeInsert(int cartNo, RomType romType, const char* cart, const char* c
         }
         // Load roms for Special Carts
         else if (strcmp(cart, "Gouda SCSI") == 0) {
-            buf = romLoad("Machines/Shared Roms/novaxis.rom", cartZip, &size);
+            buf = romLoadShared(ROM_GOUDASCSI, "novaxis.rom", &size);
             if (buf == 0) {
                 success &= romMapperGoudaSCSICreate(cartNo, romName, NULL, 0, slot, sslot, 2);
                 break;
@@ -386,11 +396,14 @@ int cartridgeInsert(int cartNo, RomType romType, const char* cart, const char* c
         }
         // Load roms for Special Carts
         else if (strcmp(cart, "Nowind MSXDOS1") == 0) {
-            buf = romLoad("Machines/Shared Roms/nowindDos1.rom", cartZip, &size);
+            buf = romLoadShared(ROM_NOWIND, "nowindDos1.rom", &size);
         }
         // Load roms for Special Carts
         else if (strcmp(cart, "Nowind MSXDOS2") == 0) {
-            buf = romLoad("Machines/Shared Roms/nowindDos2.rom", cartZip, &size);
+            buf = romLoadShared(ROM_NOWIND, "nowindDos2.rom", &size);
+        }
+        else if (strcmp(cart, "MoonSound") == 0) {
+            buf = romLoadShared(ROM_MOONSOUND, "MOONSOUND.rom", &size);
         }
         else {
             buf = romLoad(cart, cartZip, &size);
@@ -455,6 +468,19 @@ int cartridgeInsert(int cartNo, RomType romType, const char* cart, const char* c
 
             case ROM_Y8960:
                 success &= romMapperY8960CartCreate(romName, NULL, 0, slot, sslot);
+                break;
+
+            case ROM_MOONSOUND:
+                /* The FM part and the sample RAM still work without the wave ROM. */
+                if (strcmp(cart, "MoonSound") == 0) {
+                    success &= romMapperMoonsoundCreate(romName, NULL, 0, 640, slot, sslot);
+                }
+                break;
+
+            case ROM_MSXAUDIO:
+                if (strcmp(cart, "MSX-AUDIO") == 0) {
+                    success &= romMapperMsxAudioCreate(romName, NULL, 0, slot, sslot, 0);
+                }
                 break;
             }
             break;
@@ -835,10 +861,6 @@ int cartridgeInsert(int cartNo, RomType romType, const char* cart, const char* c
             success &= romMapperFMPACCreate(romName, buf, size, slot, sslot, 2);
             break;
 
-        case ROM_Y8960SCC:
-            success &= romMapperY8960SccCreate(romName, buf, size, slot, sslot, 2);
-            break;
-
         case ROM_Y8960:
             success &= romMapperY8960CartCreate(romName, buf, size, slot, sslot);
             break;
@@ -860,7 +882,12 @@ int cartridgeInsert(int cartNo, RomType romType, const char* cart, const char* c
             break;
 
         case ROM_GOUDASCSI:
-            success &= romMapperGoudaSCSICreate(cartNo, romName, buf, size, slot, sslot, 2);
+            if (!romMapperGoudaSCSICreate(cartNo, romName, buf, size, slot, sslot, 2)) {
+                if (strcmp(cart, "Gouda SCSI") == 0) {
+                    romRejectShared(ROM_GOUDASCSI, "novaxis.rom");
+                }
+                success = 0;
+            }
             break;
 
         case SRAM_ESERAM:
@@ -901,6 +928,9 @@ int cartridgeInsert(int cartNo, RomType romType, const char* cart, const char* c
                 strcat(charName, "_char.rom");
                     
                 charData = romLoad(charName, NULL, &charSize);
+                if (charData == NULL) {
+                    boardReportDeviceFile(ROM_MICROSOL80, charName, DEVICE_FILE_MISSING);
+                }
                 success &= romMapperMicrosolVmx80Create(romName, buf, size, slot, sslot, 2, charData, charSize);
                 if (charData != NULL) {
                     free(charData);
@@ -916,8 +946,7 @@ int cartridgeInsert(int cartNo, RomType romType, const char* cart, const char* c
         free(buf);
     }
 
-    mixerEndDevice(boardGetMixer(), slotGetRegistrationCount(slot, sslot));
-
+    mixerSetCreateSlot(boardGetMixer(), -1, -1);
     return success;
 }
 

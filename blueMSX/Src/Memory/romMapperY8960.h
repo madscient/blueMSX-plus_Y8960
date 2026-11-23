@@ -112,10 +112,6 @@ void romMapperY8960OpmDestroy(void);
 /* Answers on the switched I/O (40h-4Fh), which no enabler gates. */
 int  romMapperY8960SysCtrlCreate(void);
 void romMapperY8960SysCtrlDestroy(void);
-/* The SCC block carries the cartridge ROM and the bank mapper, so unlike the
-** others it is created from the slot entry. */
-int  romMapperY8960SccCreate(const char* filename, UInt8* romData,
-                             int size, int slot, int sslot, int startPage);
 
 /* The whole card: the SCC block plus the seven other blocks, as a cartridge.
 ** romData may be NULL, which is the card with no firmware in it. */

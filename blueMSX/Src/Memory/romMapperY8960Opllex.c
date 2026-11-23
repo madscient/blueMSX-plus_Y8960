@@ -4,6 +4,9 @@
 **
 ** Copyright (C) 2026 madscient
 **
+** Modified 2026 by Hesoten for blueMSX+ fork.
+** See https://github.com/Hesoten/blueMSX-plus for change history.
+**
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
 ** the Free Software Foundation; either version 2 of the License, or
@@ -28,12 +31,17 @@
 #include "IoPort.h"
 #include "Y8960Opllex.h"
 #include "AudioMixer.h"
+#include "RomLoader.h"
 #include <stdlib.h>
 
 /* MSX-MUSIC's own addresses, so that software written for a built-in FM
 ** sound chip drives it unchanged. */
 #define Y8960_OPLL_ADDRESS 0x7C
 #define Y8960_OPLL_DATA    0x7D
+
+/* The preset voices the hardware carries are licensed CC BY-SA and so are not
+** in the source. Without this file the chip plays emu2413's presets. */
+#define Y8960_OPLL_VOICES  "y8960_opll_voices.bin"
 
 typedef struct {
     int              deviceHandle;
@@ -112,12 +120,17 @@ int romMapperY8960OpllexCreate(void)
 {
     DeviceCallbacks callbacks = { destroy, reset, saveState, loadState };
     RomMapperY8960Opllex* rm = (RomMapperY8960Opllex*)calloc(1, sizeof(RomMapperY8960Opllex));
+    UInt8* voices;
+    int voicesSize;
 
     rm->deviceHandle = deviceManagerRegister(ROM_Y8960, &callbacks, rm);
 
     theOpllex = rm;
 
-    rm->chip = y8960OpllexCreate(boardGetMixer(), "Y8960 OPLLEX");
+    voicesSize = 0;
+    voices = romLoadShared(ROM_UNKNOWN, Y8960_OPLL_VOICES, &voicesSize);
+    rm->chip = y8960OpllexCreate(boardGetMixer(), "Y8960 OPLLEX", voices, voicesSize);
+    free(voices);
 
     /* Write only, as the FM-PAC's own 7Ch-7Dh are: these addresses are shared
     ** with the machine's MSX-MUSIC when one is present. */

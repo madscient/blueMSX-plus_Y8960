@@ -39,8 +39,17 @@
     "\"Where. One of: 0xC000 (what the Z80 sees now), slot1.0:seg5+0x100 (a " \
     "segment of a slot, whether or not it is paged in), ram:seg12+0x1A30 (the " \
     "memory mapper in page 3), vram:0x1B00 (as the program addresses video memory " \
-    "through the VDP). Addresses printed by these tools can be " \
+    "through the VDP; a V9968 has bank n from vram:n*0x40000). " \
+    "Addresses printed by these tools can be " \
     "sent straight back.\"}"
+
+/* bmsx_key and bmsx_type both take it. */
+#define TAKE_OVER_PROPERTY \
+    "\"take_over\":{\"type\":\"boolean\",\"default\":false,\"description\":" \
+    "\"after a step back, back frame or rewind the machine replays the input it was " \
+    "given before, up to the moment it was rewound from, and these keys wait for " \
+    "that; true drops the recorded input from now on and the keys still queued, " \
+    "and sends these at once. Accepted while paused: done when the machine runs\"}"
 
 #define READ_ONLY "\"readOnlyHint\":true,\"destructiveHint\":false," \
                   "\"idempotentHint\":true,\"openWorldHint\":false"
@@ -60,8 +69,10 @@ const McpTool mcpTools[] = {
 {
     "bmsx_status",
     "Where the emulated MSX is: run state, why it last stopped, which segment is "
-    "paged into each Z80 page and, while it is paused, every CPU register and "
-    "every VDP register with the screen mode they add up to. The VDP registers "
+    "paged into each Z80 page and, while it is paused, every CPU register, the "
+    "CPU's /INT line (and /NMI when low) and, as board requests, the devices holding "
+    "an interrupt request on the board (shown apart: some machines wire them otherwise), "
+    "and every VDP register with the screen mode they add up to. The VDP registers "
     "are write only to the Z80, so this is the only way to see what the program "
     "set them to -- start here when the screen is wrong. It also says whether a V9990 "
     "picture (GFX9000, Video9000) or a V9968 cartridge picture is shown.",
@@ -127,14 +138,21 @@ const McpTool mcpTools[] = {
     "default); step_over runs a call to completion instead of going into it; step_out "
     "runs until the current subroutine returns. Those two wait 2 seconds: if the call has "
     "not returned by then the reply says timeout and the machine is still running, so "
-    "wait with bmsx_run_until or pause it.",
+    "wait with bmsx_run_until or pause it. frame runs to the end of the frame on the "
+    "screen and pauses there (the rest of the frame in progress, which after a frame stop is "
+    "one whole frame; count frames, up to "
+    CTRL_STR(CTRL_RUN_FRAME_COUNT_MAX) "), unlike pause, which stops wherever the CPU is; "
+    "change runs on to the first frame whose picture differs, giving up after 300 frames "
+    "(5 to 6 seconds at normal speed). A breakpoint or watch met on the way ends either and "
+    "is reported; one at PC stops them at once.",
     SCHEMA("\"properties\":{"
            "\"how\":{\"type\":\"string\",\"enum\":[\"pause\",\"resume\",\"step\","
-           "\"step_over\",\"step_out\"]},"
+           "\"step_over\",\"step_out\",\"frame\",\"change\"]},"
            "\"count\":{\"type\":\"integer\",\"default\":" CTRL_STR(CTRL_RUN_COUNT_DEFAULT)
            ",\"minimum\":" CTRL_STR(CTRL_RUN_COUNT_MIN) ","
            "\"maximum\":" CTRL_STR(CTRL_RUN_COUNT_MAX)
-           ",\"description\":\"instructions, for step\"}},"
+           ",\"description\":\"instructions for step, frames for frame (up to "
+           CTRL_STR(CTRL_RUN_FRAME_COUNT_MAX) "); change takes 1\"}},"
            "\"required\":[\"how\"]"),
     CHANGES,
     "run",
@@ -146,11 +164,17 @@ const McpTool mcpTools[] = {
     "stack memory above SP, innermost first, each with where it sits, the slot and "
     "segment paged in there and the nearest symbol. A return address on its own "
     "means little on a bank switched program, where 0x4140 is in thirty-two "
-    "places at once.",
+    "places at once. With history, also the last instructions the CPU ran, oldest "
+    "first, disassembled as memory reads now, with loops folded; '?' marks a line "
+    "whose memory was switched while or after it ran.",
     SCHEMA("\"properties\":{"
            "\"count\":{\"type\":\"integer\",\"default\":" CTRL_STR(CTRL_STACK_COUNT_DEFAULT)
            ",\"minimum\":" CTRL_STR(CTRL_STACK_COUNT_MIN) ","
-           "\"maximum\":" CTRL_STR(CTRL_STACK_COUNT_MAX) "}}"),
+           "\"maximum\":" CTRL_STR(CTRL_STACK_COUNT_MAX) "},"
+           "\"history\":{\"type\":\"integer\",\"default\":"
+           CTRL_STR(CTRL_STACK_HISTORY_DEFAULT) ",\"minimum\":"
+           CTRL_STR(CTRL_STACK_HISTORY_MIN) ",\"maximum\":" CTRL_STR(CTRL_STACK_HISTORY_MAX) ","
+           "\"description\":\"how many of the last instructions run to list; 0 lists none\"}}"),
     READ_ONLY,
     "stack",
     NULL
@@ -187,11 +211,27 @@ const McpTool mcpTools[] = {
     "5 s after a killed server or a lost connection unless the same server "
     "reconnects; a cancelled call reconnects at once and keeps them. "
     "Segment ones stay until cleared. list shows both "
-    "kinds that are set, the debugger window's plain ones too.",
+    "kinds that are set, the debugger window's plain ones too. "
+    "With when or skip, every arrival is a hit (not a HALT running again, nor the "
+    "instruction a step starts at), and it stops only after the condition has been "
+    "true more than skip times; setting it again replaces both and zeroes the "
+    "counts, which list and the stop reply give (hits, matched); rewinds and snapshot "
+    "restores do not wind them back. A breakpoint the debugger window or a plugin set "
+    "at the same place still stops every time.",
     SCHEMA("\"properties\":{"
            "\"op\":{\"type\":\"string\",\"enum\":[\"set\",\"clear\",\"clear_all\",\"list\"],"
            "\"default\":\"set\"},"
-           AT_PROPERTY "}"),
+           AT_PROPERTY ","
+           "\"when\":{\"type\":\"string\","
+           "\"description\":\"for set: stop only where this is not 0, before the instruction "
+           "runs. Signed 32-bit integers with ( ) ! ~ unary - + - << >> & ^ | == != < <= > "
+           ">= && || at C precedence; registers a f b c d e h l af bc de hl ix iy sp pc, "
+           "flags zf cf, [addr] a byte and {addr} a word as the CPU sees them now (addr "
+           "wraps to 16 bits), @label its address, numbers as in at up to 0x7FFFFFFF. "
+           "Example: [0xC010]==1 && b<3\"},"
+           "\"skip\":{\"type\":\"integer\",\"default\":0,\"minimum\":"
+           CTRL_STR(CTRL_BREAK_SKIP_MIN) ",\"maximum\":" CTRL_STR(CTRL_BREAK_SKIP_MAX) ","
+           "\"description\":\"for set: how many times when holds before one stops\"}}"),
     CHANGES,
     "bp.",
     buildByOp
@@ -227,12 +267,15 @@ const McpTool mcpTools[] = {
 },
 {
     "bmsx_watch",
-    "Stop the machine when a byte is written (reads do not count, and an "
-    "unchanged value still counts), or when an I/O port gets an OUT. Works on "
-    "a Z80 address whatever segment is paged in, on video memory -- which is how "
-    "to find out what drew over your sprite -- and on ports. A condition is "
-    "checked after each byte is written, and a value of more than 1 byte is "
-    "little endian. Then bmsx_run_until reports the stop and bmsx_status says "
+    "Stop the machine when a byte is written (an unchanged value still counts), "
+    "or when an I/O port gets an OUT. Works on a Z80 address whatever segment is "
+    "paged in, on video memory -- which is how to find out what drew over your "
+    "sprite -- and on ports. on=read stops instead when the CPU reads a Z80 address "
+    "as data, or a port with IN -- which is how to find out which code reads a "
+    "variable; it stops inside that instruction. A condition compares the value "
+    "after each byte is written (on=read: the value including the byte just read); "
+    "a value of more than 1 byte is little endian. "
+    "Then bmsx_run_until reports the stop and bmsx_status says "
     "where the code was. list shows the watches agents set, not the debugger window's.",
     SCHEMA("\"properties\":{"
            "\"op\":{\"type\":\"string\",\"enum\":[\"set\",\"clear\",\"list\"],\"default\":\"set\"},"
@@ -245,7 +288,9 @@ const McpTool mcpTools[] = {
            "\"value\":{\"type\":\"integer\",\"description\":\"what to compare against\"},"
            "\"size\":{\"type\":\"integer\",\"default\":" CTRL_STR(CTRL_WP_SIZE_DEFAULT)
            ",\"minimum\":" CTRL_STR(CTRL_WP_SIZE_MIN) ",\"maximum\":" CTRL_STR(CTRL_WP_SIZE_MAX)
-           "}}"),
+           "},"
+           "\"on\":{\"type\":\"string\",\"enum\":[\"write\",\"read\"],"
+           "\"default\":\"" CTRL_WP_ON_DEFAULT "\"}}"),
     CHANGES,
     "wp.",
     buildByOp
@@ -312,6 +357,123 @@ const McpTool mcpTools[] = {
     NULL
 },
 {
+    "bmsx_vdp",
+    "Registers, palette, video memory or geo3d of a video chip, read from a paused machine: the machine's "
+    "VDP, a V9968 cartridge's VDP or a V9990 (GFX9000, Video9000). A cartridge demo "
+    "draws only on its own chip, whose registers bmsx_status does not show. A VDP's "
+    "registers include the status registers and the command engine's own (R#32 on), "
+    "whose counters move while a command runs; a V9990 is read as of its last access. "
+    "palette gives the register values and the colours drawn. vram dumps count bytes from "
+    "at, as the program addresses that chip's video memory (the V9990's in the mode a CPU "
+    "access uses now); for the machine's VDP, bmsx_mem_read with vram: does the same and "
+    "more. geo3d reads the 3D engine "
+    "beside a V9968: the RUNs it keeps (the last 32), one RUN with run, and a face or "
+    "edge with item, to tell why it was not drawn: DRAWN; NEAR, a vertex behind ZNEAR or "
+    "saturated; BACK, a face turned away; OFFSCREEN, an edge wholly off one side; UNCUT, "
+    "an edge that misses the screen. RUN numbers start again after a reset or a state "
+    "load: compare the epoch in each reply. raster (machine VDP only) lists the register "
+    "writes and line interrupts of the current frame and the one before, by frame line and "
+    "cycle, with the registers each frame began with; the first call of a connection arms "
+    "the log, so run or step a frame (bmsx_run how=frame) and read again. A write takes "
+    "effect on its line or the next; R#14-17, R#32 on and writes of the value already "
+    "there are not logged; complete=0 means the log was armed, the machine reset or a state "
+    "loaded during that frame, so earlier writes may be missing. A frame step stops at the "
+    "end of the display, so a frame's blanking lines are logged after the next run or step.",
+    SCHEMA("\"properties\":{"
+           "\"show\":{\"type\":\"string\",\"enum\":[\"registers\",\"palette\",\"geo3d\",\"vram\","
+           "\"raster\"],"
+           "\"default\":\"" CTRL_VDP_SHOW_DEFAULT "\"},"
+           "\"chip\":{\"type\":\"string\",\"enum\":[\"machine\",\"cartridge\",\"v9990\"],"
+           "\"default\":\"" CTRL_VDP_CHIP_DEFAULT "\"},"
+           "\"run\":{\"type\":\"integer\",\"minimum\":1,\"description\":\"geo3d: the RUN to "
+           "list; the latest when item is given without it\"},"
+           "\"item\":{\"type\":\"string\",\"description\":\"geo3d, as a string: a face or edge "
+           "number for its vertices, rows and VDP commands, or a range such as \\\"0-63\\\" to "
+           "list\"},"
+           "\"at\":{\"type\":\"string\",\"description\":\"vram: the first address, written as "
+           "in an address: \\\"0x1B00\\\", \\\"1B00h\\\" or decimal\"},"
+           "\"count\":{\"type\":\"integer\",\"default\":" CTRL_STR(CTRL_MEM_READ_COUNT_DEFAULT)
+           ",\"minimum\":" CTRL_STR(CTRL_MEM_READ_COUNT_MIN) ",\"maximum\":"
+           CTRL_STR(CTRL_MEM_READ_COUNT_MAX) ",\"description\":\"vram: bytes to dump\"}}"),
+    READ_ONLY,
+    "vdp",
+    NULL
+},
+{
+    "bmsx_devices",
+    "The devices the emulator's debugger sees (CPU, memory, video, sound, I/O), read from a "
+    "paused machine. Without device it lists each one by index with its kind, name, "
+    "register banks, I/O port views and memory blocks; with device it gives that one's "
+    "registers and I/O ports with their values (a write-only port has none) and its "
+    "memory blocks' names and sizes. Two devices of one kind, such as two sound chips, "
+    "are told apart by index. An index holds only while the generation in the reply "
+    "stays the same: a reset, a cartridge change or a state load changes it. A sound "
+    "chip's status bits are as of its last update, not of this moment.",
+    SCHEMA("\"properties\":{"
+           "\"device\":{\"type\":\"integer\",\"minimum\":0,\"description\":\"the index from "
+           "the list, for that device's registers and ports\"}}"),
+    READ_ONLY,
+    "devices",
+    NULL
+},
+{
+    "bmsx_trace",
+    "Record what the video chips and the CPU do, event by event, and read it back: arm the "
+    "classes, let the machine run or step it, then read. geo3d is the 3D engine beside a V9968 "
+    "(its RUN numbers are those of bmsx_vdp show=geo3d), vdpcmd the VDP commands (a command a "
+    "geo3d ISSUE sent carries that ISSUE's link), vdpreg the R#2 page writes and per-frame "
+    "tallies (the page shown longest, CPU accesses to VRAM), not every register "
+    "write. cpu is the CPU's HALTs and its interrupts, from the accept to the handler's first "
+    "EI (not its RETI); an NMI is not traced, so on a ColecoVision or an ADAM, whose frame "
+    "interrupt is an NMI, it shows HALTs only. io is every OUT the CPU makes to the ports given "
+    "in ports; dir=in records the INs from them instead of the OUTs, and both records both, "
+    "with the value written or read, the PC of the instruction and hi, the high address byte "
+    "the CPU put on the bus (A for in a,(n) and out (n),a, B for the (c) and block forms); "
+    "the BIOS patches' own accesses (to 0xA8, say) are not OUTs or INs and are not seen. An out "
+    "line comes before what the device records at the same tick, an in line after it (the "
+    "value is known only once read). A port watch (bmsx_watch) sees the same OUTs and INs. "
+    "Ports added by a later arm are recorded only from then on, unless another "
+    "connection already held them. 0x98 takes an OUT or IN for every "
+    "VRAM byte and can flood the ring (vdpreg's per-frame tallies count CPU VRAM traffic for "
+    "far less); 0x99 takes two OUTs per VRAM address or register set, and a status poll loop "
+    "can flood it with INs (vdpcmd's wait lines count CE polling). "
+    "Times are board ticks (VDP cycles, 1368 per line). Core lines, where the "
+    "record breaks (start, stop, load, reset, arm, rewind), are always shown. The ring, shared "
+    "with the Geo3D Perf window, keeps about 57000 recent records readable, so pause or "
+    "step frames (bmsx_run how=frame) between reads, else older records are dropped (the "
+    "reply says how many). "
+    "Pass next back as after to go on. The arm belongs to the connection, like a hunt: a "
+    "cancelled call reconnects without it, so arm again.",
+    SCHEMA("\"properties\":{"
+           "\"op\":{\"type\":\"string\",\"enum\":[\"arm\",\"disarm\",\"read\"]},"
+           "\"class\":{\"type\":\"string\","
+           "\"description\":\"geo3d, vdpcmd, vdpreg, cpu and io, joined with commas. Arm "
+           "without it arms " CTRL_TRACE_CLASS_DEFAULT "; read without it reads the classes "
+           "this connection holds (else " CTRL_TRACE_CLASS_DEFAULT "), and disarm without it "
+           "drops every class this connection holds (io with all its ports)\"},"
+           "\"ports\":{\"type\":\"string\",\"description\":\"I/O ports and ranges, such as "
+           "0x98,0xA0-0xA2 (a bare number is decimal: write 0x98 or 98h), for arm and read only "
+           "(disarm refuses it): for arm, needed by "
+           "class io and only by it (arming again adds ports); for read, only with class io, "
+           "the io ports to show, else the ones this connection holds, so a read of io after a "
+           "disarm, which gives them back, needs ports\"},"
+           "\"dir\":{\"type\":\"string\",\"enum\":[\"out\",\"in\",\"both\"],"
+           "\"description\":\"for arm with class io only: whether its ports record OUTs (the "
+           "default), INs or both; arming again adds its ports in its dir. A read given ports "
+           "shows both directions of them; without ports, the directions this connection "
+           "holds\"},"
+           "\"after\":{\"type\":\"integer\",\"minimum\":" CTRL_STR(CTRL_TRACE_AFTER_MIN) ","
+           "\"description\":\"for read: the seq to read after, the next of the last read; "
+           "without it, from where this connection armed\"},"
+           "\"count\":{\"type\":\"integer\",\"default\":" CTRL_STR(CTRL_TRACE_COUNT_DEFAULT)
+           ",\"minimum\":" CTRL_STR(CTRL_TRACE_COUNT_MIN) ",\"maximum\":"
+           CTRL_STR(CTRL_TRACE_COUNT_MAX) ",\"description\":\"for read: most lines\"}},"
+           "\"required\":[\"op\"]"),
+    READ_ONLY,
+    "trace.",
+    buildByOp
+},
+{
     "bmsx_key",
     "Press, release or tap a key or a joystick button. Names are the ones the "
     "emulator's shortcut editor uses: return, space, ctrl, stop, f1, "
@@ -331,7 +493,8 @@ const McpTool mcpTools[] = {
            "missed\"},"
            "\"gap\":{\"type\":\"integer\",\"default\":" CTRL_STR(CTRL_KEY_GAP_DEFAULT)
            ",\"minimum\":" CTRL_STR(CTRL_KEY_GAP_MIN) ",\"maximum\":" CTRL_STR(CTRL_KEY_GAP_MAX)
-           "}},"
+           "},"
+           TAKE_OVER_PROPERTY "},"
            "\"required\":[\"keys\"]"),
     CHANGES,
     "key",
@@ -355,7 +518,8 @@ const McpTool mcpTools[] = {
            "},"
            "\"gap\":{\"type\":\"integer\",\"default\":" CTRL_STR(CTRL_TYPE_GAP_DEFAULT)
            ",\"minimum\":" CTRL_STR(CTRL_TYPE_GAP_MIN) ",\"maximum\":" CTRL_STR(CTRL_TYPE_GAP_MAX)
-           "}},"
+           "},"
+           TAKE_OVER_PROPERTY "},"
            "\"required\":[\"text\"]"),
     CHANGES,
     "type",

@@ -47,11 +47,17 @@ const char* ctrlVramModeName(int mode)
     }
 }
 
-void ctrlVramModeShortName(char* out, int len, int mode)
+void ctrlVramModeShortName(char* out, int len, int layout)
 {
-    const char* name = ctrlVramModeName(mode);
+    const char* name = ctrlVramModeName(VDP_LAYOUT_MODE(layout));
 
-    snprintf(out, (size_t)len, "%.*s", (int)strcspn(name, ","), name);
+    snprintf(out, (size_t)len, "%.*s%s", (int)strcspn(name, ","), name,
+             layout >= 0 && (layout & VDP_LAYOUT_LINEAR) ? " (SP3, linear)" : "");
+}
+
+UInt32 ctrlVramSpan(int banks, UInt32 chipSize)
+{
+    return banks > 1 ? (UInt32)banks << 18 : chipSize;
 }
 
 Int32 ctrlVramUnbacked(UInt32 address, UInt32 size, int vramMode)
@@ -60,6 +66,7 @@ Int32 ctrlVramUnbacked(UInt32 address, UInt32 size, int vramMode)
     UInt32 i;
 
     vdpDebugGetVram(&vramSize);
+    vramSize = ctrlVramSpan(vdpDebugGetVramBanks(), vramSize);
     for (i = 0; i < size; i++) {
         if ((UInt32)debugDeviceVramIndex(vramMode, (int)(address + i)) >= vramSize) {
             return (Int32)(address + i);

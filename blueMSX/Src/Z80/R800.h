@@ -97,6 +97,9 @@
 #define TIME_TRACE_SIZE 1024
 #endif
 
+/* The PCs run, a power of two; recorded with the time trace, so only when it is on. */
+#define PC_TRACE_SIZE 4096
+
 /*****************************************************
 ** CpuMode
 **
@@ -251,7 +254,7 @@ typedef struct
     SystemTime    lastRefreshTime;  /* R800 DRAM-refresh phase (saved)  */
     UInt16        cachePage;        /* Current page in cache           */
     CpuRegs       regs;             /* Active register bank            */
-    UInt32        delay[40];        /* Instruction timing table        */
+    UInt32        delay[41];        /* Instruction timing table        */
     UInt8         callPenalty;      /* Last instruction was CALL/RST   */
     UInt8         retTaken;         /* This instruction returned       */
     const UInt8*  pageWait;         /* Wait class of each 8kB page     */
@@ -279,7 +282,9 @@ typedef struct
     R800WriteCb   writeMemory;      /* and writing memory and IO ports */
     R800ReadCb    readIoPort;
     R800WriteCb   writeIoPort;
-    R800PatchCb   patch;
+    /* The same read as readMemory, for instruction fetches and other reads no read
+    ** watchpoint sees; the debugger may route readMemory through a watching wrapper. */
+    R800ReadCb    fetchMemory;      /* in patch's old slot, so the hot fields keep their offsets */
     R800TimerCb   timerCb;
     R800BreakptCb breakpointCb;
     R800DebugCb   debugCb;
@@ -304,6 +309,12 @@ typedef struct
     SystemTime    timeTraceBuffer[TIME_TRACE_SIZE];
     UInt32        timeTraceIndex;
     UInt16        lastPC;
+    /* Entry timeTraceIndex is the newest; pcTraceFirst the first written, maybe overwritten. */
+    UInt16        pcTraceBuffer[PC_TRACE_SIZE];
+    UInt32        pcTraceFirst;
+    UInt32        pageChangedAt[8]; /* entry during which each 8kB page last showed other memory */
+    UInt8         pcTraceFresh;     /* newest entry unrun, kept from the last boundary stop */
+    UInt8         pcTraceParked;    /* in timerCb or breakpointCb: between two instructions */
 #endif
 
     /* Trace only, never saved: the source, and the HALT and interrupt open. */
@@ -311,6 +322,8 @@ typedef struct
     UInt8         traceHalted;
     UInt8         traceInIrq;
     UInt32        traceEpoch;
+
+    R800PatchCb   patch;            /* rarely called, so kept out of the way */
 } R800;
 
 
@@ -416,6 +429,10 @@ void r800SetMode(R800* r800, CpuMode mode);
 */
 CpuMode r800GetMode(R800* r800);
 
+/* Whether the /INT and the /NMI line are held low. */
+int r800IntIsLow(R800* r800);
+int r800NmiIsLow(R800* r800);
+
 /************************************************************************
 ** r800SetInt
 **
@@ -517,6 +534,10 @@ void r800SetBreakpoint(R800* r800, UInt16 address);
 void r800ClearBreakpoint(R800* r800, UInt16 address);
 
 SystemTime r800GetTimeTrace(R800* r800, int offset);
+
+/* Records a PC set from outside the CPU: it replaces the newest trace entry if that has
+** not started to run, else it follows it (after a HALT or a block repeat that did). */
+void r800TraceSetPc(R800* r800);
 
 /************************************************************************
 ** r800GetSystemTime

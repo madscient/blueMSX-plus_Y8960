@@ -35,7 +35,6 @@ void archShowCassettePosDialog() {}
 void archShowShortcutsEditor() {}
 void archShowKeyboardEditor() {}
 void archShowMixer() {}
-void archShowMixerDevices() {}
 void archShowDebugger() {}
 void archShowTrainer() {}
 void archShowMachineEditor() {}

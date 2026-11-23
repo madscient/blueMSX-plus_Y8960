@@ -4,10 +4,13 @@
 **
 ** Copyright (C) 2003-2006 Daniel Vik
 **
+** Modified 2026 by Hesoten for blueMSX+ fork.
+** See https://github.com/Hesoten/blueMSX-plus for change history.
+**
 ** Forked from blueMSX's ym2151.c for the Y8960 cartridge, 2026 by madscient.
 ** The cartridge carries IKAOPM, an equivalent circuit, rather than the
-** YM2151 of a Yamaha SFG unit, so it runs on its own copy of the core
-** (Y8960OpmCore.c). What the cartridge adds: the mixer block's volume, and an
+** YM2151 of a Yamaha SFG unit. It runs on the same core as the SFG
+** (MameYM2151.c). What the cartridge adds: the mixer block's volume, and an
 ** interrupt line of its own on /INT with no vector, the cartridge having
 ** none of the SFG's IM2 support.
 **
@@ -28,11 +31,12 @@
 ******************************************************************************
 */
 #include "Y8960Opm.h"
-#include "Y8960OpmCore.h"
+#include "MameYM2151.h"
 #include "Y8960Pan.h"
 #include "romMapperY8960.h"
 #include "Board.h"
 #include "SaveState.h"
+#include "DebugDeviceManager.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -50,9 +54,10 @@
 struct Y8960OpmChip {
     Mixer* mixer;
     Int32  handle;
+    Int32  debugHandle;
     UInt32 rate;
 
-    Y8960OpmCore* opm;
+    MameYm2151* opm;
     BoardTimer* timer1;
     BoardTimer* timer2;
     UInt32 timerValue1;
@@ -69,13 +74,13 @@ struct Y8960OpmChip {
     Int32  s2l;
     Int32  s1r;
     Int32  s2r;
+    MixerVoices* voices;
     Int32  buffer[AUDIO_STEREO_BUFFER_SIZE];
 };
 
-/* The core calls these by name. */
-void y8960OpmTimerStart(void* ref, int timer, int start);
+static void y8960OpmTimerStart(void* ref, int timer, int start);
 
-void y8960OpmTimerSet(void* ref, int timer, int count)
+static void y8960OpmTimerSet(void* ref, int timer, int count)
 {
     Y8960OpmChip* chip = (Y8960OpmChip*)ref;
 
@@ -87,7 +92,7 @@ void y8960OpmTimerSet(void* ref, int timer, int count)
     }
 }
 
-void y8960OpmSetIrq(void* ref, int timer)
+static void y8960OpmSetIrq(void* ref, int timer)
 {
     Y8960OpmChip* chip = (Y8960OpmChip*)ref;
 
@@ -97,7 +102,7 @@ void y8960OpmSetIrq(void* ref, int timer)
     chip->irqState |= timer;
 }
 
-void y8960OpmClearIrq(void* ref, int timer)
+static void y8960OpmClearIrq(void* ref, int timer)
 {
     Y8960OpmChip* chip = (Y8960OpmChip*)ref;
 
@@ -107,7 +112,7 @@ void y8960OpmClearIrq(void* ref, int timer)
     }
 }
 
-void y8960OpmWritePortCallback(void* ref, UInt32 port, UInt8 value)
+static void y8960OpmWritePortCallback(void* ref, UInt32 port, UInt8 value)
 {
 }
 
@@ -116,7 +121,7 @@ static void onTimeout1(void* ref, UInt32 time)
     Y8960OpmChip* chip = (Y8960OpmChip*)ref;
 
     chip->timerRunning1 = 0;
-    Y8960OpmCoreTimerCallback(chip->opm, 0);
+    YM2151TimerCallback(chip->opm, 0);
     y8960OpmTimerStart(chip, 0, 1);
 }
 
@@ -125,11 +130,11 @@ static void onTimeout2(void* ref, UInt32 time)
     Y8960OpmChip* chip = (Y8960OpmChip*)ref;
 
     chip->timerRunning2 = 0;
-    Y8960OpmCoreTimerCallback(chip->opm, 1);
+    YM2151TimerCallback(chip->opm, 1);
     y8960OpmTimerStart(chip, 1, 1);
 }
 
-void y8960OpmTimerStart(void* ref, int timer, int start)
+static void y8960OpmTimerStart(void* ref, int timer, int start)
 {
     Y8960OpmChip* chip = (Y8960OpmChip*)ref;
 
@@ -169,11 +174,15 @@ void y8960OpmTimerStart(void* ref, int timer, int start)
     }
 }
 
+static const YM2151Callbacks y8960OpmCallbacks = {
+    y8960OpmTimerSet, y8960OpmTimerStart, y8960OpmSetIrq, y8960OpmClearIrq, y8960OpmWritePortCallback
+};
+
 /* Bit 7 is the hardware's busy flag, set while its write queue drains. Here
 ** a write takes effect at once, so it reads 0 throughout. */
 UInt8 y8960OpmReadStatus(Y8960OpmChip* chip)
 {
-    return (UInt8)Y8960OpmCoreReadStatus(chip->opm);
+    return (UInt8)YM2151ReadStatus(chip->opm);
 }
 
 void y8960OpmWriteAddress(Y8960OpmChip* chip, UInt8 address)
@@ -184,7 +193,7 @@ void y8960OpmWriteAddress(Y8960OpmChip* chip, UInt8 address)
 void y8960OpmWriteData(Y8960OpmChip* chip, UInt8 data)
 {
     mixerSync(chip->mixer);
-    Y8960OpmCoreWriteReg(chip->opm, chip->latch, data);
+    YM2151WriteReg(chip->opm, chip->latch, data);
 }
 
 static Int32* y8960OpmSync(void* ref, UInt32 count)
@@ -193,20 +202,24 @@ static Int32* y8960OpmSync(void* ref, UInt32 count)
     Int64 gain = (Int64)y8960MixerGain(Y8960_VOL_OPM) * Y8960_OPM_VOLUME;
     UInt32 i;
 
+    YM2151SyncVoices(chip->opm);
+    if (chip->voices != NULL) {
+        chip->voices->scale = (float)gain / Y8960_GAIN_ONE;
+    }
     for (i = 0; i < count; i++) {
         Int16 sl, sr;
         Int32 l, r;
         chip->off -= SAMPLERATE - chip->rate;
         chip->s1l = chip->s2l;
         chip->s1r = chip->s2r;
-        Y8960OpmCoreUpdateOne(chip->opm, &sl, &sr, 1);
+        YM2151UpdateOne(chip->opm, &sl, &sr, 1);
         chip->s2l = sl;
         chip->s2r = sr;
         if (chip->off < 0) {
             chip->off += chip->rate;
             chip->s1l = chip->s2l;
             chip->s1r = chip->s2r;
-            Y8960OpmCoreUpdateOne(chip->opm, &sl, &sr, 1);
+            YM2151UpdateOne(chip->opm, &sl, &sr, 1);
             chip->s2l = sl;
             chip->s2r = sr;
         }
@@ -241,7 +254,7 @@ void y8960OpmSaveState(Y8960OpmChip* chip)
 
     saveStateClose(state);
 
-    Y8960OpmCoreSaveState(chip->opm);
+    YM2151SaveState(chip->opm);
 }
 
 void y8960OpmLoadState(Y8960OpmChip* chip)
@@ -259,7 +272,7 @@ void y8960OpmLoadState(Y8960OpmChip* chip)
 
     saveStateClose(state);
 
-    Y8960OpmCoreLoadState(chip->opm);
+    YM2151LoadState(chip->opm);
 
     if (chip->timerRunning1) {
         boardTimerAdd(chip->timer1, chip->timeout1);
@@ -277,7 +290,7 @@ void y8960OpmReset(Y8960OpmChip* chip)
     y8960OpmTimerSet(chip, 1, 16 * 256);
     boardTimerRemove(chip->timer1);
     boardTimerRemove(chip->timer2);
-    Y8960OpmCoreReset(chip->opm);
+    YM2151ResetChip(chip->opm);
     chip->off = 0;
     chip->s1l = 0;
     chip->s2l = 0;
@@ -288,8 +301,14 @@ void y8960OpmReset(Y8960OpmChip* chip)
     boardClearInt(BOARD_INT_Y8960_OPM);
 }
 
+static void getDebugInfo(Y8960OpmChip* chip, DbgDevice* dbgDevice)
+{
+    YM2151GetDebugInfo(chip->opm, dbgDevice);
+}
+
 Y8960OpmChip* y8960OpmCreate(Mixer* mixer)
 {
+    DebugCallbacks dbgCallbacks = { getDebugInfo, NULL, NULL, NULL };
     Y8960OpmChip* chip = (Y8960OpmChip*)calloc(1, sizeof(Y8960OpmChip));
 
     chip->mixer = mixer;
@@ -297,11 +316,14 @@ Y8960OpmChip* y8960OpmCreate(Mixer* mixer)
     chip->timer1 = boardTimerCreate(onTimeout1, chip);
     chip->timer2 = boardTimerCreate(onTimeout2, chip);
 
-    chip->handle = mixerRegisterChannelNamed(mixer, MIXER_CHANNEL_Y8960, 1,
-                                             y8960OpmSync, y8960OpmSetSampleRate, chip, "opm");
+    chip->handle = mixerRegisterChannel(mixer, MIXER_CHANNEL_Y8960, 1,
+                                        y8960OpmSync, y8960OpmSetSampleRate, chip);
 
-    chip->opm  = Y8960OpmCoreCreate(chip, FREQUENCY, SAMPLERATE);
+    chip->opm  = YM2151Create(chip, &y8960OpmCallbacks, "y8960opm_core", FREQUENCY, SAMPLERATE);
     chip->rate = mixerGetSampleRate(mixer);
+    /* The core scales each channel before the pan; the sync keeps scale on the block's gain. */
+    chip->voices = YM2151AttachVoices(chip->opm, mixer, chip->handle, Y8960_OPM_VOLUME);
+    chip->debugHandle = debugDeviceRegister(DBGTYPE_AUDIO, "Y8960 OPM", &dbgCallbacks, chip);
 
     y8960OpmReset(chip);
 
@@ -310,11 +332,12 @@ Y8960OpmChip* y8960OpmCreate(Mixer* mixer)
 
 void y8960OpmDestroy(Y8960OpmChip* chip)
 {
+    debugDeviceUnregister(chip->debugHandle);
     boardClearInt(BOARD_INT_Y8960_OPM);
     mixerUnregisterChannel(chip->mixer, chip->handle);
     boardTimerDestroy(chip->timer1);
     boardTimerDestroy(chip->timer2);
-    Y8960OpmCoreDestroy(chip->opm);
+    YM2151Destroy(chip->opm);
 
     free(chip);
 }

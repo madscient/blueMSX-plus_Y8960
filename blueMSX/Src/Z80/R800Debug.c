@@ -35,12 +35,14 @@
 #include "R800Debug.h"
 #include "SlotManager.h"
 #include "DebugDeviceManager.h"
+#include "DebugTrace.h"
 #include "Language.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include "Board.h"
 #include "Emulator.h"
+#include "ArchEvent.h"
 
 
 extern void debuggerTrace(const char* str);
@@ -49,11 +51,19 @@ extern void archTrap(UInt8 value);
 struct R800Debug {
     int debugHandle;
     R800* r800;
+    R800ReadCb readMemory;      /* the CPU's own reads, which a read watch wraps */
+    R800ReadCb readIoPort;
+    R800WriteCb writeIoPort;    /* the CPU's own OUT, which the io trace wraps */
+    const UInt8* memBits;       /* the READ watch bits, which the memory wrapper tests */
+    UInt16 ioSource;
+    int ioReadHooks;            /* HOOK_TRACE | HOOK_WATCH: who wants the CPU's IN wrapped */
+    void* ioReadLock;           /* a leaf around ioReadHooks and readIoPort; it calls nothing */
 };
 
 static R800Debug* dbg;
 /* Set while a breakpoint stop parks here, before the instruction at PC runs. */
 static int stoppedBeforeInstruction;
+static int pagesTracked;
 
 
 static void getDebugInfo(R800Debug* dbg, DbgDevice* dbgDevice)
@@ -152,7 +162,17 @@ static int dbgWriteRegister(R800Debug* dbg, char* name, int regIndex, UInt32 val
     case  9: dbg->r800->regs.IY.W = (UInt16)value; break;
     case 10: dbg->r800->regs.SP.W = (UInt16)value; break;
     /* A new PC leaves the HALT, so a breakpoint at the new PC can fire. */
-    case 11: dbg->r800->regs.PC.W = (UInt16)value; dbg->r800->regs.halt = 0; break;
+    case 11:
+        dbg->r800->regs.PC.W = (UInt16)value;
+        dbg->r800->regs.halt = 0;
+#if TIME_TRACE_SIZE > 0
+        /* The flag is stored only at stops between instructions. */
+        if (!dbg->r800->pcTraceParked) {
+            dbg->r800->pcTraceFresh = 0;
+        }
+#endif
+        r800TraceSetPc(dbg->r800);
+        break;
     case 12: dbg->r800->regs.I = (UInt8)value; break;
     case 13: dbg->r800->regs.R = (UInt8)value; break;
     case 14: dbg->r800->regs.im = value > 2 ? 2 : (UInt8)value; break;
@@ -181,8 +201,8 @@ static void breakpointCb(R800Debug* dbg, UInt16 pc)
         return;
     }
 
-    /* Segment breakpoints arm every address the segment could land at. */
-    if (!dbgBreakpointAllows(pc)) {
+    /* Segment breakpoints arm every address the segment could land at; a condition may hold off. */
+    if (!dbgBreakpointDecide(pc, 1)) {
         return;
     }
 
@@ -210,6 +230,115 @@ static void watchpointIoCb(R800Debug* dbg, UInt16 port, UInt8 value)
     tryWatchpoint(DBGTYPE_PORT, port & 0xff, value, dbg, NULL);
 }
 
+/* The start of the instruction running, which only r800Execute keeps in lastPC (the
+** ExecuteUntil and ExecuteInstruction loops do not, and only the unused r800ExecuteTrace
+** calls them); -1 if untraced. */
+static int readerPc(void)
+{
+#if TIME_TRACE_SIZE > 0
+    return dbg->r800->lastPC;
+#else
+    return -1;
+#endif
+}
+
+/* Installed as the CPU's data read while a read watch is armed; fetches do not come here. */
+static UInt8 readMemoryWatched(void* ref, UInt16 address)
+{
+    UInt8 value = dbg->readMemory(ref, address);
+
+    if (dbg->memBits[address >> 3] >> (address & 7) & 1) {
+        tryReadWatchpoint(DBGTYPE_CPU, address, value, ref, readMem, readerPc());
+    }
+    return value;
+}
+
+static const DebugTraceField ioTraceFields[] = {
+    { "port",  DEBUG_TRACE_WORD_A, 0,  8,  DEBUG_TRACE_HEX, 0, NULL, 0 },
+    { "value", DEBUG_TRACE_WORD_A, 8,  8,  DEBUG_TRACE_HEX, 0, NULL, 0 },
+    { "hi",    DEBUG_TRACE_WORD_A, 16, 8,  DEBUG_TRACE_HEX, 0, NULL, 0 },
+    { "pc",    DEBUG_TRACE_WORD_B, 0,  16, DEBUG_TRACE_HEX, 0, NULL, 0 },
+};
+
+static const DebugTraceKindDesc ioTraceKinds[] = {
+    { DEBUG_TRACE_IO_OUT, "out", ioTraceFields, 4 },
+    { DEBUG_TRACE_IO_IN,  "in",  ioTraceFields, 4 },
+};
+
+static const DebugTraceClassDesc ioTraceClass = { "io", ioTraceKinds, 2 };
+
+static void emitIo(UInt16 kind, UInt32 time, UInt16 port, UInt8 value)
+{
+    debugTraceEmit(dbg->ioSource, kind, time, 0,
+                   (port & 0xff) | (UInt32)value << 8 | (UInt32)(port & 0xff00) << 8,
+                   (UInt32)readerPc());
+}
+
+#define HOOK_TRACE 1
+#define HOOK_WATCH 2
+
+/* Installed as the CPU's IN while class io is armed or a port read watch exists. The in
+** record goes after the read, which gives the value, so it follows what the device records. */
+static UInt8 readIoPortHooked(void* ref, UInt16 port)
+{
+    UInt32 time  = dbg->r800->systemTime;
+    UInt8  value = dbg->readIoPort(ref, port);
+
+    if ((dbg->ioReadHooks & HOOK_TRACE) &&
+        DEBUG_TRACE_PORT_HELD(debugTracePorts, DEBUG_TRACE_PORT_IN | (port & 0xff)))
+    {
+        emitIo(DEBUG_TRACE_IO_IN, time, port, value);
+    }
+    /* Last: nothing after it may touch dbg, which a machine change while parked frees. */
+    if (dbg->ioReadHooks & HOOK_WATCH) {
+        tryReadWatchpoint(DBGTYPE_PORT, port & 0xff, value, ref, NULL, readerPc());
+    }
+    return value;
+}
+
+/* The one owner of readIoPort, called under the trace's lock or readWatchLock, and by
+** destroy. A plain pointer store, as the writeIoPort swap in armIoTrace, under a leaf lock
+** (skipped if it could not be made) so the two callers cannot interleave. */
+static void hookIoRead(int bit, int on)
+{
+    if (dbg->ioReadLock != NULL) {
+        archSemaphoreWait(dbg->ioReadLock, -1);
+    }
+    dbg->ioReadHooks = on ? dbg->ioReadHooks | bit : dbg->ioReadHooks & ~bit;
+    dbg->r800->readIoPort = dbg->ioReadHooks ? readIoPortHooked : dbg->readIoPort;
+    if (dbg->ioReadLock != NULL) {
+        archSemaphoreSignal(dbg->ioReadLock);
+    }
+}
+
+/* The readMemory store is plain (readIoPort goes through hookIoRead): what each wrapper
+** reads is set at create, and a running CPU may pick the change up at any access. */
+static void armReadWatch(int memory, int ports)
+{
+    dbg->r800->readMemory = memory ? readMemoryWatched : dbg->readMemory;
+    hookIoRead(HOOK_WATCH, ports);
+}
+
+/* Installed as the CPU's OUT while class io is armed. The record goes first, so it comes
+** before what the device records at the same tick. */
+static void writeIoPortTraced(void* ref, UInt16 port, UInt8 value)
+{
+    if (DEBUG_TRACE_PORT_HELD(debugTracePorts, port & 0xff)) {
+        emitIo(DEBUG_TRACE_IO_OUT, dbg->r800->systemTime, port, value);
+    }
+    dbg->writeIoPort(ref, port, value);
+}
+
+/* Under the trace's lock. Both wrappers go in while io is armed at all, even for OUTs only:
+** the cost of one test per IN while armed buys not tracking each direction's holders here. */
+static void armIoTrace(UInt32 armed)
+{
+    int io = (armed & DEBUG_TRACE_BIT(DEBUG_TRACE_IO)) != 0;
+
+    dbg->r800->writeIoPort = io ? writeIoPortTraced : dbg->writeIoPort;
+    hookIoRead(HOOK_TRACE, io);
+}
+
 static void debugCb(R800Debug* dbg, int command, const char* data) 
 {
     int slot, page, addr, rv;
@@ -234,9 +363,15 @@ void trapCb(R800* r800, UInt8 value)
 void r800DebugCreate(R800* r800)
 {
     DebugCallbacks dbgCallbacks = { getDebugInfo, dbgWriteMemory, dbgWriteRegister, NULL };
-    
-    dbg = (R800Debug*)malloc(sizeof(R800Debug));
-    dbg->r800 = r800;
+    R800Debug* created = (R800Debug*)calloc(1, sizeof(R800Debug));
+
+    created->r800        = r800;
+    created->readMemory  = r800->readMemory;
+    created->readIoPort  = r800->readIoPort;
+    created->writeIoPort = r800->writeIoPort;
+    created->memBits     = debugDeviceCpuReadBits();
+    created->ioReadLock  = archSemaphoreCreate(1);
+    dbg = created;
     dbg->debugHandle = debugDeviceRegister(DBGTYPE_CPU, langDbgDevZ80(), &dbgCallbacks, dbg);
 
     r800->debugCb           = debugCb;
@@ -244,11 +379,29 @@ void r800DebugCreate(R800* r800)
     r800->trapCb            = trapCb;
     r800->watchpointMemCb   = watchpointMemCb;
     r800->watchpointIoCb    = watchpointIoCb;
+    /* Watchpoints outlive a machine, so the new CPU takes over the read ones. */
+    debugDeviceSetReadWatchCb(armReadWatch);
+    r800SetTraceSource(r800, debugTraceSourceRegister(DEBUG_TRACE_CPU, r800TraceClass(), "CPU"));
+    dbg->ioSource = debugTraceSourceRegister(DEBUG_TRACE_IO, &ioTraceClass, "CPU");
+    debugTraceSetArmCb(armIoTrace);
 }
 
 void r800DebugDestroy()
 {
+    slotSetPageMappedCb(NULL);
+    debugDeviceSetReadWatchCb(NULL);
+    debugTraceSetArmCb(NULL);
+    pagesTracked = 0;
     debugDeviceUnregister(dbg->debugHandle);
+    /* The wrappers read through dbg, which goes now. */
+    dbg->r800->readMemory  = dbg->readMemory;
+    dbg->r800->writeIoPort = dbg->writeIoPort;
+    hookIoRead(HOOK_TRACE | HOOK_WATCH, 0);
+    if (dbg->ioReadLock != NULL) {
+        archSemaphoreDestroy(dbg->ioReadLock);
+    }
+    debugTraceSourceUnregister(dbg->ioSource);
+    debugTraceSourceUnregister(dbg->r800->traceSource);
     free(dbg);
     dbg = NULL;
 }
@@ -263,8 +416,67 @@ int r800DebugWaitsInHalt(void)
     return cpuWaitsInHalt();
 }
 
+const CpuRegs* r800DebugRegisters(void)
+{
+    return dbg != NULL ? &dbg->r800->regs : NULL;
+}
+
+int r800DebugIntLow(void)
+{
+    return dbg != NULL && r800IntIsLow(dbg->r800);
+}
+
+int r800DebugNmiLow(void)
+{
+    return dbg != NULL && r800NmiIsLow(dbg->r800);
+}
+
 int r800DebugStoppedBeforeInstruction(void)
 {
     return stoppedBeforeInstruction;
 }
 
+int r800DebugHistoryGet(R800DebugHistory* out)
+{
+#if TIME_TRACE_SIZE > 0
+    if (dbg == NULL) {
+        return 0;
+    }
+    out->pc     = dbg->r800->pcTraceBuffer;
+    out->newest = dbg->r800->timeTraceIndex;
+    out->oldest = dbg->r800->pcTraceFirst;
+    if (out->newest - out->oldest + 1 > PC_TRACE_SIZE) {
+        out->oldest = out->newest - (PC_TRACE_SIZE - 1);
+    }
+    out->pagesTracked = pagesTracked;
+    memcpy(out->changedAt, dbg->r800->pageChangedAt, sizeof(out->changedAt));
+    return 1;
+#else
+    return 0;
+#endif
+}
+
+static void pageMapped(int page)
+{
+#if TIME_TRACE_SIZE > 0
+    if (dbg != NULL && page >= 0 && page < 8) {
+        dbg->r800->pageChangedAt[page] = dbg->r800->timeTraceIndex;
+    }
+#endif
+}
+
+void r800DebugTrackPages(int on)
+{
+    slotSetPageMappedCb(on ? pageMapped : NULL);
+    pagesTracked = on;
+}
+
+int r800DebugInsideInstruction(void)
+{
+#if TIME_TRACE_SIZE > 0
+    /* A device stop inside timerCb, such as a VDP command's, is between instructions too. */
+    return dbg != NULL && boardIsParkedInBreakpointStop() && !dbg->r800->pcTraceParked;
+#else
+    return boardIsParkedInBreakpointStop() && !stoppedBeforeInstruction;
+#endif
+}

@@ -59,11 +59,13 @@ void  vdpCmdWrite(VdpCmdState* state, UInt8 reg, UInt8 value, UInt32 systemTime)
 UInt8 vdpCmdPeek(VdpCmdState* vdpCmd, UInt8 reg, UInt32 systemTime);
 
 void vdpCmdSetVram256(VdpCmdState* state, int enable);
+void vdpCmdSetBanks(VdpCmdState* state, int srcBank, int dstBank);
 void vdpCmdSetInterleave(VdpCmdState* state, int enable);
 void vdpCmdSetExpansionWindow(VdpCmdState* state, int enable);
 void vdpCmdSetV9968(VdpCmdState* state, int enable);
 void vdpCmdSetExtCommands(VdpCmdState* state, int enable);
 void vdpCmdResetExtRegs(VdpCmdState* state);
+void vdpCmdResetState(VdpCmdState* state);
 void vdpCmdSetTextBackColor(VdpCmdState* state, int color);
 
 int  vdpCmdGetEndFlag(VdpCmdState* state);
@@ -93,6 +95,7 @@ int  vdpCmdGetWaitPct(void);
 
 UInt8 vdpGetStatus(VdpCmdState* state);
 UInt16 vdpGetBorderX(VdpCmdState* state);
+void vdpClearBorderDetect(VdpCmdState* state);
 UInt8 vdpGetColor(VdpCmdState* state);
 
 /*************************************************************

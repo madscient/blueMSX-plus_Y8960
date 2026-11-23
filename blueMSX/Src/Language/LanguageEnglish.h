@@ -86,6 +86,9 @@ void langInitEnglish(LanguageStrings* ls)
     ls->errorNoCasInZip         = "Could not locate a .CAS file in the ZIP archive.";
     ls->errorUnknownFileType    = "Cannot open the file: its type is unknown.";
     ls->errorCartV9968WithV9990 = "The V9968 cartridge cannot be inserted together with a GFX9000 or a Video9000, as both take over the screen. Remove the other cartridge first.";
+    ls->errorCartTwice          = "The %s cartridge cannot be inserted in both slots, as both would use the same I/O ports. Remove the other cartridge first.";
+    ls->errorCartBuiltIn        = "This machine has %s built in, so it cannot be inserted as a cartridge.";
+    ls->errorCartBuiltInRemoved = "This machine has %s built in, so the cartridge was removed.";
     ls->errorDirDiskTooLarge    = "%d file(s) did not fit on the disk and were left out.";
     ls->errorDirDiskOnline      = "%d online-only file(s) were left out. Make them available on this device to include them.";
     ls->errorDirDiskSubdirs     = "Subdirectories left out because the chosen format cannot hold them: %d.";
@@ -107,6 +110,8 @@ void langInitEnglish(LanguageStrings* ls)
     ls->errorStartEmuMachineNotFound     = "The selected machine configuration '%s' could not be found.";
     ls->errorStartEmuConfigInvalid       = "Could not read config.ini for machine configuration '%s'. The file may be corrupted or from an incompatible version.";
     ls->errorMissingFiles       = "The following files could not be loaded:";
+    ls->errorSharedRomsFailed   = "Could not load from Shared Roms:";
+    ls->errorFileUnusable       = " (content mismatch)";
     ls->errorFlashInvalid       = "The save data for %s is damaged and could not be loaded.";
     ls->errorFlashSramSize      = "The save data for %s is the wrong size and could not be loaded.";
     ls->errorFlashUnreadable    = "The save data for %s could not be opened. Another program may be using it.";
@@ -203,6 +208,8 @@ void langInitEnglish(LanguageStrings* ls)
     ls->menuCartEseSCC          = "Ese-SCC";             // New in 2.7
     ls->menuCartMegaFlashRom    = "Mega Flash ROM";      // New in 2.7
     ls->menuCartFlashCart       = "Flash Cartridges";
+    ls->menuCartSound           = "Sound Cartridges";
+    ls->menuCartVdp             = "VDP Cartridges";
 
     ls->menuDiskInsertNew       = "Insert New Disk Image";
     ls->menuDiskInsertPhysical  = "Insert Physical Drive";
@@ -292,15 +299,7 @@ void langInitEnglish(LanguageStrings* ls)
     ls->menuToolsShortcuts      = "Shortcuts Editor";
     ls->menuToolsCtrlEditor     = "Input Editor"; 
     ls->menuToolsMixer          = "Sound Mixer";
-    ls->menuToolsMixerDevices   = "Sound Mixer (Devices)";
-    ls->mixerDevicesTitle       = "blueMSX - Sound Mixer (Devices)";
-    ls->mixerDevicesNone        = "No sound devices.";
-    ls->mixerDevicesEnable      = "On";
-    ls->mixerDevicesVolume      = "Volume";
-    ls->mixerDevicesPan         = "Pan";
-    ls->mixerDevicesLevel       = "Level";
-    ls->mixerDevicesSlot        = "Slot";
-    ls->mixerDevicesBoard       = "Board";
+    ls->menuToolsMixerDetailed  = "Detailed Mixer";
     ls->menuToolsVdpViewer      = "VDP Viewer";
     ls->menuToolsControlDeck    = "Control Deck";
     ls->menuToolsLoadMemory     = "Load Memory";
@@ -915,7 +914,6 @@ void langInitEnglish(LanguageStrings* ls)
     ls->shortcutShowShortcuts   = "Show Shortcuts Editor";
     ls->shortcutShowKeyboard    = "Show Input Editor";
     ls->shortcutShowMixer       = "Show Sound Mixer";
-    ls->shortcutShowMixerDevices = "Show Sound Mixer (Devices)";
     ls->shortcutShowDebugger    = "Show Debugger";
     ls->shortcutShowTrainer     = "Show Trainer";
     ls->shortcutShowHelp        = "Show Help Dialog";
@@ -995,6 +993,7 @@ void langInitEnglish(LanguageStrings* ls)
     ls->romTypeSg1000Cart       = "SG-1000 Cartridge";
     ls->romTypeSc3000Cart       = "SC-3000 Cartridge";
     ls->romTypeV9968Cart        = "V9968 Cartridge";
+    ls->romTypeY8960Cart        = "Y8960 Cartridge";
     ls->romTypeMsxPrinter       = "MSX Printer";
     ls->romTypeTurborPcm        = "Turbo-R PCM Chip";
     ls->romTypeNms8280Digitiz   = "Philips NMS-8280 Digitizer";

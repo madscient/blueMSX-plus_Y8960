@@ -98,6 +98,9 @@ int  emulatorHoldFromPause(void);
 /* Non-zero on the emulation thread while reverse play runs a snapshot on to a frame: the
 ** frames it passes are not flipped, counted or tapped. */
 int  emulatorRewindReplaying(void);
+/* Non-zero while reverse play, a rewind or a step back runs, whose breakpoint and watch
+** stops are passed over; for the emulation thread. */
+int  emulatorDropsStops(void);
 int emulatorGetCpuOverflow();
 int emulatorGetSyncPeriod();
 EmuState emulatorGetState();
@@ -120,6 +123,9 @@ int  emulatorFrameStopPending(void);
 ** request, stops it at the next frame end. */
 void emulatorRequestChangeStop(void);
 int  emulatorChangeStepArmed(void);
+/* For a tool: emulatorRequestFrameStop, or with change emulatorRequestChangeStop, but only
+** when no frame step, step back or hold is under way, which it leaves alone; 1 when started. */
+int  emulatorStartFrameStop(int change);
 /* Non-zero when the last step waiting for a change stopped without seeing one, until
 ** the machine runs again; the limit is in machine VDP frames. */
 int  emulatorChangeStepGaveUp(void);

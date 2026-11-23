@@ -54,10 +54,6 @@ UInt8 slotPeek(void* ref, UInt16 address);
 void slotRegister(int slot, int sslot, int startpage, int pages,
                   SlotRead readCb, SlotRead peekCb, SlotWrite writeCb, SlotEject ejectCb, void* ref);
 void slotUnregister(int slot, int sslot, int startpage);
-/* Counts slotRegister and slotMapPage calls into one slot and subslot, so
-** that a caller can tell whether a device it just created there mapped any
-** memory (see mixerBeginDevice). */
-UInt32 slotGetRegistrationCount(int slot, int sslot);
 
 void slotRemove(int slot, int sslot);
 
@@ -67,6 +63,11 @@ void slotUnregisterWrite0();
 void slotSetRamSlot(int slot, int psl);
 int slotGetRamSlot(int page);
 void slotMapRamPage(int slot, int sslot, int page);
+
+/* Called when what the CPU reads in an 8kB page (0..7) changes: another slot, other
+** memory, or a reported segment switch. NULL to stop. */
+typedef void (*SlotPageMappedCb)(int page);
+void slotSetPageMappedCb(SlotPageMappedCb cb);
 
 /* Memory wait class of an 8kB page of a slot, in the R800's terms. The
  * array holds the classes of the 8 pages the CPU currently sees. */

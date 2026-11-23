@@ -87,6 +87,9 @@ void langInitItalian(LanguageStrings* ls)
     ls->errorNoCasInZip                 = "Nessun file .CAS trovato nell'archivio compresso.";
     ls->errorUnknownFileType            = "Impossibile aprire il file: tipo di file sconosciuto.";
     ls->errorCartV9968WithV9990 = "La cartuccia V9968 non può essere inserita insieme a una GFX9000 o a una Video9000, perché entrambe prendono il controllo dello schermo. Rimuovi prima l'altra cartuccia.";
+    ls->errorCartTwice          = "La cartuccia %s non può essere inserita in entrambi gli slot, perché entrambe userebbero le stesse porte di I/O. Rimuovi prima l'altra cartuccia.";
+    ls->errorCartBuiltIn        = "Questa macchina ha %s integrato; non può essere inserito come cartuccia.";
+    ls->errorCartBuiltInRemoved = "Questa macchina ha %s integrato; la cartuccia è stata rimossa.";
     ls->errorDirDiskTooLarge    = "%d file non entravano nel disco e sono stati esclusi.";
     ls->errorDirDiskOnline      = "%d file disponibili solo online sono stati esclusi. Rendili disponibili su questo dispositivo per includerli.";
     ls->errorDirDiskSubdirs     = "%d cartelle sono state escluse perché il formato scelto non può contenerle.";
@@ -108,6 +111,8 @@ void langInitItalian(LanguageStrings* ls)
     ls->errorStartEmuMachineNotFound    = "La configurazione di macchina selezionata '%s' non è stata trovata.";
     ls->errorStartEmuConfigInvalid      = "Impossibile leggere config.ini della configurazione di macchina '%s'. Il file potrebbe essere danneggiato o provenire da una versione incompatibile.";
     ls->errorMissingFiles               = "Non è stato possibile caricare i seguenti file:";
+    ls->errorSharedRomsFailed           = "Impossibile caricare da Shared Roms:";
+    ls->errorFileUnusable               = " (contenuto non corrispondente)";
     ls->errorFlashInvalid               = "Il salvataggio di %s è danneggiato e non è stato possibile caricarlo.";
     ls->errorFlashSramSize              = "Il salvataggio di %s ha una dimensione errata e non è stato possibile caricarlo.";
     ls->errorFlashUnreadable            = "Non è stato possibile aprire il salvataggio di %s. Forse è in uso da un altro programma.";
@@ -204,6 +209,8 @@ void langInitItalian(LanguageStrings* ls)
     ls->menuCartEseSCC                  = "Ese-SCC";             // New in 2.7
     ls->menuCartMegaFlashRom            = "Mega Flash ROM";      // New in 2.7
     ls->menuCartFlashCart               = "Cartucce Flash";
+    ls->menuCartSound                   = "Cartucce audio";
+    ls->menuCartVdp                     = "Cartucce VDP";
 
     ls->menuDiskInsertNew               = "Inserisci un nuovo disco...";
     ls->menuDiskInsertPhysical  = "Inserisci un'unità fisica...";
@@ -293,6 +300,7 @@ void langInitItalian(LanguageStrings* ls)
     ls->menuToolsShortcuts              = "Gestione tasti rapidi...";
     ls->menuToolsCtrlEditor             = "Periferiche di ingresso...";               
     ls->menuToolsMixer                  = "Mixer audio...";
+    ls->menuToolsMixerDetailed          = "Mixer dettagliato";
     ls->menuToolsVdpViewer              = "Visualizzatore VDP...";
     ls->menuToolsControlDeck            = "Comandi di emulazione";
     ls->menuToolsLoadMemory             = "Carico di memoria";

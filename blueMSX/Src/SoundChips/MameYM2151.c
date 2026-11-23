@@ -11,6 +11,7 @@
 
 #include "MameYM2151.h"
 #include "SaveState.h"
+#include "Language.h"
 
 
 /* struct describing a single operator */
@@ -67,6 +68,8 @@ typedef struct
 struct MameYm2151
 {
     void* ref;
+    YM2151Callbacks cb;
+    const char* stateSection;
 
 	YM2151Operator	oper[32];			/* the 32 operators */
 
@@ -105,6 +108,8 @@ struct MameYm2151
 
     UInt16      timer_A_val;
 
+    UInt8       regs[256];          /* last value written to each register, for the debugger */
+
 	/*	Frequency-deltas to get the closest frequency possible.
 	*	There are 11 octaves because of DT2 (max 950 cents over base frequency)
 	*	and LFO phase modulation (max 800 cents below AND over base frequency)
@@ -135,13 +140,11 @@ struct MameYm2151
     signed int chanout[8];
     signed int m2,c1,c2; /* Phase Modulation input for operators 2,3,4 */
     signed int mem;		/* one sample delay memory */
-};
 
-extern void	ym2151TimerSet(void* ref, int timer, int count);
-extern void	ym2151TimerStart(void* ref, int timer, int start);
-extern void	ym2151ClearIrq(void* ref, int irq);
-extern void	ym2151SetIrq(void* ref, int irq);
-extern void ym2151WritePortCallback(void* ref, UInt32 port, UInt8 value);
+    /* Detailed mixer: lent by the mixer; NULL leaves chanout alone. */
+    MixerVoices* voices;
+    int voicesWanted, voicesActive, voicesMetered;  /* read once per update */
+};
 
 #define FREQ_SH			16  /* 16.16 fixed point (frequency calculations) */
 #define EG_SH			16  /* 16.16 fixed point (envelope generator timing) */
@@ -677,7 +680,7 @@ void YM2151TimerCallback(MameYm2151 *chip, int timer)
     if (timer == 0) {
         if (chip->irq_enable & 0x04)
 	    {
-            if ((chip->status & 3) == 0) ym2151SetIrq(chip->ref, 1);
+            if ((chip->status & 3) == 0) chip->cb.setIrq(chip->ref, 1);
 		    chip->status |= 1;
 	    }
 	    if (chip->irq_enable & 0x80)
@@ -686,7 +689,7 @@ void YM2151TimerCallback(MameYm2151 *chip, int timer)
     if (timer == 1) {
 	    if (chip->irq_enable & 0x08)
 	    {
-            if ((chip->status & 3) == 0) ym2151SetIrq(chip->ref, 2);
+            if ((chip->status & 3) == 0) chip->cb.setIrq(chip->ref, 2);
 		    chip->status |= 2;
 	    }
     }
@@ -884,6 +887,8 @@ void YM2151WriteReg(MameYm2151 *chip, int r, int v)
 	r &= 0xff;
 	v &= 0xff;
 
+	chip->regs[r] = (UInt8)v;
+
 	switch(r & 0xe0){
 	case 0x00:
 		switch(r){
@@ -905,17 +910,17 @@ void YM2151WriteReg(MameYm2151 *chip, int r, int v)
         case 0x10:
             chip->timer_A_val &= 0x03;
             chip->timer_A_val |= v << 2;
-			ym2151TimerSet(chip->ref, 0, 1 * (1024 - chip->timer_A_val));
+			chip->cb.timerSet(chip->ref, 0, 1 * (1024 - chip->timer_A_val));
             break;
 
         case 0x11:
             chip->timer_A_val &= 0x03fc;
             chip->timer_A_val |= v & 3;
-			ym2151TimerSet(chip->ref, 0, 1 * (1024 - chip->timer_A_val));
+			chip->cb.timerSet(chip->ref, 0, 1 * (1024 - chip->timer_A_val));
             break;
 
         case 0x12:
-			ym2151TimerSet(chip->ref, 1, 16 * (256 - v));
+			chip->cb.timerSet(chip->ref, 1, 16 * (256 - v));
             break;
 
         case 0x14:	/* CSM, irq flag reset, irq enable, timer start/stop */
@@ -925,17 +930,17 @@ void YM2151WriteReg(MameYm2151 *chip, int r, int v)
 			if (v&0x10)	/* reset timer A irq flag */
 			{
 				chip->status &= ~1;
-                if ((chip->status & 3) == 0) ym2151ClearIrq(chip->ref, 1);
+                if ((chip->status & 3) == 0) chip->cb.clearIrq(chip->ref, 1);
 			}
 
 			if (v&0x20)	/* reset timer B irq flag */
 			{
 				chip->status &= ~2;
-                if ((chip->status & 3) == 0) ym2151ClearIrq(chip->ref, 2);
+                if ((chip->status & 3) == 0) chip->cb.clearIrq(chip->ref, 2);
 			}
 
-			ym2151TimerStart(chip->ref, 1, v & 2);
-			ym2151TimerStart(chip->ref, 0, v & 1);
+			chip->cb.timerStart(chip->ref, 1, v & 2);
+			chip->cb.timerStart(chip->ref, 0, v & 1);
 			break;
 
 		case 0x18:	/* LFO frequency */
@@ -956,7 +961,7 @@ void YM2151WriteReg(MameYm2151 *chip, int r, int v)
 			chip->ct = v >> 6;
 			chip->lfo_wsel = v & 3;
 
-            ym2151WritePortCallback(chip->ref, 0 , chip->ct);
+            chip->cb.writePort(chip->ref, 0 , chip->ct);
 			break;
 
 		default:
@@ -1134,11 +1139,15 @@ static void ym2151_state_save_register( MameYm2151 *chip )
 {
 }
 
-MameYm2151* YM2151Create(void* ref, int clock, int rate)
+MameYm2151* YM2151Create(void* ref, const YM2151Callbacks* callbacks,
+                         const char* stateSection, int clock, int rate)
 {
     MameYm2151 *chip = (MameYm2151 *)calloc(1, sizeof(MameYm2151));
 
     chip->ref = ref;
+    /* Set before YM2151ResetChip below, which already calls timerStart. */
+    chip->cb = *callbacks;
+    chip->stateSection = stateSection;
 
 	init_tables();
 
@@ -1191,8 +1200,8 @@ void YM2151ResetChip(MameYm2151 *chip)
 	chip->test= 0;
 
 	chip->irq_enable = 0;
-	ym2151TimerStart(chip->ref, 0, 0);
-	ym2151TimerStart(chip->ref, 1, 0);
+	chip->cb.timerStart(chip->ref, 0, 0);
+	chip->cb.timerStart(chip->ref, 1, 0);
 
 	chip->noise     = 0;
 	chip->noise_rng = 0;
@@ -1202,6 +1211,7 @@ void YM2151ResetChip(MameYm2151 *chip)
 	chip->csm_req	= 0;
 	chip->status    = 0;
 
+	memset(chip->regs, 0, sizeof(chip->regs));
 	YM2151WriteReg(chip, 0x1b, 0);	/* only because of CT1, CT2 output pins */
 	YM2151WriteReg(chip, 0x18, 0);	/* set LFO frequency */
 	for (i=0x20; i<0x100; i++)		/* set the operators */
@@ -1844,6 +1854,9 @@ void YM2151UpdateOne(MameYm2151* chip, Int16* bufL, Int16* bufR, int length)
 {
 	int i;
 	signed int outl,outr;
+	signed int* ch;
+	signed int scaled[8];
+	int v;
 
 	PSG = chip;
 
@@ -1869,22 +1882,40 @@ void YM2151UpdateOne(MameYm2151* chip, Int16* bufL, Int16* bufR, int length)
 		chan_calc(chip, 6);
 		chan7_calc(chip);
 
-		outl = chip->chanout[0] & PSG->pan[0];
-		outr = chip->chanout[0] & PSG->pan[1];
-		outl += (chip->chanout[1] & PSG->pan[2]);
-		outr += (chip->chanout[1] & PSG->pan[3]);
-		outl += (chip->chanout[2] & PSG->pan[4]);
-		outr += (chip->chanout[2] & PSG->pan[5]);
-		outl += (chip->chanout[3] & PSG->pan[6]);
-		outr += (chip->chanout[3] & PSG->pan[7]);
-		outl += (chip->chanout[4] & PSG->pan[8]);
-		outr += (chip->chanout[4] & PSG->pan[9]);
-		outl += (chip->chanout[5] & PSG->pan[10]);
-		outr += (chip->chanout[5] & PSG->pan[11]);
-		outl += (chip->chanout[6] & PSG->pan[12]);
-		outr += (chip->chanout[6] & PSG->pan[13]);
-		outl += (chip->chanout[7] & PSG->pan[14]);
-		outr += (chip->chanout[7] & PSG->pan[15]);
+		/* The voices scale a copy; chanout itself stays as the chip left it. */
+		ch = chip->chanout;
+		if (chip->voicesWanted) {
+			for (v = 0; v < 8; v++) {
+				scaled[v] = chip->chanout[v];
+				if (chip->voicesActive) {
+					scaled[v] = (signed int)(((Int64)scaled[v] * chip->voices->gain[v]) >> 12);
+				}
+				if (chip->voicesMetered) {
+					mixerMeterVoice(chip->voices, v, scaled[v]);
+				}
+			}
+			if (chip->voicesMetered) {
+				chip->voices->samples++;
+			}
+			ch = scaled;
+		}
+
+		outl = ch[0] & PSG->pan[0];
+		outr = ch[0] & PSG->pan[1];
+		outl += (ch[1] & PSG->pan[2]);
+		outr += (ch[1] & PSG->pan[3]);
+		outl += (ch[2] & PSG->pan[4]);
+		outr += (ch[2] & PSG->pan[5]);
+		outl += (ch[3] & PSG->pan[6]);
+		outr += (ch[3] & PSG->pan[7]);
+		outl += (ch[4] & PSG->pan[8]);
+		outr += (ch[4] & PSG->pan[9]);
+		outl += (ch[5] & PSG->pan[10]);
+		outr += (ch[5] & PSG->pan[11]);
+		outl += (ch[6] & PSG->pan[12]);
+		outr += (ch[6] & PSG->pan[13]);
+		outl += (ch[7] & PSG->pan[14]);
+		outr += (ch[7] & PSG->pan[15]);
 
 		outl >>= FINAL_SH;
 		outr >>= FINAL_SH;
@@ -1902,10 +1933,9 @@ void YM2151UpdateOne(MameYm2151* chip, Int16* bufL, Int16* bufR, int length)
 
 void YM2151LoadState(MameYm2151* chip)
 {
-    SaveState* state = saveStateOpenForRead("ym2151_core");
+    SaveState* state = saveStateOpenForRead(chip->stateSection);
     char tag[32];
     int i;
-    int tmp;
     
     chip->eg_cnt            = saveStateGet(state, "eg_cnt",            0);
     chip->eg_timer          = saveStateGet(state, "eg_timer",          0);
@@ -2052,31 +2082,25 @@ void YM2151LoadState(MameYm2151* chip)
         sprintf(tag, "rr%d", i);
         chip->oper[i].rr = saveStateGet(state, tag, 0);
         
-        sprintf(tag, "connect%d", i);
-        tmp = saveStateGet(state, tag, -1);
-        if (tmp < 0) {
-            chip->oper[i].connect = NULL;
-        }
-        else {
-            chip->oper[i].connect = (int*)chip + tmp;
-        }
-
-        sprintf(tag, "mem_connect%d", i);
-        tmp = saveStateGet(state, tag, -1);
-        if (tmp < 0) {
-            chip->oper[i].mem_connect = NULL;
-        }
-        else {
-            chip->oper[i].mem_connect = (int*)chip + tmp;
-        }
+        chip->oper[i].connect = NULL;
+        chip->oper[i].mem_connect = NULL;
     }
+
+    /* The saved operator routing shares the channels' "connect%d" tags and cannot
+    ** be read back, so rebuild it from each channel's algorithm. */
+    for (i = 0; i < sizeof(chip->connect) / sizeof(chip->connect[0]); i++) {
+        set_connect(chip, &chip->oper[i * 4], i, chip->connect[i]);
+    }
+
+    memset(chip->regs, 0, sizeof(chip->regs));
+    saveStateGetBuffer(state, "regs", chip->regs, sizeof(chip->regs));
 
     saveStateClose(state);
 }
 
 void YM2151SaveState(MameYm2151* chip)
 {
-    SaveState* state = saveStateOpenForWrite("ym2151_core");
+    SaveState* state = saveStateOpenForWrite(chip->stateSection);
     char tag[32];
     int i;
 
@@ -2242,5 +2266,49 @@ void YM2151SaveState(MameYm2151* chip)
         }
     }
 
+    saveStateSetBuffer(state, "regs", chip->regs, sizeof(chip->regs));
+
     saveStateClose(state);
+}
+
+void YM2151GetDebugInfo(MameYm2151* chip, DbgDevice* dbgDevice)
+{
+    /* 19h is shown as the AMD and PMD it holds; 20h-FFh all exist. */
+    static const UInt8 lowRegs[] = { 0x01, 0x08, 0x0f, 0x10, 0x11, 0x12, 0x14, 0x18, 0x19, 0x1b };
+    DbgRegisterBank* regBank;
+    char name[8];
+    int count = 0;
+    int i;
+
+    regBank = dbgDeviceAddRegisterBank(dbgDevice, langDbgRegs(), sizeof(lowRegs) + 1 + 0xe0);
+
+    for (i = 0; i < (int)sizeof(lowRegs); i++) {
+        if (lowRegs[i] == 0x19) {
+            dbgRegisterBankAddRegister(regBank, count++, "AMD", 8, chip->amd);
+            dbgRegisterBankAddRegister(regBank, count++, "PMD", 8, (UInt8)chip->pmd);
+        }
+        else {
+            sprintf(name, "R%.2x", lowRegs[i]);
+            dbgRegisterBankAddRegister(regBank, count++, name, 8, chip->regs[lowRegs[i]]);
+        }
+    }
+    for (i = 0x20; i < 0x100; i++) {
+        sprintf(name, "R%.2x", i);
+        dbgRegisterBankAddRegister(regBank, count++, name, 8, chip->regs[i]);
+    }
+}
+
+MixerVoices* YM2151AttachVoices(MameYm2151* chip, Mixer* mixer, Int32 handle, float scale)
+{
+    static const char* const names[8] = { "1", "2", "3", "4", "5", "6", "7", "8" };
+
+    chip->voices = mixerAttachVoices(mixer, handle, 8, names, scale);
+    return chip->voices;
+}
+
+void YM2151SyncVoices(MameYm2151* chip)
+{
+    chip->voicesWanted  = mixerVoicesWanted(chip->voices);
+    chip->voicesActive  = chip->voicesWanted && chip->voices->active;
+    chip->voicesMetered = chip->voicesWanted && chip->voices->metering;
 }

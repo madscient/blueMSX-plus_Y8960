@@ -33,16 +33,36 @@
 #define _H_YM2151_
 
 #include "MsxTypes.h"
+#include "AudioMixer.h"
+#include "DebugDeviceManager.h"
 
 typedef struct MameYm2151 MameYm2151;
 
-MameYm2151* YM2151Create(void* ref, int clock, int rate);
+/* How the core reaches the unit it sits in; each call gets back Create's ref. */
+typedef struct {
+    void (*timerSet)(void* ref, int timer, int count);
+    void (*timerStart)(void* ref, int timer, int start);
+    void (*setIrq)(void* ref, int irq);
+    void (*clearIrq)(void* ref, int irq);
+    void (*writePort)(void* ref, UInt32 port, UInt8 value);
+} YM2151Callbacks;
+
+/* stateSection names the core's save state section; it must outlive the chip. */
+MameYm2151* YM2151Create(void* ref, const YM2151Callbacks* callbacks,
+                         const char* stateSection, int clock, int rate);
 void YM2151Destroy(MameYm2151* chip);
 void YM2151ResetChip(MameYm2151* chip);
 void YM2151UpdateOne(MameYm2151* chip,Int16* bufL, Int16* bufR, int length);
+/* Detailed mixer: lend the eight channels to the mixer channel handle, named
+** 1-8; returns NULL when none is left. */
+MixerVoices* YM2151AttachVoices(MameYm2151* chip, Mixer* mixer, Int32 handle, float scale);
+/* Once per update, before the samples: read whether gains or levels are wanted. */
+void YM2151SyncVoices(MameYm2151* chip);
 void YM2151WriteReg(MameYm2151* chip, int r, int v);
 int  YM2151ReadStatus(MameYm2151* chip);
 void YM2151TimerCallback(MameYm2151* chip, int timer);
 void YM2151LoadState(MameYm2151* chip);
 void YM2151SaveState(MameYm2151* chip);
+/* Adds the register bank: the last values written, 19h as AMD and PMD. */
+void YM2151GetDebugInfo(MameYm2151* chip, DbgDevice* dbgDevice);
 #endif /*_H_YM2151_*/

@@ -732,6 +732,9 @@ void Y8950::generateChannels(std::span<float*> bufs, unsigned num)
                 ? float(2 * ch[8].slot[MOD].calc_slot_tom(lfo_pm, lfo_am))
                 : 0.0f;
         }
+        /* The cartridge's logic adds the ADPCM at an eighth of its 16 bits,
+        ** about one FM channel at full scale, which is the Y8950's balance
+        ** and so needs no factor here. */
         bufs[14][sample] += float(adpcm->calcSample());
     }
 }
@@ -769,7 +772,14 @@ static constexpr std::array<int, 15> PAN_OF_BUFFER = {
     9
 };
 
-void Y8950::generateStereo(int32_t* out, unsigned num)
+/* The detailed mixer's voice of each buffer: FM 1-9, then BD HH SD TOM CYM, ADPCM. */
+static constexpr std::array<int, 15> VOICE_OF_BUFFER = {
+    0, 1, 2, 3, 4, 5, 6, 7, 8,
+    9, 11, 13, 10, 12,
+    14
+};
+
+void Y8950::generateStereo(int32_t* out, unsigned num, struct MixerVoices* voices)
 {
     constexpr unsigned NCH = 9 + 5 + 1;
     std::vector<float> storage(NCH * num, 0.0f);
@@ -779,15 +789,25 @@ void Y8950::generateStereo(int32_t* out, unsigned num)
     generateChannels(std::span<float*>(bufs.data(), NCH), num);
 
     float amp = getAmplificationFactorImpl() * float(maxVolume);
+    int active = voices != NULL && voices->active;
+    int metered = voices != NULL && voices->metering;
+    if (voices != NULL) {
+        /* Rhythm mode takes FM 7-9; without it the rhythm voices are idle. */
+        voices->idle = rythm_mode ? 0x1C0u : 0x3E00u;
+    }
     for (unsigned s = 0; s < num; ++s) {
         float l = 0.0f, r = 0.0f;
         for (unsigned i = 0; i < NCH; ++i) {
             if (!bufs[i]) continue;
             float v = bufs[i][s];
+            if (voices != NULL) {
+                v = mixerVoiceSampleF(voices, VOICE_OF_BUFFER[i], v, active, metered, amp);
+            }
             const auto& g = panGain[PAN_OF_BUFFER[i]];
             l += v * float(g[0]) / Y8960_GAIN_ONE;
             r += v * float(g[1]) / Y8960_GAIN_ONE;
         }
+        if (metered) voices->samples++;
         out[2 * s + 0] = int32_t(l * amp);
         out[2 * s + 1] = int32_t(r * amp);
     }

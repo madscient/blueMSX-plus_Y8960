@@ -27,6 +27,7 @@
 #include "ControlProtocol.h"
 #include "Emulator.h"
 #include "SlotManager.h"
+#include "VDP.h"
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
@@ -60,8 +61,16 @@ static void tellBareDecimal(CtrlText* out, const char* typed)
         if (end - scan >= 4 && !isxdigit((unsigned char)*end) &&
             (*end == 0 || strchr("hHxX", *end) == NULL))
         {
-            /* Video memory holds at most 192 kB, and every other space 64 kB. */
-            unsigned long most = _strnicmp(typed, "vram:", 5) == 0 ? 0x2FFFF : 0xFFFF;
+            /* Video memory holds 192 kB, or on a V9968 256 kB (4 MB across its banks), and every
+            ** other space 64 kB. */
+            UInt32 vramSize = 0;
+            unsigned long most = 0xFFFF;
+
+            if (_strnicmp(typed, "vram:", 5) == 0) {
+                vdpDebugGetVram(&vramSize);
+                vramSize = ctrlVramSpan(vdpDebugGetVramBanks(), vramSize);
+                most = vramSize > 0x30000 ? vramSize - 1 : 0x2FFFF;
+            }
 
             ctrlTextAdd(out, "read %.*s as decimal (0x%04X)",
                         (int)(end - scan), scan, (unsigned)strtoul(scan, NULL, 10));

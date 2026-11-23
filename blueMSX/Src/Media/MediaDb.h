@@ -218,21 +218,11 @@ enum  {
     ** gave it, since their machine configurations, cartridge history and
     ** save states already store 188. */
     ROM_MAKOTO      = 188,           /* Makoto YM2608 (OPNA) cartridge */
-    /* Y8960 cartridge, one RomType per device block so that a machine
-    ** configuration can carry the blocks independently. The block sits
-    ** at 200 so that upstream can keep adding types below it without
-    ** colliding with numbers already written into config.ini files. */
-    ROM_Y8960OPLLEX = 200,           /* Y8960 OPLLEX  */
-    ROM_Y8960OPL2EX = 201,           /* Y8960 OPL2EX  */
-    ROM_Y8960SSGS   = 202,           /* Y8960 SSGS    */
-    ROM_Y8960TIMER  = 203,           /* Y8960 MSX-TIMER */
-    ROM_Y8960MIXER  = 204,           /* Y8960 MSX-MIXER */
-    ROM_Y8960SCC    = 205,           /* Y8960 SCC + mapper */
-    /* 206 was Y8960 DCSG until the hardware dropped it (2026-10-16). */
-    ROM_Y8960OPM    = 206,           /* Y8960 OPM     */
-    ROM_Y8960       = 207,           /* the whole cartridge: every block at once */
-    ROM_Y8960SYSCTRL = 208,          /* Y8960 System Controller */
-    ROM_MAXROMID    = 208
+    /* The Y8960 cartridge keeps the number that builds released outside
+    ** this repository gave it, since their cartridge history and save
+    ** states already store 207. */
+    ROM_Y8960       = 207,           /* Y8960 cartridge */
+    ROM_MAXROMID    = 207
 };
 
 typedef struct MediaType MediaType;

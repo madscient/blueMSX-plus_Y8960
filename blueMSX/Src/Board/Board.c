@@ -56,6 +56,7 @@
 #include "RomLoader.h"
 #include "JoystickPort.h"
 #include "KeyMatrixInput.h"
+#include "RewindInput.h"
 #include "FileHistory.h"
 #include "Utf8Conv.h"
 
@@ -72,6 +73,7 @@ static void AnyToUtf8(const char* src, char* dst, int dstCap) {
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <assert.h>
 /* Route fopen() through pkg_fopen so UTF-8 .cap paths (e.g. ROM names with
 ** Japanese characters) reach _wfopen instead of being mangled by the runtime
 ** ACP. Must come after <stdio.h>. */
@@ -82,6 +84,11 @@ extern void PatchReset(BoardType boardType);
 static int skipSync;
 static int parkedInBreakpointStop;
 static int pendingInt;
+/* Who holds each BOARD_INT_UNIT_BITS bit; emptied when a new machine is built
+** and when an in-place load replaces pendingInt. */
+#define INT_UNITS_MAX 16
+static struct { UInt32 irq; const void* unit; } intUnits[INT_UNITS_MAX];
+static int intUnitCount;
 static int boardType;
 static Mixer* boardMixer = NULL;
 static int (*syncToRealClock)(int, int) = NULL;
@@ -107,6 +114,9 @@ static BoardInfo boardInfo;
 static UInt32 boardRamSize;
 static UInt32 boardVramSize;
 static int boardRunning = 0;
+/* Set while the machine is created: the cartridges go in one at a time, so
+** removed chips are forgotten once boardRun has built everything. */
+static int boardBuilding = 0;
 
 static HdType hdType[MAX_HD_COUNT];
   
@@ -114,6 +124,8 @@ static int     ramMaxStates;
 static int     ramStateCur;
 static int     ramStateCount;
 static UInt32* ramStateTime;
+/* The same moments on the 64-bit clock, which the input log is kept by. */
+static UInt64* ramStateTime64;
 static int     stateFrequency;
 
 /* The "mem" prefix keeps it in memory, beside the rewind ring's memN states. */
@@ -173,6 +185,63 @@ void boardReportMissingFile(const char* file, const char* inZip) {
     }
     sprintf_s(missingFiles[missingFileCount], sizeof(missingFiles[0]), "%s", entry);
     missingFileCount++;
+}
+
+static BoardDeviceFile         deviceFiles[MISSING_FILES_MAX];
+static int                     deviceFileCount;
+static BoardDeviceFilesHandler deviceFilesHandler;
+static int                     deviceFilesUserInsert;
+static int                     cartUserInsert[2];
+
+void boardSetDeviceFilesHandler(BoardDeviceFilesHandler handler) {
+    deviceFilesHandler = handler;
+}
+
+void boardReportDeviceFile(RomType device, const char* path, DeviceFileProblem problem) {
+    BoardDeviceFile* entry;
+    int i;
+
+    if (deviceFileCount >= MISSING_FILES_MAX) return;
+    entry = &deviceFiles[deviceFileCount];
+    AnyToUtf8(path, entry->path, sizeof(entry->path));
+    for (i = 0; i < deviceFileCount; i++) {
+        if (0 == strcmp(deviceFiles[i].path, entry->path)) {
+            deviceFiles[i].userInsert |= deviceFilesUserInsert;
+            return;
+        }
+    }
+    entry->device     = device;
+    entry->problem    = problem;
+    entry->userInsert = deviceFilesUserInsert;
+    deviceFileCount++;
+}
+
+void boardDeviceFilesFatal(RomType device) {
+    int i, kept = 0;
+
+    for (i = 0; i < deviceFileCount; i++) {
+        if (deviceFiles[i].device == device) {
+            boardReportMissingFile(deviceFiles[i].path, NULL);
+        }
+        else {
+            deviceFiles[kept++] = deviceFiles[i];
+        }
+    }
+    deviceFileCount = kept;
+}
+
+void boardNoteUserCartridge(int cartNo) {
+    if (cartNo >= 0 && cartNo < 2) {
+        cartUserInsert[cartNo] = 1;
+    }
+}
+
+/* Called on the thread that built the devices; the handler copies what it needs. */
+static void boardFlushDeviceFiles(void) {
+    if (deviceFileCount > 0 && deviceFilesHandler != NULL) {
+        deviceFilesHandler(deviceFiles, deviceFileCount);
+    }
+    deviceFileCount = 0;
 }
 
 static void boardProbeMissingFile(const char* file, const char* inZip) {
@@ -592,18 +661,26 @@ int boardCaptureConsumePendingToast(char* out, int outSize) {
 }
 
 UInt8 boardCaptureUInt8(UInt8 logId, UInt8 value) {
+    /* Playback first, so the rewind log keeps what a .cap gave the machine. A
+    ** recording that runs full stops and never turns into playback. */
+    if (cap.state == CAPTURE_PLAY) {
+        if (!rleEncEof()) {
+            value= rleEncGet(logId);
+        }
+    }
+    value = rewindInputFilter(boardSystemTime64(), logId, value);
     if (cap.state == CAPTURE_REC) {
         rleEncAdd(logId, value);
         if (rleEncEof()) {
             boardCaptureStop();
         }
     }
-    if (cap.state == CAPTURE_PLAY) {
-        if (!rleEncEof()) {
-            value= rleEncGet(logId);
-        }
-    }
     return value;
+}
+
+UInt8 boardRewindInput(UInt8 logId, UInt8 value)
+{
+    return rewindInputFilter(boardSystemTime64(), logId, value);
 }
 
 static void boardCaptureSaveState()
@@ -621,16 +698,17 @@ static void boardCaptureSaveState()
         saveStateSet(state, "endTime64Lo", (UInt32)cap.endTime64);
         saveStateSet(state, "startTime64Hi", (UInt32)(cap.startTime64 >> 32));
         saveStateSet(state, "startTime64Lo", (UInt32)cap.startTime64);
-        saveStateSet(state, "inputCnt", cap.inputCnt);
-        if (cap.inputCnt > 0) {
-            saveStateSetBuffer(state, "inputs", cap.inputs, cap.inputCnt * sizeof(RleData));
-        }
+        /* The log that grows goes last, so what stays the same while recording
+        ** keeps its place and a rewind snapshot shares it with the one before. */
         saveStateSet(state, "initStateSize", cap.initStateSize);
         if (cap.initStateSize > 0) {
             saveStateSetBuffer(state, "initState", cap.initState, cap.initStateSize);
         }
-        
         saveStateSetBuffer(state, "rleCache", rleCache, sizeof(rleCache));
+        saveStateSet(state, "inputCnt", cap.inputCnt);
+        if (cap.inputCnt > 0) {
+            saveStateSetBuffer(state, "inputs", cap.inputs, cap.inputCnt * sizeof(RleData));
+        }
 
         saveStateClose(state);
     }
@@ -833,6 +911,29 @@ static int psgChannelAudibleViaMixer(UInt8 r7, int ch) {
     return !(r7 & (1 << ch)) || !(r7 & (1 << (ch + 3)));
 }
 
+/* Whether this write makes a channel of a PSG-compatible generator audible.
+** A fixed level on a channel muted in R7 is not sound; an R7 write that
+** un-mutes a channel with a level is. */
+static int psgWriteAudible(UInt8 reg, UInt8 value, UInt8* reg7, UInt8* vol) {
+    int ch;
+    if (reg >= 8 && reg <= 10) {
+        ch = reg - 8;
+        vol[ch] = value;
+        return (value & 0x10) ||
+               ((value & 0x0f) && psgChannelAudibleViaMixer(*reg7, ch));
+    }
+    if (reg == 7) {
+        *reg7 = value;
+        for (ch = 0; ch < 3; ch++) {
+            if (psgChannelAudibleViaMixer(value, ch) &&
+                (vol[ch] & 0x0f) && !(vol[ch] & 0x10)) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
 /* Drop the FDC boost on melodic sound-chip writes that cause the
 ** audible "BGM at double speed" tail. Excluded: VDP VRAM (sector
 ** streaming), PPI (VBLANK keyboard scan), PSG R15. Included: VDP
@@ -849,6 +950,7 @@ void boardCheckFdcBoostKill(UInt16 port, UInt8 value) {
     static UInt8  pcmStatus        = 0;     /* Turbo-R PCM status (port 0xA5), low 5 bits */
     static UInt32 ymf278KeyOn      = 0;     /* wave key-on bits, ch 0-23 */
     UInt8 p = (UInt8)(port & 0xff);
+    int psgAudible = 0;
 
     /* Address latches: keep in sync regardless of boost state. */
     if (p == 0x7c) { ym2413LatchedReg = value;           return; }
@@ -861,10 +963,7 @@ void boardCheckFdcBoostKill(UInt16 port, UInt8 value) {
     /* PSG data-register value latches: track the mixer (R7) and per-channel
     ** volumes (R8-R10) regardless of boost state so the audibility test below
     ** stays in sync with the chip across boost on/off transitions. */
-    if (p == 0xa1) {
-        if (psgLatchedReg == 7)                             psgReg7 = value;
-        else if (psgLatchedReg >= 8 && psgLatchedReg <= 10) psgVol[psgLatchedReg - 8] = value;
-    }
+    if (p == 0xa1) psgAudible = psgWriteAudible(psgLatchedReg, value, &psgReg7, psgVol);
     /* Turbo-R PCM status (port 0xA5): low 5 bits matter (see romMapperTurboRPcm
     ** write handler). Tracked regardless of boost state so the 0xA4 sample
     ** audibility test stays correct across boost on/off transitions. */
@@ -957,34 +1056,37 @@ void boardCheckFdcBoostKill(UInt16 port, UInt8 value) {
         return;
     }
     if (p == 0xa1) {                                    /* PSG data */
-        /* Volume registers 8-10. Fixed level (bit 4 clear) is audible only
-        ** when the channel's tone or noise is enabled in mixer R7 -- a level
-        ** written to a fully-disabled channel just sets a DC offset (common
-        ** false positive: drivers poke levels on silenced channels).
-        ** Envelope mode (bit 4) plays through even with tone+noise off, so
-        ** it always counts. R11-15 (env period/shape, keyboard scan) and
-        ** R0-6 (tone / noise period, audible only after volume) are skipped. */
-        if (psgLatchedReg >= 8 && psgLatchedReg <= 10) {
-            int ch = psgLatchedReg - 8;
-            if ((value & 0x10) ||
-                ((value & 0x0f) && psgChannelAudibleViaMixer(psgReg7, ch))) {
-                fdcKillBoost();
-            }
-        }
-        /* R7 (mixer) write: catch the "set level first, enable channel later"
-        ** ordering. If un-muting a channel now makes a fixed-level channel
-        ** audible, drop the boost; envelope-mode was caught at volume write. */
-        else if (psgLatchedReg == 7) {
-            int ch;
-            for (ch = 0; ch < 3; ch++) {
-                if (psgChannelAudibleViaMixer(value, ch) &&
-                    (psgVol[ch] & 0x0f) && !(psgVol[ch] & 0x10)) {
-                    fdcKillBoost();
-                    break;
-                }
-            }
+        if (psgAudible) {
+            fdcKillBoost();
         }
         return;
+    }
+}
+
+/* Makoto (YM2608) on ports 14h-17h, called from its own write handler because
+** the SVI-328 RS-IDE shares these ports. One address latch serves both halves;
+** the chip ignores data written to the half that was not addressed. */
+void boardCheckOpnaBoostKill(UInt8 offset, UInt8 value) {
+    static UInt16 latchedReg = 0;           /* low byte = reg, 0x100 = upper half */
+    static UInt8  ssgReg7    = 0xff;
+    static UInt8  ssgVol[3]  = { 0, 0, 0 };
+    int bank1 = (offset & 2) != 0;
+    int ssgAudible = 0;
+    UInt8 reg;
+
+    if (!(offset & 1)) { latchedReg = value | (bank1 ? 0x100 : 0); return; }
+    if (bank1 != ((latchedReg & 0x100) != 0)) return;
+    reg = (UInt8)(latchedReg & 0xff);
+    if (!bank1 && reg < 0x10) ssgAudible = psgWriteAudible(reg, value, &ssgReg7, ssgVol);
+
+    if (!fdcActive && !casActive) return;
+
+    if (ssgAudible ||
+        (!bank1 && reg == 0x28 && (value & 0xf0)) ||                     /* FM key on */
+        (reg >= 0x40 && reg <= 0x4f && (value & 0x7f) != 0x7f) ||        /* FM TL */
+        (!bank1 && reg == 0x10 && !(value & 0x80) && (value & 0x3f)) ||  /* rhythm key on */
+        (bank1 && reg == 0x00 && (value & 0x80) && !(value & 0x40))) {   /* ADPCM-B start */
+        fdcKillBoost();
     }
 }
 
@@ -1068,14 +1170,39 @@ static void onMixerSync(void* ref, UInt32 time)
     boardTimerAdd(mixerTimer, boardSystemTime() + boardFrequency() / 50);
 }
 
+static int boardRewindOldest(void)
+{
+    return (ramStateCur + ramMaxStates - (ramStateCount - 1)) % ramMaxStates;
+}
+
+/* A snapshot older than the input and key logs reach would run again with the wrong input. */
+static void boardRewindKeepCovered(void)
+{
+    UInt64 from = rewindInputCoveredFrom();
+    UInt64 keys = keyMatrixInputDoneCoveredFrom();
+
+    if (keys > from) {
+        from = keys;
+    }
+    while (ramStateCount > 0 && ramStateTime64[boardRewindOldest()] < from) {
+        ramStateCount--;
+    }
+}
+
 static void onStateSync(void* ref, UInt32 time)
 {
     /* A medium that cannot be taken back with the MSX leaves nothing to rewind to. */
     if (enableSnapshots && diskHasHostMedium()) {
         ramStateCount = 0;
+        rewindInputReset();
+        keyMatrixInputForgetDone();
     }
     else if (enableSnapshots) {
         char memFilename[16];
+        int    prevCur   = ramStateCur;
+        int    prevCount = ramStateCount;
+        UInt32 prevTime;
+        UInt64 prevTime64;
 
         ramStateCur = (ramStateCur + 1) % ramMaxStates;
         if (ramStateCount < ramMaxStates) {
@@ -1086,9 +1213,25 @@ static void onStateSync(void* ref, UInt32 time)
         
         /* What the clock will read once this snapshot is restored; step back
         ** uses it to pick a snapshot instead of restoring them to find out. */
+        prevTime = ramStateTime[ramStateCur];
+        prevTime64 = ramStateTime64[ramStateCur];
         ramStateTime[ramStateCur] = boardSystemTime();
+        ramStateTime64[ramStateCur] = boardSystemTime64();
 
-        boardSaveState(memFilename, 0);
+        if (!boardSaveState(memFilename, 0)) {
+            /* A partial snapshot would restore the parts left out as devices
+            ** starting afresh. In a full ring the oldest it overwrote is gone too. */
+            memZipFileDelete(memFilename);
+            ramStateTime[ramStateCur] = prevTime;
+            ramStateTime64[ramStateCur] = prevTime64;
+            ramStateCur   = prevCur;
+            ramStateCount = prevCount == ramMaxStates ? prevCount - 1 : prevCount;
+        }
+        boardRewindKeepCovered();
+        if (ramStateCount > 0) {
+            rewindInputTrim(ramStateTime64[boardRewindOldest()]);
+            keyMatrixInputTrimDone(ramStateTime64[boardRewindOldest()]);
+        }
     }
 
     boardTimerAdd(stateTimer, boardSystemTime() + stateFrequency);
@@ -1182,6 +1325,7 @@ int boardRewindOne() {
     if (stateFrequency <= 0 || diskHasHostMedium()) {
         return 0;
     }
+    boardRewindKeepCovered();
     rewindTime = boardInfo.getTimeTrace(1);
     if (rewindTime == 0 || ramStateCount < 2) {
         return 0;
@@ -1232,6 +1376,7 @@ int boardRewindTo(UInt32 loadAt, UInt32 dropAfter)
     if (stateFrequency <= 0 || diskHasHostMedium()) {
         return 0;
     }
+    boardRewindKeepCovered();
     for (skip = 0; skip < ramStateCount; skip++) {
         int slot = (ramStateCur + ramMaxStates - skip) % ramMaxStates;
         if ((Int32)(ramStateTime[slot] - dropAfter) <= 0) {
@@ -1262,10 +1407,14 @@ int boardRewindTo(UInt32 loadAt, UInt32 dropAfter)
 int boardRewindReaches(UInt32 at)
 {
     int oldest;
-    if (stateFrequency <= 0 || diskHasHostMedium() || ramStateCount < 1) {
+    if (stateFrequency <= 0 || diskHasHostMedium()) {
         return 0;
     }
-    oldest = (ramStateCur + ramMaxStates - (ramStateCount - 1)) % ramMaxStates;
+    boardRewindKeepCovered();
+    if (ramStateCount < 1) {
+        return 0;
+    }
+    oldest = boardRewindOldest();
     return (Int32)(ramStateTime[oldest] - at) <= 0 && (Int32)(at - boardSystemTime()) <= 0;
 }
 
@@ -1276,6 +1425,25 @@ void boardRewindForget(UInt32 after)
     }
 }
 
+int boardRewindReplaying(void)
+{
+    return rewindInputReplaying(boardSystemTime64());
+}
+
+UInt32 boardRewindTakeOver(int requeue)
+{
+    UInt64 now = boardSystemTime64();
+    UInt64 dropped = rewindInputTakeOver(now);
+
+    if (dropped == 0) {
+        return 0;
+    }
+    /* Snapshots past now belong to the run given up. */
+    boardRewindForget(boardSystemTime());
+    keyMatrixInputTakeOver(now, requeue);
+    return (UInt32)(dropped / HIRES_CYCLES_PER_LORES_CYCLE * 1000 / boardFrequency()) + 1;
+}
+
 static int boardRewindLoad(int drop)
 {
     char stateFile[16];
@@ -1284,6 +1452,7 @@ static int boardRewindLoad(int drop)
     if (diskHasHostMedium()) {
         return 0;
     }
+    boardRewindKeepCovered();
     if (drop ? !boardRewindDrop() : ramStateCount < 1) {
         return 0;
     }
@@ -1313,6 +1482,8 @@ int boardSnapshotRestore(void)
     boardLoadStateInPlace(SNAPSHOT_STATE, DEBUG_TRACE_LOAD);
     /* The ring holds moments after the snapshot, so a step back would jump forward. */
     ramStateCount = 0;
+    rewindInputReset();
+    keyMatrixInputForgetDone();
     return BOARD_SNAPSHOT_OK;
 }
 
@@ -1321,6 +1492,8 @@ int boardSnapshotRestore(void)
 ** trace a rewind step from any other load. */
 static int boardLoadStateInPlace(const char* stateFile, int traceReason)
 {
+    UInt64 loadedFrom = boardSystemTime64();
+
     debugTraceBreak(traceReason);
     boardTimerCleanup();
     /* The cleanup drops fdcTimer without ever running onFdcDone, so the boost
@@ -1340,21 +1513,32 @@ static int boardLoadStateInPlace(const char* stateFile, int traceReason)
         SaveState* bs = saveStateOpenForRead("board");
         UInt64 stashedTime = (UInt64)saveStateGet(bs, "boardSysTime64Hi", 0) << 32
                            | (UInt64)saveStateGet(bs, "boardSysTime64Lo", 0);
+        UInt32 stashedOldTime = saveStateGet(bs, "oldTime", 0);
         UInt32 snapInt = saveStateGet(bs, "pendingInt", 0);
         saveStateClose(bs);
         /* boardLoadState is not called here, so this field is taken by hand. */
         pendingInt = (int)snapInt;
+        intUnitCount = 0;
         boardInfo.loadState();
         videoManagerLoadState();
         videoManagerApplyLoadedState();
-        if (stashedTime != 0) boardSysTime64 = stashedTime;
+        /* The 64-bit clock was saved as of the saved oldTime, which can be earlier than
+        ** the snapshot. Both are put back, before the tape below reads the clock;
+        ** otherwise the time between them is lost. */
+        if (stashedTime != 0) {
+            boardSysTime64 = stashedTime;
+            oldTime = stashedOldTime;
+        }
+        else {
+            oldTime = boardSystemTime();
+        }
     }
     /* The tape clock is anchored to boardSysTime64, which just went backwards.
     ** Without this the next update underflows and seeks to the end of the tape. */
     tapeSignalReset();
-    /* boardSystemTime64 accumulates from oldTime, so it has to follow the clock
-    ** back too. Left alone the next call adds a wrapped UInt32 delta. */
-    oldTime = boardSystemTime();
+    if (traceReason == DEBUG_TRACE_REWIND) {
+        rewindInputLoaded(loadedFrom, boardSystemTime64());
+    }
     boardCaptureLoadState();
 
 #if 1
@@ -1368,7 +1552,7 @@ static int boardLoadStateInPlace(const char* stateFile, int traceReason)
         boardTimerAdd(periodicTimer, boardSystemTime() + periodicInterval);
     }
 #endif
-    keyMatrixInputBoardRearm();
+    keyMatrixInputBoardRearm(traceReason == DEBUG_TRACE_REWIND);
     /* A hunt or a write journal kept by an agent was about the machine before this. */
     dbgNotifyMachineChanged();
     debugTraceResume(traceReason, boardSystemTime(), 0);
@@ -1395,6 +1579,7 @@ int boardRun(Machine* machine,
     /* Stash boardSysTime64 across msxCreate / boardInfo.loadState since
     ** boardInit clobbers it; reapply after all init runs. */
     UInt64 stashedSysTime64 = 0;
+    UInt32 stashedInt = 0;
 
     syncToRealClock = syncCallback;
     snapshotTaken   = 0;
@@ -1410,6 +1595,12 @@ int boardRun(Machine* machine,
 
     /* Shared list: state pre-validation and machineInitialize both feed it. */
     boardClearMissingFiles();
+    deviceFileCount = 0;
+    /* A state brings its own cartridges, not the one the user inserted. */
+    if (stateFile != NULL) {
+        cartUserInsert[0] = 0;
+        cartUserInsert[1] = 0;
+    }
 
     if (stateFile != NULL) {
         int   size;
@@ -1427,6 +1618,7 @@ int boardRun(Machine* machine,
 
                 boardType = boardLoadState();
                 stashedSysTime64 = boardSysTime64;
+                stashedInt = (UInt32)pendingInt;
 
                 machineLoadState(boardMachine);
             }
@@ -1487,12 +1679,14 @@ int boardRun(Machine* machine,
 #endif
 
     pendingInt = 0;
+    intUnitCount = 0;
 
     boardSetFrequency(frequency);
 
     memset(&boardInfo, 0, sizeof(boardInfo));
 
     boardRunning = 1;
+    boardBuilding = 1;
     switch (boardType) {
     case BOARD_MSX:
     case BOARD_MSX_S3527:
@@ -1519,10 +1713,27 @@ int boardRun(Machine* machine,
     default:
         success = 0;
     }
-    
+    boardBuilding = 0;
+
+    /* A failed start has its own dialog, which names what it needs. */
+    if (success) {
+        boardFlushDeviceFiles();
+    }
+    deviceFileCount = 0;
+    /* An insert this build could not use must not mark a later one. */
+    cartUserInsert[0] = 0;
+    cartUserInsert[1] = 0;
+
     boardCaptureInit();
 
     if (success && loadState) {
+        /* The CPU line comes back as saved, so the mask has to match it. Units take
+        ** their bits again in their loads, and a chip switched off now could never lower
+        ** its bit (MSX-AUDIO off also leaves its MIDI status port unmapped). */
+        stashedInt &= ~BOARD_INT_UNIT_BITS;
+        if (!boardGetY8950Enable())     stashedInt &= ~(BOARD_INT_Y8950 | BOARD_INT_MSX_AUDIO_MIDI);
+        if (!boardGetMoonsoundEnable()) stashedInt &= ~BOARD_INT_YMF262;
+        pendingInt = (int)stashedInt;
         boardInfo.loadState();
         videoManagerApplyLoadedState();
         /* Re-apply the stashed boardSysTime64 (boardInit clobbered it). The
@@ -1530,6 +1741,10 @@ int boardRun(Machine* machine,
         if (stashedSysTime64 != 0) boardSysTime64 = stashedSysTime64;
         tapeSignalReset();
         boardCaptureLoadState();
+    }
+
+    if (success) {
+        mixerForgetRemovedInstances(mixer);
     }
 
     if (stateFile != NULL) {
@@ -1563,6 +1778,8 @@ int boardRun(Machine* machine,
 
         if (stateFrequency > 0) {
             ramStateTime = calloc(ramMaxStates, sizeof(UInt32));
+            ramStateTime64 = calloc(ramMaxStates, sizeof(UInt64));
+            rewindInputCreate();
             stateTimer = boardTimerCreate(onStateSync, NULL);
             breakpointTimer = boardTimerCreate(onBreakpointSync, NULL); 
             boardTimerAdd(stateTimer, boardSystemTime() + stateFrequency);
@@ -1616,6 +1833,9 @@ int boardRun(Machine* machine,
             stateTimer = NULL;
             free(ramStateTime);
             ramStateTime = NULL;
+            free(ramStateTime64);
+            ramStateTime64 = NULL;
+            rewindInputDestroy();
         }
         memZipFileSystemDestroy();
     }
@@ -1903,23 +2123,54 @@ int boardGetRefreshRate()
     return 0;
 }
 
-/* Fails the build when a BOARD_INT_* name is 0 or two of them overlap (their sum
-** then exceeds their OR). Every name in the table in Board.h belongs in this list. */
-#define BOARD_INT_ALL(op) (BOARD_INT_VDP_IE0 op BOARD_INT_VDP_IE1 op BOARD_INT_VDP_IE2 op \
-    BOARD_INT_YMF262 op BOARD_INT_Y8950 op BOARD_INT_MAKOTO op BOARD_INT_YM2151 op \
-    BOARD_INT_MSX_RS232 op BOARD_INT_MSX_MIDI_TMR op BOARD_INT_MSX_MIDI_RXRDY op \
-    BOARD_INT_MSX_AUDIO_MIDI op BOARD_INT_YM2148 op BOARD_INT_V9990 op \
-    BOARD_INT_V9968_CART_IE0 op BOARD_INT_V9968_CART_IE1 op BOARD_INT_V9968_CART_IE2 op \
-    BOARD_INT_Y8960_TIMER op BOARD_INT_Y8960_OPL2EX op BOARD_INT_Y8960_OPM)
-typedef char boardIntBitsMustNotOverlap[BOARD_INT_ALL(&&) && BOARD_INT_ALL(+) == BOARD_INT_ALL(|) ? 1 : -1];
+/* Every BOARD_INT_* name with what the status calls it. */
+#define BOARD_INT_EACH(X) \
+    X(BOARD_INT_VDP_IE0,        "VDP IE0") \
+    X(BOARD_INT_VDP_IE1,        "VDP IE1") \
+    X(BOARD_INT_VDP_IE2,        "VDP IE2") \
+    X(BOARD_INT_YMF262,         "MoonSound") \
+    X(BOARD_INT_Y8950,          "MSX-AUDIO") \
+    X(BOARD_INT_MAKOTO,         "Makoto") \
+    X(BOARD_INT_YM2151,         "YM2151") \
+    X(BOARD_INT_MSX_RS232,      "RS-232C") \
+    X(BOARD_INT_MSX_MIDI_TMR,   "MSX-MIDI timer") \
+    X(BOARD_INT_MSX_MIDI_RXRDY, "MSX-MIDI RxRDY") \
+    X(BOARD_INT_MSX_AUDIO_MIDI, "MSX-AUDIO MIDI") \
+    X(BOARD_INT_YM2148,         "YM2148") \
+    X(BOARD_INT_V9990,          "V9990") \
+    X(BOARD_INT_V9968_CART_IE0, "V9968 cartridge IE0") \
+    X(BOARD_INT_V9968_CART_IE1, "V9968 cartridge IE1") \
+    X(BOARD_INT_V9968_CART_IE2, "V9968 cartridge IE2") \
+    X(BOARD_INT_Y8960_TIMER,    "Y8960 timer") \
+    X(BOARD_INT_Y8960_OPL2EX,   "Y8960 OPL2EX") \
+    X(BOARD_INT_Y8960_OPM,      "Y8960 OPM")
 
-void  boardSetInt(UInt32 irq)
+/* Fails the build when a BOARD_INT_* name is 0 or two of them overlap (their sum
+** then exceeds their OR). */
+#define BOARD_INT_AND(bit, name) (bit) &&
+#define BOARD_INT_SUM(bit, name) (bit) +
+#define BOARD_INT_OR(bit, name)  (bit) |
+typedef char boardIntBitsMustNotOverlap[(BOARD_INT_EACH(BOARD_INT_AND) 1) &&
+    (BOARD_INT_EACH(BOARD_INT_SUM) 0) == (BOARD_INT_EACH(BOARD_INT_OR) 0) ? 1 : -1];
+#undef BOARD_INT_AND
+#undef BOARD_INT_SUM
+#undef BOARD_INT_OR
+
+const char* boardIntName(UInt32 bit)
+{
+#define BOARD_INT_NAME(b, name) if (bit == (b)) return name;
+    BOARD_INT_EACH(BOARD_INT_NAME)
+#undef BOARD_INT_NAME
+    return NULL;
+}
+
+static void setIntBits(UInt32 irq)
 {
     pendingInt |= irq;
     boardInfo.setInt(boardInfo.cpuRef);
 }
 
-void   boardClearInt(UInt32 irq)
+static void clearIntBits(UInt32 irq)
 {
     pendingInt &= ~irq;
     if (pendingInt == 0) {
@@ -1927,9 +2178,76 @@ void   boardClearInt(UInt32 irq)
     }
 }
 
+void  boardSetInt(UInt32 irq)
+{
+    assert(!(irq & BOARD_INT_UNIT_BITS));
+    setIntBits(irq);
+}
+
+void   boardClearInt(UInt32 irq)
+{
+    assert(!(irq & BOARD_INT_UNIT_BITS));
+    clearIntBits(irq);
+}
+
+void boardSetIntUnit(UInt32 irq, const void* unit)
+{
+    int i;
+
+    assert(irq != 0 && (irq & (irq - 1)) == 0 && !(irq & ~BOARD_INT_UNIT_BITS));
+    for (i = 0; i < intUnitCount; i++) {
+        if (intUnits[i].irq == irq && intUnits[i].unit == unit) {
+            break;
+        }
+    }
+    if (i == intUnitCount) {
+        /* With the table full the request goes unrecorded and falls back
+        ** to the plain shared bit. */
+        assert(intUnitCount < INT_UNITS_MAX);
+        if (intUnitCount < INT_UNITS_MAX) {
+            intUnits[intUnitCount].irq  = irq;
+            intUnits[intUnitCount].unit = unit;
+            intUnitCount++;
+        }
+    }
+    setIntBits(irq);
+}
+
+void boardClearIntUnit(UInt32 irq, const void* unit)
+{
+    int held = 0;
+    int i = 0;
+
+    assert(irq != 0 && (irq & (irq - 1)) == 0 && !(irq & ~BOARD_INT_UNIT_BITS));
+    while (i < intUnitCount) {
+        if (intUnits[i].irq == irq && intUnits[i].unit == unit) {
+            intUnits[i] = intUnits[--intUnitCount];
+            continue;
+        }
+        if (intUnits[i].irq == irq) {
+            held = 1;
+        }
+        i++;
+    }
+    if (!held) {
+        clearIntBits(irq);
+    }
+}
+
 UInt32 boardGetInt(UInt32 irq)
 {
     return pendingInt & irq;
+}
+
+int boardGetIntUnitCount(UInt32 irq)
+{
+    int count = 0;
+    int i;
+
+    for (i = 0; i < intUnitCount; i++) {
+        count += intUnits[i].irq == irq;
+    }
+    return count;
 }
 
 UInt8* boardGetRamPage(int page)
@@ -2043,10 +2361,22 @@ void boardChangeCartridge(int cartNo, RomType romType, char* cart, char* cartZip
         if (currentRomType[cartNo] == ROM_ROOKIEDRIVE)  hdType[cartNo] = HD_ROOKIEDRIVE;
     }
 
+    if (cart == NULL) {
+        cartUserInsert[cartNo] = 0;
+    }
+
     if (boardRunning && cartNo < boardInfo.cartridgeCount) {
-        int inserted = cartridgeInsert(cartNo, romType, cart, cartZip);
+        int inserted;
+        deviceFilesUserInsert = cartUserInsert[cartNo];
+        cartUserInsert[cartNo] = 0;
+        inserted = cartridgeInsert(cartNo, romType, cart, cartZip);
+        deviceFilesUserInsert = 0;
         if (boardInfo.changeCartridge != NULL) {
             boardInfo.changeCartridge(boardInfo.cpuRef, cartNo, inserted);
+        }
+        if (!boardBuilding) {
+            mixerForgetRemovedInstances(boardMixer);
+            boardFlushDeviceFiles();
         }
         dbgBreakpointsOnCartridgeChanged();
         snapshotTaken = 0;

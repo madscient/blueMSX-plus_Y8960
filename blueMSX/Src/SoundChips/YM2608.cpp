@@ -38,10 +38,23 @@ extern "C" {
 
 #define RHYTHM_ROM_SIZE 0x2000
 
-/* The mixer divides by 4096 after a channel volume of at most 1024, and
-** ymfm clamps FM to 16 bits; this keeps a full-scale OPNA at about half
-** of the mixer's range. */
-#define OUTPUT_GAIN     2
+/* What each stream is multiplied by before the mixer, which divides by 4096
+** after a channel volume of at most 1024 and clamps the sum to 16 bits:
+** FM with ADPCM-A and ADPCM-B, and the three SSG voices. */
+#define FM_GAIN         16
+#define SSG_GAIN        6
+
+/* FM 1-6, ADPCM-A's six rhythm sounds, ADPCM-B; then the SSG's three. */
+static const char* const fmVoiceNames[13] = {
+    "1", "2", "3", "4", "5", "6", "BD", "SD", "TOP", "HH", "TOM", "RIM", "ADPCM"
+};
+static const UInt8 fmVoiceGroups[13] = {
+    MIXER_VOICE_FM, MIXER_VOICE_FM, MIXER_VOICE_FM, MIXER_VOICE_FM, MIXER_VOICE_FM, MIXER_VOICE_FM,
+    MIXER_VOICE_RHYTHM, MIXER_VOICE_RHYTHM, MIXER_VOICE_RHYTHM,
+    MIXER_VOICE_RHYTHM, MIXER_VOICE_RHYTHM, MIXER_VOICE_RHYTHM, MIXER_VOICE_ADPCM
+};
+static const char* const ssgVoiceNames[3] = { "A", "B", "C" };
+static const UInt8 ssgVoiceGroups[3] = { MIXER_VOICE_TONE, MIXER_VOICE_TONE, MIXER_VOICE_TONE };
 
 /* The windowed sinc of the rate conversion: how many zero crossings it
 ** reaches to each side, counted at the lower of the two rates, and into how
@@ -57,29 +70,127 @@ extern "C" {
 ** ADPCM-B channel in nine values of which seven mean something else now. */
 #define CHIP_STATE_LAYOUT   2
 
+/* The ADPCM-B copies beside the one the CPU sees read the memory as it
+** does, through the host, and never write it. */
+class Ym2608ListenBus : public ymfm::ymfm_interface {
+public:
+    Ym2608ListenBus(ymfm::ymfm_interface& host) : host(host) {}
+
+    uint8_t ymfm_external_read(ymfm::access_class type, uint32_t address) override
+    {
+        return host.ymfm_external_read(type, address);
+    }
+    void ymfm_external_write(ymfm::access_class type, uint32_t address, uint8_t data) override {}
+
+private:
+    ymfm::ymfm_interface& host;
+};
+
 /* ym2608::generate() brings FM+ADPCM and the SSG to one common rate by
 ** repeating and averaging samples. Its protected members let the two parts
 ** be clocked apart, each at the rate the chip produces it at, without
 ** changing ymfm. */
 class Ym2608Chip : public ymfm::ym2608 {
 public:
-    Ym2608Chip(ymfm::ymfm_interface& intf) : ymfm::ym2608(intf) {}
+    Ym2608Chip(ymfm::ymfm_interface& intf, ymfm::ymfm_interface& listenBus) :
+        ymfm::ym2608(intf), heard(listenBus), probe(listenBus),
+        heardFirst(0), heardCount(0), heardHasPending(false) {}
 
-    void clockFm(Int16* sample)
+    /* clock_fm_and_adpcm() with the heard ADPCM-B in place of m_adpcm_b,
+    ** which the CPU sees and which runs on board time instead. Keep the
+    ** two in step when ymfm changes. voices: NULL, or the 13 to sum apart. */
+    void clockFm(Int16* sample, MixerVoices* voices, bool active, bool metered)
     {
-        clock_fm_and_adpcm();
+        uint32_t fmmask = ymfm::bitfield(m_irq_enable, 7) ? 0x3f : 0x07;
+        uint8_t ended = heard.status() & ymfm::adpcm_b_channel::STATUS_EOS;
+        uint32_t envCounter;
+
+        feedHeard();
+        envCounter = m_fm.clock(fm_engine::ALL_CHANNELS);
+        if (ymfm::bitfield(envCounter, 0, 2) == 0) {
+            m_adpcm_a.clock(ymfm::bitfield(envCounter, 2) ? 0x0f : 0x3f);
+        }
+        heard.clock();
+        if (voices == NULL) {
+            m_fm.output(m_last_fm.clear(), 1, 32767, fmmask);
+            m_adpcm_a.output(m_last_fm, 0x3f);
+            heard.output(m_last_fm, 1);
+        }
+        else {
+            sumVoices(fmmask, voices, active, metered);
+        }
+        m_last_fm.clamp16();
+
         sample[0] = (Int16)m_last_fm.data[0];
         sample[1] = (Int16)m_last_fm.data[1];
+
+        /* Fed by the CPU, the heard copy runs dry when the CPU side has not
+        ** taken the next byte yet, as below 100 % speed; it goes on from
+        ** where the CPU side is. */
+        if (!ended && (heard.status() & ymfm::adpcm_b_channel::STATUS_EOS) != 0 && !heard.regs().external()) {
+            followAdpcmB();
+        }
     }
 
+    /* The same sum one voice at a time, each with its gain: FM 1-6, ADPCM-A
+    ** 1-6, ADPCM-B. Every part only adds into the output and a channel
+    ** clamps only itself, so at unity gain the total is unchanged. */
+    void sumVoices(uint32_t fmmask, MixerVoices* voices, bool active, bool metered)
+    {
+        int v;
+
+        m_last_fm.clear();
+        for (v = 0; v < 13; v++) {
+            fm_engine::output_data part;
+
+            part.clear();
+            if (v < 6) {
+                m_fm.output(part, 1, 32767, fmmask & (1u << v));
+            }
+            else if (v < 12) {
+                m_adpcm_a.output(part, 1u << (v - 6));
+            }
+            else {
+                heard.output(part, 1);
+            }
+            if (active) {
+                part.data[0] = (int32_t)(((Int64)part.data[0] * voices->gain[v]) >> 12);
+                part.data[1] = (int32_t)(((Int64)part.data[1] * voices->gain[v]) >> 12);
+            }
+            if (metered) {
+                /* A voice goes out at one level to each side it is panned to. */
+                mixerMeterVoice(voices, v, part.data[0] != 0 ? part.data[0] : part.data[1]);
+            }
+            m_last_fm.data[0] += part.data[0];
+            m_last_fm.data[1] += part.data[1];
+        }
+        if (metered) {
+            voices->samples++;
+        }
+    }
+
+    bool sixFmChannels() const { return ymfm::bitfield(m_irq_enable, 7) != 0; }
+
     /* The three voices mixed into one as generate() mixes them, which
-    ** also keeps their sum within 16 bits. */
-    Int16 clockSsg()
+    ** also keeps their sum within 16 bits. voices: NULL, or A, B and C. */
+    Int16 clockSsg(MixerVoices* voices, bool active, bool metered)
     {
         ymfm::ssg_engine::output_data out;
+        int v;
 
         m_ssg.clock();
         m_ssg.output(out);
+        for (v = 0; voices != NULL && v < 3; v++) {
+            if (active) {
+                out.data[v] = (int32_t)(((Int64)out.data[v] * voices->gain[v]) >> 12);
+            }
+            if (metered) {
+                mixerMeterVoice(voices, v, out.data[v]);
+            }
+        }
+        if (metered) {
+            voices->samples++;
+        }
         return (Int16)((out.data[0] + out.data[1] + out.data[2]) * 2 / 3);
     }
 
@@ -104,6 +215,8 @@ public:
         reset();
         update_prescale(6);
         m_fm.set_irq_mask(m_irq_enable & ~m_flag_control & 0x1f);
+        heard.reset();
+        dropHeardBytes();
     }
 
     /* ym2608's STATUS_ADPCM_B_* are private; these are their values. */
@@ -113,14 +226,17 @@ public:
     static const uint8_t ADPCM_B_FLAGS   = ADPCM_B_EOS | ADPCM_B_BRDY | ADPCM_B_PLAYING;
 
     /* The ADPCM-B flags, at the bits the upper status shows them in. */
-    uint8_t adpcmBFlags() const
+    uint8_t adpcmBFlags()
     {
         uint8_t adpcm = m_adpcm_b.status();
         uint8_t flags = 0;
 
         if (adpcm & ymfm::adpcm_b_channel::STATUS_EOS)     flags |= ADPCM_B_EOS;
         if (adpcm & ymfm::adpcm_b_channel::STATUS_BRDY)    flags |= ADPCM_B_BRDY;
-        if (adpcm & ymfm::adpcm_b_channel::STATUS_PLAYING) flags |= ADPCM_B_PLAYING;
+        /* The busy flag is the START bit of register 00h as last written;
+        ** neither the end of the sample, the reset bit nor a flag reset
+        ** clears it, where ymfm's playing flag stays up after 00h=01h. */
+        if (m_adpcm_b.regs().execute())                    flags |= ADPCM_B_PLAYING;
         return flags;
     }
 
@@ -137,7 +253,7 @@ public:
 
     /* What reading the upper status returns, without writing the flags
     ** back into the chip as that read does. */
-    uint8_t peekStatusHi() const
+    uint8_t peekStatusHi()
     {
         uint8_t status = (m_fm.status() & ~ADPCM_B_FLAGS) | adpcmBFlags();
 
@@ -179,6 +295,135 @@ public:
         m_adpcm_b.reset();
         m_adpcm_b.regs().save_restore(loader);
     }
+
+    /* Clocks the ADPCM-B the CPU sees by one chip sample; a byte it takes
+    ** from the CPU then goes on to the heard copy. */
+    void clockAdpcmB()
+    {
+        bool waiting = (m_adpcm_b.status() & ymfm::adpcm_b_channel::STATUS_BRDY) == 0;
+
+        m_adpcm_b.clock();
+        if (waiting && (m_adpcm_b.status() & ymfm::adpcm_b_channel::STATUS_BRDY) != 0) {
+            passToHeard((uint8_t)m_adpcm_b.regs().cpudata());
+        }
+    }
+
+    /* Whether one more clock brings the ADPCM-B the CPU sees to where no
+    ** clock changes it any more. */
+    bool adpcmBSettles()
+    {
+        if (m_adpcm_b.regs().execute() == 0) {
+            return true;
+        }
+        copyAdpcmB(probe);
+        probe.clock();
+        saveAdpcmB(probe, probeOnce);
+        probe.clock();
+        saveAdpcmB(probe, adpcmBCopy);
+        return adpcmBCopy == probeOnce;
+    }
+
+    /* Chip samples until the ADPCM-B flags the CPU sees next change, found
+    ** by clocking a copy; 0 if they do not within limit. */
+    UInt32 adpcmBChangeIn(UInt32 limit)
+    {
+        uint8_t status = m_adpcm_b.status();
+        UInt32 k;
+
+        copyAdpcmB(probe);
+        for (k = 1; k <= limit; k++) {
+            probe.clock();
+            if (probe.status() != status) {
+                return k;
+            }
+        }
+        return 0;
+    }
+
+    /* What write_data_hi() passes to m_adpcm_b goes to the heard copy too,
+    ** but a data byte, which follows once the CPU side has taken it. */
+    void writeHeard(uint8_t data)
+    {
+        uint8_t reg = (uint8_t)m_address;
+
+        if (!upperAddress() || reg >= 0x10 || reg == 0x08) {
+            return;
+        }
+        if (reg == 0x00) {
+            dropHeardBytes();
+        }
+        heard.write(reg, data);
+    }
+
+    /* The heard copy goes on from where the ADPCM-B the CPU sees is. */
+    void followAdpcmB()
+    {
+        copyAdpcmB(heard);
+        heard.clear_status(ymfm::adpcm_b_channel::STATUS_EOS);
+        dropHeardBytes();
+        /* A byte written but not yet taken came along in the copy. */
+        heardHasPending = (m_adpcm_b.status() & ymfm::adpcm_b_channel::STATUS_BRDY) == 0;
+    }
+
+private:
+    static const UInt32 HEARD_BYTES = 64;
+
+    void saveAdpcmB(ymfm::adpcm_b_engine& from, std::vector<uint8_t>& to)
+    {
+        ymfm::ymfm_saved_state saver(to, true);
+
+        from.save_restore(saver);
+    }
+
+    void copyAdpcmB(ymfm::adpcm_b_engine& to)
+    {
+        ymfm::ymfm_saved_state loader(adpcmBCopy, false);
+
+        saveAdpcmB(m_adpcm_b, adpcmBCopy);
+        to.save_restore(loader);
+    }
+
+    void passToHeard(uint8_t data)
+    {
+        if (heardHasPending) {
+            heardHasPending = false;
+            return;
+        }
+        /* Further behind than the queue holds, as above 100 % speed or
+        ** with the sound off, the heard copy skips ahead. */
+        if (heardCount == HEARD_BYTES) {
+            followAdpcmB();
+            return;
+        }
+        heardBytes[(heardFirst + heardCount) % HEARD_BYTES] = data;
+        heardCount++;
+    }
+
+    void feedHeard()
+    {
+        if (heardCount != 0 && (heard.status() & ymfm::adpcm_b_channel::STATUS_BRDY) != 0) {
+            heard.write(0x08, heardBytes[heardFirst]);
+            heardFirst = (heardFirst + 1) % HEARD_BYTES;
+            heardCount--;
+        }
+    }
+
+    void dropHeardBytes()
+    {
+        heardFirst      = 0;
+        heardCount      = 0;
+        heardHasPending = false;
+    }
+
+    /* The ADPCM-B that is heard, and a copy for looking ahead. */
+    ymfm::adpcm_b_engine heard;
+    ymfm::adpcm_b_engine probe;
+    std::vector<uint8_t> adpcmBCopy;
+    std::vector<uint8_t> probeOnce;
+    uint8_t heardBytes[HEARD_BYTES];
+    UInt32  heardFirst;
+    UInt32  heardCount;
+    bool    heardHasPending;
 };
 
 /* Brings one stream from the rate the chip produces it at to the mixer
@@ -330,16 +575,16 @@ private:
     int    pos;
 
     /* Zero samples in a row, up to taps: with nothing but zeros to weigh,
-    ** the arithmetic is skipped. Only that is skipped; the chip is clocked
-    ** all the same, because the ADPCM-B status advances with it. */
+    ** the arithmetic is skipped. Only that is skipped; the chip is clocked all
+    ** the same, as its envelopes and the heard ADPCM-B keep time with it. */
     int    quiet;
 };
 
 class Ym2608Host : public ymfm::ymfm_interface {
 public:
-    /* owner is declared before chip so that it is set before the chip's
-    ** constructor can call back into this interface. */
-    Ym2608Host(YM2608* owner) : owner(owner), chip(*this) {}
+    /* owner and listenBus are declared before chip so that they are set
+    ** before the chip's constructor can use them. */
+    Ym2608Host(YM2608* owner) : owner(owner), listenBus(*this), chip(*this, listenBus) {}
 
     void timerExpired(int tnum) { m_engine->engine_timer_expired(tnum); }
 
@@ -351,15 +596,18 @@ public:
     void ymfm_external_write(ymfm::access_class type, uint32_t address, uint8_t data) override;
 
     YM2608* owner;
+    Ym2608ListenBus listenBus;
     Ym2608Chip chip;
 };
 
 struct YM2608 {
-    YM2608() : fm(2), ssg(1) {}
+    YM2608() : fmVoices(NULL), ssgVoices(NULL), fm(2), ssg(1) {}
 
     Mixer*      mixer;
     Int32       fmHandle;
     Int32       ssgHandle;
+    MixerVoices* fmVoices;      /* lent by the mixer; NULL leaves them alone */
+    MixerVoices* ssgVoices;
     UInt32      clock;
     UInt32      irqMask;
     UInt32      sampleRate;
@@ -373,6 +621,13 @@ struct YM2608 {
     UInt32      busyEnd;
     UInt32      irqAsserted;
     UInt32      csmPending;
+
+    /* The ADPCM-B the CPU sees runs on board time: chip samples counted from
+    ** adpcmBRef, adpcmBFrag the part of one already passed, in chip clocks
+    ** times boardFrequency(). The one heard runs with the mixer. */
+    BoardTimer* adpcmBTimer;
+    UInt32      adpcmBRef;
+    UInt32      adpcmBFrag;
 
     /* The two streams of the chip: FM with rhythm and ADPCM in stereo, and
     ** the SSG. Each has its own number of clocks per sample, which follows
@@ -504,6 +759,62 @@ static void onTimeout(YM2608* ym2608, int tnum)
 static void onTimeoutA(void* ref, UInt32 time) { onTimeout((YM2608*)ref, 0); }
 static void onTimeoutB(void* ref, UInt32 time) { onTimeout((YM2608*)ref, 1); }
 
+/* With no flag change in sight, the timer looks again after this many chip
+** samples, so that board time never runs far ahead of the channel. */
+#define ADPCM_B_LOOKAHEAD 1024
+
+static void adpcmBAdvance(YM2608* ym2608, UInt32 now)
+{
+    Ym2608Chip& chip = ym2608->host->chip;
+    UInt64 period = (UInt64)boardFrequency() * ym2608->fmClocks;
+    UInt64 total  = (UInt64)(now - ym2608->adpcmBRef) * ym2608->clock + ym2608->adpcmBFrag;
+    UInt64 n      = total / period;
+
+    ym2608->adpcmBRef  = now;
+    ym2608->adpcmBFrag = (UInt32)(total % period);
+
+    if (n > 1 && chip.adpcmBSettles()) {
+        n = 1;
+    }
+    while (n-- > 0) {
+        chip.clockAdpcmB();
+    }
+    chip.updateAdpcmBStatus();
+}
+
+/* The timer goes off at the chip sample in which the flags next change. */
+static void adpcmBSchedule(YM2608* ym2608)
+{
+    Ym2608Chip& chip = ym2608->host->chip;
+    UInt32 now = boardSystemTime();
+    UInt64 units;
+    UInt32 when;
+    UInt32 k;
+
+    k = chip.adpcmBChangeIn(ADPCM_B_LOOKAHEAD);
+    if (k == 0) {
+        if (chip.adpcmBSettles()) {
+            boardTimerRemove(ym2608->adpcmBTimer);
+            return;
+        }
+        k = ADPCM_B_LOOKAHEAD;
+    }
+    units = (UInt64)k * boardFrequency() * ym2608->fmClocks - ym2608->adpcmBFrag;
+    when  = ym2608->adpcmBRef + (UInt32)((units + ym2608->clock - 1) / ym2608->clock);
+    if ((Int32)(when - now) <= 0) {
+        when = now + 1;
+    }
+    boardTimerAdd(ym2608->adpcmBTimer, when);
+}
+
+static void onAdpcmBTimer(void* ref, UInt32 time)
+{
+    YM2608* ym2608 = (YM2608*)ref;
+
+    adpcmBAdvance(ym2608, boardSystemTime());
+    adpcmBSchedule(ym2608);
+}
+
 /* The chip produces an FM sample every 24 * prescaler clocks and an SSG
 ** sample every 32, 16 or 8 clocks at prescaler 6, 3 or 2 (ymfm_opn.h,
 ** "A note about prescaling and sample rates"). Both streams start over. */
@@ -525,8 +836,14 @@ static Int32* ym2608FmSync(void* ref, UInt32 count)
     YM2608* ym2608 = (YM2608*)ref;
     Ym2608Chip& chip = ym2608->host->chip;
     UInt32 period = ym2608->sampleRate * ym2608->fmClocks;
+    MixerVoices* voices = mixerVoicesWanted(ym2608->fmVoices) ? ym2608->fmVoices : NULL;
+    bool active  = voices != NULL && voices->active;
+    bool metered = voices != NULL && voices->metering;
     UInt32 i;
 
+    if (voices != NULL) {
+        voices->idle = chip.sixFmChannels() ? 0 : 0x38;     /* FM 4-6 */
+    }
     for (i = 0; i < count; i++) {
         Int16 sample[2];
         Int32 fm[2];
@@ -534,7 +851,7 @@ static Int32* ym2608FmSync(void* ref, UInt32 count)
         ym2608->fmAcc += ym2608->clock;
         while (ym2608->fmAcc >= period) {
             ym2608->fmAcc -= period;
-            chip.clockFm(sample);
+            chip.clockFm(sample, voices, active, metered);
             ym2608->fm.put(sample);
             if (ym2608->csmPending) {
                 ym2608->csmPending = 0;
@@ -543,10 +860,9 @@ static Int32* ym2608FmSync(void* ref, UInt32 count)
         }
         ym2608->fm.get(ym2608->fmAcc, period, fm);
 
-        ym2608->fmBuffer[2 * i + 0] = OUTPUT_GAIN * fm[0];
-        ym2608->fmBuffer[2 * i + 1] = OUTPUT_GAIN * fm[1];
+        ym2608->fmBuffer[2 * i + 0] = FM_GAIN * fm[0];
+        ym2608->fmBuffer[2 * i + 1] = FM_GAIN * fm[1];
     }
-    chip.updateAdpcmBStatus();
 
     return ym2608->fmBuffer;
 }
@@ -556,6 +872,9 @@ static Int32* ym2608SsgSync(void* ref, UInt32 count)
     YM2608* ym2608 = (YM2608*)ref;
     Ym2608Chip& chip = ym2608->host->chip;
     UInt32 period = ym2608->sampleRate * ym2608->ssgClocks;
+    MixerVoices* voices = mixerVoicesWanted(ym2608->ssgVoices) ? ym2608->ssgVoices : NULL;
+    bool active  = voices != NULL && voices->active;
+    bool metered = voices != NULL && voices->metering;
     UInt32 i;
 
     for (i = 0; i < count; i++) {
@@ -565,12 +884,12 @@ static Int32* ym2608SsgSync(void* ref, UInt32 count)
         ym2608->ssgAcc += ym2608->clock;
         while (ym2608->ssgAcc >= period) {
             ym2608->ssgAcc -= period;
-            sample = chip.clockSsg();
+            sample = chip.clockSsg(voices, active, metered);
             ym2608->ssg.put(&sample);
         }
         ym2608->ssg.get(ym2608->ssgAcc, period, &ssg);
 
-        ym2608->ssgBuffer[i] = OUTPUT_GAIN * ssg;
+        ym2608->ssgBuffer[i] = SSG_GAIN * ssg;
     }
 
     return ym2608->ssgBuffer;
@@ -608,20 +927,34 @@ YM2608* ym2608Create(Mixer* mixer, UInt32 clock, UInt32 adpcmRamSize,
     ym2608->timerExpiring[1] = 0;
     ym2608->timer[0] = boardTimerCreate(onTimeoutA, ym2608);
     ym2608->timer[1] = boardTimerCreate(onTimeoutB, ym2608);
+    ym2608->adpcmBTimer = boardTimerCreate(onAdpcmBTimer, ym2608);
 
     ym2608->host = new Ym2608Host(ym2608);
 
     ym2608->sampleRate = mixerGetSampleRate(mixer);
     setRates(ym2608);
     /* The rate callback of the FM channel sets the rates of both streams. */
+    mixerSetCreateName(mixer, "FM");
     ym2608->fmHandle  = mixerRegisterChannel(mixer, MIXER_CHANNEL_OPNA_FM, 1,
                                              ym2608FmSync, ym2608SetSampleRate, ym2608);
+    mixerSetCreateName(mixer, "SSG");
     ym2608->ssgHandle = mixerRegisterChannel(mixer, MIXER_CHANNEL_OPNA_SSG, 0,
                                              ym2608SsgSync, NULL, ym2608);
+    mixerSetCreateName(mixer, NULL);
+    /* A voice sample reaches the mixer FM_GAIN and SSG_GAIN * 2 / 3 times larger. */
+    ym2608->fmVoices  = mixerAttachVoices(mixer, ym2608->fmHandle, 13, fmVoiceNames, (float)FM_GAIN);
+    ym2608->ssgVoices = mixerAttachVoices(mixer, ym2608->ssgHandle, 3, ssgVoiceNames, SSG_GAIN * 2 / 3.0f);
+    mixerSetVoiceGroups(mixer, ym2608->fmHandle, fmVoiceGroups);
+    mixerSetVoiceGroups(mixer, ym2608->ssgHandle, ssgVoiceGroups);
 
     ym2608Reset(ym2608);
 
     return ym2608;
+}
+
+int ym2608HasRhythmRom(YM2608* ym2608)
+{
+    return ym2608->hasRhythmRom;
 }
 
 void ym2608Destroy(YM2608* ym2608)
@@ -631,6 +964,7 @@ void ym2608Destroy(YM2608* ym2608)
 
     boardTimerDestroy(ym2608->timer[0]);
     boardTimerDestroy(ym2608->timer[1]);
+    boardTimerDestroy(ym2608->adpcmBTimer);
     if (ym2608->irqMask != 0) {
         boardClearInt(ym2608->irqMask);
     }
@@ -658,6 +992,9 @@ void ym2608Reset(YM2608* ym2608)
 
     ym2608->host->chip.resetChip();
     setRates(ym2608);
+    ym2608->adpcmBRef  = boardSystemTime();
+    ym2608->adpcmBFrag = 0;
+    boardTimerRemove(ym2608->adpcmBTimer);
 }
 
 UInt8 ym2608Read(YM2608* ym2608, int offset)
@@ -665,8 +1002,13 @@ UInt8 ym2608Read(YM2608* ym2608, int offset)
     UInt8 value;
 
     mixerSync(ym2608->mixer);
+    adpcmBAdvance(ym2608, boardSystemTime());
     value = ym2608->host->chip.read(offset & 3);
     ym2608->host->chip.updateAdpcmBStatus();
+    /* ymfm's read shows its own playing flag in place of the busy flag. */
+    if ((offset & 3) == 2) {
+        value = ym2608->host->chip.peekStatusHi();
+    }
     return value;
 }
 
@@ -693,6 +1035,7 @@ void ym2608Write(YM2608* ym2608, int offset, UInt8 value)
     int hi = (offset >> 1) & 1;
 
     mixerSync(ym2608->mixer);
+    adpcmBAdvance(ym2608, boardSystemTime());
 
     if (offset & 1) {
         if (ym2608->host->chip.upperAddress() == (hi != 0)) {
@@ -705,9 +1048,18 @@ void ym2608Write(YM2608* ym2608, int offset, UInt8 value)
     ym2608->host->chip.write(offset & 3, value);
     ym2608->host->chip.updateAdpcmBStatus();
 
+    if ((offset & 3) == 3 && ym2608->host->chip.upperAddress() &&
+        ym2608->host->chip.addressInHalf() <= 0x10) {
+        ym2608->host->chip.writeHeard(value);
+        adpcmBSchedule(ym2608);
+    }
+
     /* Selecting address 2Dh-2Fh changes the prescaler. */
     if (ym2608->host->chip.prescale() != ym2608->prescale) {
         setRates(ym2608);
+        /* The next chip sample starts now, as the streams' do. */
+        ym2608->adpcmBFrag = 0;
+        adpcmBSchedule(ym2608);
     }
 }
 
@@ -720,6 +1072,10 @@ void ym2608SaveState(YM2608* ym2608)
     ymfm::ymfm_saved_state saver(chipState, true);
     UInt32 now = boardSystemTime();
 
+    /* Brought up to now, so that a load hands the heard copy the point the
+    ** sound had reached; a flag this changes, the timer due by now changes
+    ** before the next instruction too. */
+    adpcmBAdvance(ym2608, now);
     ym2608->host->chip.save_restore(saver);
     ym2608->fm.save(fmHistory);
     ym2608->ssg.save(ssgHistory);
@@ -733,6 +1089,7 @@ void ym2608SaveState(YM2608* ym2608)
     saveStateSet(state, "mixerRate",     ym2608->sampleRate);
     saveStateSet(state, "fmAcc",         ym2608->fmAcc);
     saveStateSet(state, "ssgAcc",        ym2608->ssgAcc);
+    saveStateSet(state, "adpcmBFrag",    ym2608->adpcmBFrag);
     saveStateSet(state, "fmHistorySize", (UInt32)(fmHistory.size() * sizeof(Int16)));
     saveStateSetBuffer(state, "fmHistory", fmHistory.data(), (UInt32)(fmHistory.size() * sizeof(Int16)));
     saveStateSet(state, "ssgHistorySize", (UInt32)(ssgHistory.size() * sizeof(Int16)));
@@ -808,6 +1165,13 @@ void ym2608LoadState(YM2608* ym2608)
     ** they were only if they were taken at these very rates; a state from
     ** another mixer rate, or one that does not hold them, starts them over. */
     setRates(ym2608);
+    /* A state without it, or with a value no save makes, starts a chip
+    ** sample now. */
+    ym2608->adpcmBRef  = boardSystemTime();
+    ym2608->adpcmBFrag = saveStateGet(state, "adpcmBFrag", 0);
+    if (ym2608->adpcmBFrag >= (UInt64)boardFrequency() * ym2608->fmClocks) {
+        ym2608->adpcmBFrag = 0;
+    }
     fmHistory.resize(2 * ym2608->fm.getTaps());
     ssgHistory.resize(ym2608->ssg.getTaps());
     if (saveStateGet(state, "mixerRate", 0) == ym2608->sampleRate &&
@@ -829,6 +1193,8 @@ void ym2608LoadState(YM2608* ym2608)
             boardTimerAdd(ym2608->timer[i], ym2608->timerTimeout[i]);
         }
     }
+    ym2608->host->chip.followAdpcmB();
+    adpcmBSchedule(ym2608);
     if (ym2608->irqMask != 0) {
         if (ym2608->irqAsserted) {
             boardSetInt(ym2608->irqMask);

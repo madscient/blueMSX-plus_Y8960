@@ -130,7 +130,6 @@ SOURCE_FILES += Win32ScreenShot.c
 SOURCE_FILES += Win32ShortcutsConfig.c 
 SOURCE_FILES += Win32snd.c 
 SOURCE_FILES += Win32ThemeClassic.c 
-SOURCE_FILES += Win32MixerDevices.c 
 SOURCE_FILES += Win32Thread.c 
 SOURCE_FILES += Win32Timer.c 
 SOURCE_FILES += Win32ToolLoader.c
@@ -408,7 +407,6 @@ SOURCE_FILES += Y8960Scc.c
 SOURCE_FILES += Y8960OpllCore.c
 SOURCE_FILES += Y8960Opllex.c
 SOURCE_FILES += Y8960Opm.c
-SOURCE_FILES += Y8960OpmCore.c
 SOURCE_FILES += Y8960Ssgs.c
 # These three need C++20; the msvc projects set it per file, and there is no
 # per-file mechanism here.

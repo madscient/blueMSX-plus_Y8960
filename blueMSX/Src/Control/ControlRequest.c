@@ -78,7 +78,7 @@ static const CtrlArg runArgs[] = {
     { "how", CTRL_ARG_TEXT, 15 }, { "count", CTRL_ARG_INT, 0 }, { NULL }
 };
 static const CtrlArg stackArgs[] = {
-    { "count", CTRL_ARG_INT, 0 }, { NULL }
+    { "count", CTRL_ARG_INT, 0 }, { "history", CTRL_ARG_INT, 0 }, { NULL }
 };
 static const CtrlArg runUntilArgs[] = {
     { "timeout_ms", CTRL_ARG_INT, 0 }, { "pause_at_timeout", CTRL_ARG_BOOL, 0 }, { NULL }
@@ -87,17 +87,20 @@ static const CtrlArg resetArgs[] = {
     { "how", CTRL_ARG_TEXT, 15 }, { NULL }
 };
 static const CtrlArg bpSetArgs[] = {
-    { "at", CTRL_ARG_TEXT, CTRL_AT_MAX }, { NULL }
+    { "at", CTRL_ARG_TEXT, CTRL_AT_MAX }, { "when", CTRL_ARG_TEXT, CTRL_BREAK_WHEN_MAX },
+    { "skip", CTRL_ARG_INT, 0 }, { NULL }
 };
 static const CtrlArg bpClearArgs[] = {
     { "at", CTRL_ARG_TEXT, CTRL_AT_MAX }, { NULL }
 };
 static const CtrlArg wpSetArgs[] = {
     { "at", CTRL_ARG_TEXT, CTRL_AT_MAX }, { "port", CTRL_ARG_INT, 0 },
-    { "condition", CTRL_ARG_TEXT, 15 }, { "value", CTRL_ARG_INT, 0 }, { "size", CTRL_ARG_INT, 0 }, { NULL }
+    { "condition", CTRL_ARG_TEXT, 15 }, { "value", CTRL_ARG_INT, 0 }, { "size", CTRL_ARG_INT, 0 },
+    { "on", CTRL_ARG_TEXT, 15 }, { NULL }
 };
 static const CtrlArg wpClearArgs[] = {
-    { "at", CTRL_ARG_TEXT, CTRL_AT_MAX }, { "port", CTRL_ARG_INT, 0 }, { NULL }
+    { "at", CTRL_ARG_TEXT, CTRL_AT_MAX }, { "port", CTRL_ARG_INT, 0 }, { "on", CTRL_ARG_TEXT, 15 },
+    { NULL }
 };
 static const CtrlArg huntStartArgs[] = {
     { "width", CTRL_ARG_TEXT, 7 }, { "stride", CTRL_ARG_INT, 0 }, { NULL }
@@ -123,13 +126,30 @@ static const CtrlArg symSearchArgs[] = {
 };
 static const CtrlArg keyArgs[] = {
     { "how", CTRL_ARG_TEXT, 15 }, { "keys", CTRL_ARG_TEXT, 95 }, { "hold", CTRL_ARG_INT, 0 },
-    { "gap", CTRL_ARG_INT, 0 }, { NULL }
+    { "gap", CTRL_ARG_INT, 0 }, { "take_over", CTRL_ARG_BOOL, 0 }, { NULL }
 };
 static const CtrlArg typeArgs[] = {
-    { "text", CTRL_ARG_TEXT, 511 }, { "hold", CTRL_ARG_INT, 0 }, { "gap", CTRL_ARG_INT, 0 }, { NULL }
+    { "text", CTRL_ARG_TEXT, 511 }, { "hold", CTRL_ARG_INT, 0 }, { "gap", CTRL_ARG_INT, 0 },
+    { "take_over", CTRL_ARG_BOOL, 0 }, { NULL }
 };
 static const CtrlArg screenArgs[] = {
     { "as", CTRL_ARG_TEXT, 11 }, { "path", CTRL_ARG_TEXT, CTRL_PATH_MAX - 1 }, { NULL }
+};
+static const CtrlArg vdpArgs[] = {
+    { "show", CTRL_ARG_TEXT, 11 }, { "chip", CTRL_ARG_TEXT, 11 }, { "run", CTRL_ARG_INT, 0 },
+    { "item", CTRL_ARG_TEXT, 15 }, { "at", CTRL_ARG_TEXT, 15 }, { "count", CTRL_ARG_INT, 0 },
+    { NULL }
+};
+static const CtrlArg devicesArgs[] = {
+    { "device", CTRL_ARG_INT, 0 }, { NULL }
+};
+static const CtrlArg traceArmArgs[] = {
+    { "class", CTRL_ARG_TEXT, 63 }, { "ports", CTRL_ARG_TEXT, 255 }, { "dir", CTRL_ARG_TEXT, 7 },
+    { NULL }
+};
+static const CtrlArg traceReadArgs[] = {
+    { "class", CTRL_ARG_TEXT, 63 }, { "ports", CTRL_ARG_TEXT, 255 }, { "after", CTRL_ARG_INT, 0 },
+    { "count", CTRL_ARG_INT, 0 }, { "dir", CTRL_ARG_TEXT, 7 }, { NULL }
 };
 
 /* An op's args in its row; an array longer than CTRL_OP_ARGS_MAX and its { NULL } fails to compile. */
@@ -172,10 +192,10 @@ static const CtrlOp opTable[] = {
       "  undo         count        (puts back what mem.write overwrote)\n" },
     { "run",               CTRL_OP_CHANGES, CTRL_OP_SELF, ctrlOpRun, OP_ARGS(runArgs),
       CTRL_ACT_DENIED,
-      "  run          how = pause|resume|step|step_over|step_out, count\n" },
+      "  run          how = pause|resume|step|step_over|step_out|frame|change, count\n" },
     { "stack",             CTRL_OP_LOOKS,   CTRL_OP_HELD, ctrlOpStack, OP_ARGS(stackArgs),
       CTRL_ACT_DENIED,
-      "  stack        count\n" },
+      "  stack        count, history  (history: the last N instructions run)\n" },
     { "run.until",         CTRL_OP_CHANGES, CTRL_OP_SELF, ctrlOpRunUntil, OP_ARGS(runUntilArgs),
       CTRL_ACT_RUN_UNTIL_STOP,
       "  run.until    timeout_ms, pause_at_timeout\n" },
@@ -190,8 +210,11 @@ static const CtrlOp opTable[] = {
       "  snapshot.restore\n" },
     { "bp.set",            CTRL_OP_CHANGES, CTRL_OP_HELD, ctrlOpBpSet, OP_ARGS(bpSetArgs),
       CTRL_ACT_BREAK_SET,
-      "  bp.set       at            (fires only in the segment named, or for a Z80\n"
-      "                             address in a mapper slot the one paged in now)\n" },
+      "  bp.set       at, when, skip\n"
+      "                             (fires only in the segment named, or for a Z80\n"
+      "                             address in a mapper slot the one paged in now;\n"
+      "                             when is a condition such as [0xC010]==1 && a<3,\n"
+      "                             skip how many times it holds before one stops)\n" },
     { "bp.clear",          CTRL_OP_CHANGES, CTRL_OP_HELD, ctrlOpBpClear, OP_ARGS(bpClearArgs),
       CTRL_ACT_BREAK_CLEAR,
       "  bp.clear     at\n" },
@@ -209,10 +232,10 @@ static const CtrlOp opTable[] = {
       "  bp.list\n" },
     { "wp.set",            CTRL_OP_CHANGES, CTRL_OP_HELD, ctrlOpWpSet, OP_ARGS(wpSetArgs),
       CTRL_ACT_WATCH_SET,
-      "  wp.set       at | port, condition, value, size\n" },
+      "  wp.set       at | port, condition, value, size, on = write|read\n" },
     { "wp.clear",          CTRL_OP_CHANGES, CTRL_OP_HELD, ctrlOpWpClear, OP_ARGS(wpClearArgs),
       CTRL_ACT_WATCH_CLEAR,
-      "  wp.clear     at | port\n" },
+      "  wp.clear     at | port, on = write|read\n" },
     { "wp.list",           CTRL_OP_LOOKS,   CTRL_OP_HELD, ctrlOpWpList, NULL,
       CTRL_ACT_DENIED,
       "  wp.list\n" },
@@ -248,13 +271,36 @@ static const CtrlOp opTable[] = {
       "  sym.clear\n" },
     { "key",               CTRL_OP_CHANGES, CTRL_OP_SELF, ctrlOpKey, OP_ARGS(keyArgs),
       CTRL_ACT_DENIED,
-      "  key          how = press|release|tap, keys, hold, gap\n" },
+      "  key          how = press|release|tap, keys, hold, gap, take_over\n" },
     { "type",              CTRL_OP_CHANGES, CTRL_OP_SELF, ctrlOpType, OP_ARGS(typeArgs),
       CTRL_ACT_TYPE,
-      "  type         text, hold, gap\n" },
+      "  type         text, hold, gap, take_over\n" },
     { "screen",            CTRL_OP_LOOKS,   CTRL_OP_HELD, ctrlOpScreen, OP_ARGS(screenArgs),
       CTRL_ACT_DENIED,
       "  screen       as = auto|text|png, path\n" },
+    { "vdp",               CTRL_OP_LOOKS,   CTRL_OP_HELD, ctrlOpVdp, OP_ARGS(vdpArgs),
+      CTRL_ACT_DENIED,
+      "  vdp          show = registers|palette|geo3d|vram|raster,\n"
+      "               chip = machine|cartridge|v9990, run, item (geo3d only),\n"
+      "               at, count (vram only); raster: machine only, the first\n"
+      "               call arms the log\n" },
+    { "devices",           CTRL_OP_LOOKS,   CTRL_OP_HELD, ctrlOpDevices, OP_ARGS(devicesArgs),
+      CTRL_ACT_DENIED,
+      "  devices      device       (without it, the list; an index holds for one generation)\n" },
+    { "trace.arm",         CTRL_OP_LOOKS,   CTRL_OP_SELF, ctrlOpTraceArm, OP_ARGS(traceArmArgs),
+      CTRL_ACT_DENIED,
+      "  trace.arm    class = geo3d|vdpcmd|vdpreg|cpu|io (joined with commas; default\n"
+      "               " CTRL_TRACE_CLASS_DEFAULT "), ports (io only, and needed by it),\n"
+      "               dir = out|in|both (io only; default out) (held by this connection)\n" },
+    { "trace.disarm",      CTRL_OP_LOOKS,   CTRL_OP_SELF, ctrlOpTraceDisarm, OP_ARGS(traceArmArgs),
+      CTRL_ACT_DENIED,
+      "  trace.disarm class         (default: every class this connection holds; io gives back\n"
+      "               all its ports both ways; ports and dir refused)\n" },
+    { "trace.read",        CTRL_OP_LOOKS,   CTRL_OP_SELF, ctrlOpTraceRead, OP_ARGS(traceReadArgs),
+      CTRL_ACT_DENIED,
+      "  trace.read   class (default: what this connection holds, else " CTRL_TRACE_CLASS_DEFAULT
+      "),\n"
+      "               ports (io only), after, count\n" },
 };
 
 static const CtrlOp* findOp(const char* name)
@@ -335,7 +381,8 @@ static int opVerb(const char* op, const char* request)
     if (strcmp(op, "run") == 0) {
         return strcmp(how, "pause") == 0     ? CTRL_ACT_PAUSE :
                strcmp(how, "resume") == 0    ? CTRL_ACT_RUN :
-               strcmp(how, "step") == 0      ? CTRL_ACT_STEP :
+               strcmp(how, "step") == 0 || strcmp(how, "frame") == 0 ||
+               strcmp(how, "change") == 0    ? CTRL_ACT_STEP :
                strcmp(how, "step_over") == 0 ? CTRL_ACT_STEP_OVER :
                strcmp(how, "step_out") == 0  ? CTRL_ACT_STEP_OUT : CTRL_ACT_DENIED;
     }

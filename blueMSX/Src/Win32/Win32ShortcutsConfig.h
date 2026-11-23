@@ -152,7 +152,6 @@ typedef struct {
     ShotcutHotkeySet toolsShowShorcutEditor;
     ShotcutHotkeySet toolsShowKeyboardEditor;
     ShotcutHotkeySet toolsShowMixer;
-    ShotcutHotkeySet toolsShowMixerDevices;
     ShotcutHotkeySet toolsShowDebugger;
     ShotcutHotkeySet toolsShowTrainer;
     ShotcutHotkeySet helpShowHelp;

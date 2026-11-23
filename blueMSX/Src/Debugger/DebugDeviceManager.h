@@ -98,19 +98,22 @@ int debugDeviceIsInspecting(void);
 #define DBG_WATCH_PHYSICAL 1
 #define DBG_WATCH_PROGRAM  2
 
-/* The watchpoint hit a WATCH stop is for: noted on the emulation thread before it stops,
-** and read back as that stop is told. A VIDEO hit has the screen mode at the write. */
-void debugDeviceNoteWatchHit(int devType, UInt32 address, int screenMode, int kind);
-void debugDeviceLastWatchHit(int* devType, UInt32* address, int* screenMode, int* kind);
+/* The watchpoint hit a WATCH stop is for, noted on the emulation thread before it stops. A
+** VIDEO hit has the VRAM layout at the write; a noted hit is a write. access is DBG_WATCH_ON_,
+** pc the start of the instruction that read (-1 for a write or when not known). */
+void debugDeviceNoteWatchHit(int devType, UInt32 address, int layout, int kind);
+void debugDeviceLastWatchHit(int* devType, UInt32* address, int* layout, int* kind, int* access,
+                             int* pc);
 
 /* The same for a whole access by another thread, so a VDP sync under it keeps a hit pending. */
 void debugDeviceInspectBegin(void);
 void debugDeviceInspectEnd(void);
 
-/* A VRAM address as the program uses it in that screen mode, to the index of its byte in the
-** chips, and back. Only below 0x20000 do the interleaving modes number the bytes otherwise. */
-int debugDeviceVramIndex(int screenMode, int address);
-int debugDeviceVramAddress(int screenMode, int index);
+/* A VRAM address as the program uses it in that layout (vdpDebugGetVramLayout), to the index of
+** its byte in the chips, and back. Only an interleaving layout numbers them otherwise: below
+** 0x20000, or below 0x40000 with VDP_LAYOUT_A17, alike in each 256 kB V9968 bank. */
+int debugDeviceVramIndex(int layout, int address);
+int debugDeviceVramAddress(int layout, int index);
 
 int debugDeviceWriteMemory(DbgMemoryBlock* memoryBlock, void* data, int startAddr, int size);
 int debugDeviceWriteRegister(DbgRegisterBank* regBank, int regIndex, UInt32 value);
@@ -120,12 +123,31 @@ void debugDeviceSetMemoryWatchpoint(DbgDeviceType devType, int address, DbgWatch
 void debugDeviceClearMemoryWatchpoint(DbgDeviceType devType, int address);
 
 /* The same with byProgram: non-zero for a VIDEO watchpoint at the address the program uses,
-** matched in the screen mode of each write. It is another watchpoint than one at that index.
+** matched in the VRAM layout of each write. It is another watchpoint than one at that index.
 ** Has says whether one starts exactly there, which is what a clear matches. */
 void debugDeviceSetMemoryWatchpointEx(DbgDeviceType devType, int address, DbgWatchpointCondition condition, UInt32 refValue, int size, int byProgram);
 void debugDeviceClearMemoryWatchpointEx(DbgDeviceType devType, int address, int byProgram);
 int  debugDeviceHasMemoryWatchpointEx(DbgDeviceType devType, int address, int byProgram);
+/* The same for a watchpoint stopping on access, a DBG_WATCH_ON_ value; the ones above are
+** WRITE ones, a READ one at the same address being another watchpoint. */
+void debugDeviceSetMemoryWatchpointOn(DbgDeviceType devType, int address, DbgWatchpointCondition condition, UInt32 refValue, int size, int byProgram, int access);
+void debugDeviceClearMemoryWatchpointOn(DbgDeviceType devType, int address, int byProgram, int access);
+int  debugDeviceHasMemoryWatchpointOn(DbgDeviceType devType, int address, int byProgram, int access);
 void tryWatchpoint(DbgDeviceType devType, int address, UInt8 value, void* ref, WatchpointReadMemCallback callback);
+/* The same for a read of value, by the CPU from memory or from a port, in the instruction
+** starting at pc (-1 when not known). */
+void tryReadWatchpoint(DbgDeviceType devType, int address, UInt8 value, void* ref, WatchpointReadMemCallback callback, int pc);
+
+/* A bit for each CPU address a READ watchpoint covers; the same array for good. */
+const UInt8* debugDeviceCpuReadBits(void);
+
+/* Told whether any READ watchpoint is on CPU memory, and on a port: at once when set, then on
+** each change. The CPU's debugger sets it while a CPU exists, NULL when it goes. */
+typedef void (*DebugDeviceReadWatchCb)(int memory, int ports);
+void debugDeviceSetReadWatchCb(DebugDeviceReadWatchCb cb);
+
+/* Once at startup, with debuggerCreateLocks: the lock arming and clearing READ ones take. */
+void debugDeviceCreateLock(void);
 
 /* Reports a match without stopping, for callers that have to finish what they
 ** are doing before the emulator may be parked; a DBG_WATCH_ value. */
@@ -137,7 +159,7 @@ int checkWatchpoint(DbgDeviceType devType, int address, UInt8 value, void* ref, 
 extern int debugWatchpointCount[];
 
 /* For a caller holding a hit it could not report at the time: the DBG_WATCH_ kind of a watchpoint
-** that still covers that address in that screen mode, kind itself while one of that kind does. */
-int watchpointCovers(DbgDeviceType devType, int address, int screenMode, int kind);
+** that still covers that address in that VRAM layout, kind itself while one of that kind does. */
+int watchpointCovers(DbgDeviceType devType, int address, int layout, int kind);
 
 #endif /*DEBUG_DEVICE_MANAGER_H*/

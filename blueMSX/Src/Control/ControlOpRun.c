@@ -22,6 +22,7 @@
 */
 #include "ControlOp.h"
 #include "ControlStep.h"
+#include "ControlBreakCond.h"
 #include "ControlWatch.h"
 #include "ControlClient.h"
 #include "ControlCpu.h"
@@ -35,6 +36,12 @@
 #include "R800Debug.h"
 #include <stdio.h>
 #include <string.h>
+
+/* How long a frame step, and a step on to another picture (up to 300 frames), is waited for,
+** in slices that notice a request gone without its stop. */
+#define CTRL_RUN_FRAME_WAIT_MS       2000
+#define CTRL_RUN_CHANGE_WAIT_MS      10000
+#define CTRL_RUN_FRAME_WAIT_SLICE_MS 250
 
 /* A machine stop posts before the state says stopped; a start since bumps the generation. */
 static int machineStopState(const CtrlStop* stop)
@@ -140,10 +147,10 @@ static int replyLostStep(CtrlCall* call)
     return ctrlReplyDone(call);
 }
 
-/* The first step after a watchpoint stop, which stopped inside the writing instruction, may
+/* The first step after a watchpoint stop, which stopped inside the instruction, may
 ** only finish it: then the counter did not go up (an LDIR repeat takes one off). Returns how
 ** many steps that counts as, 0 or 1. */
-static Int32 stepPastWatch(CtrlCall* call, int* finishedWrite, int* lost, int* refused)
+static Int32 stepPastWatch(CtrlCall* call, int* finishedInside, int* lost, int* refused)
 {
     CtrlStop latest;
     Int32 before;
@@ -162,28 +169,29 @@ static Int32 stepPastWatch(CtrlCall* call, int* finishedWrite, int* lost, int* r
     after = registerNow("CNT");
     moved = (after - before) & 0xFFFF;
     if (before >= 0 && after >= 0 && (moved == 0 || moved == 0xFFFF)) {
-        *finishedWrite = 1;
+        *finishedInside = 1;
         return 0;
     }
     return 1;
 }
 
-/* A step loop cut short by Off, Read Only or the client going: why, after how many. */
-static int refuseCutSteps(CtrlCall* call, Int32 done, Int32 count)
+/* A step loop cut short by Off, Read Only or the client going: why, after how many of
+** count units ("steps", "frames"). */
+static int refuseCutSteps(CtrlCall* call, Int32 done, Int32 count, const char* units)
 {
     if (ctrlClientAllBlocked()) {
         return ctrlReplyErrorf(call, "revoked", "agent control was turned off at the "
-                               "emulator after %d of the %d steps", (int)done, (int)count);
+                               "emulator after %d of the %d %s", (int)done, (int)count, units);
     }
     /* Read only refuses new steps, so it ends a long loop too. */
     if (ctrlGateLevel() != CTRL_GATE_FULL) {
         return ctrlReplyErrorf(call, "read_only", "the emulator was set to read only "
-                               "after %d of the %d steps", (int)done, (int)count);
+                               "after %d of the %d %s", (int)done, (int)count, units);
     }
     if (ctrlPeerGone()) {
         return ctrlReplyErrorf(call, "abandoned", "the connection was closed after %d "
-                               "of the %d steps, so the loop ended there", (int)done,
-                               (int)count);
+                               "of the %d %s, so the loop ended there", (int)done,
+                               (int)count, units);
     }
     return 0;
 }
@@ -192,7 +200,7 @@ static int refuseCutSteps(CtrlCall* call, Int32 done, Int32 count)
 ** reported, else the reply. */
 static int runStep(CtrlCall* call, Int32 count)
 {
-    int   finishedWrite = 0;
+    int   finishedInside = 0;
     int   lost = 0;
     int   refused = 0;
     int   stepped;
@@ -206,7 +214,7 @@ static int runStep(CtrlCall* call, Int32 count)
         return refused;
     }
     ctrlActivityNoteAmount(CTRL_ACT_STEP, NULL, (UInt32)count);
-    i = stepPastWatch(call, &finishedWrite, &lost, &refused);
+    i = stepPastWatch(call, &finishedInside, &lost, &refused);
     for (; i < count && !lost && !refused && !ctrlClientAllBlocked() &&
            ctrlGateLevel() == CTRL_GATE_FULL && !ctrlPeerGone(); i++) {
         if ((stepped = stepAndWait(call, i, &refused)) != 1) {
@@ -214,10 +222,10 @@ static int runStep(CtrlCall* call, Int32 count)
             break;
         }
     }
-    if (refused != 0 || (refused = refuseCutSteps(call, i, count)) != 0) {
+    if (refused != 0 || (refused = refuseCutSteps(call, i, count, "steps")) != 0) {
         return refused;
     }
-    if (finishedWrite) {
+    if (finishedInside) {
         ctrlTextAdd(&call->text, "first finished the instruction the watch stopped inside; "
                     "that is not counted as a step\n");
     }
@@ -228,6 +236,134 @@ static int runStep(CtrlCall* call, Int32 count)
         return replyLostStep(call);
     }
     return 0;
+}
+
+/* A frame step refused after done frames. Returns the reply. */
+static int refuseFrameStep(CtrlCall* call, int result, Int32 done)
+{
+    char after[40] = "";
+
+    if (done > 0) {
+        snprintf(after, sizeof(after), " after %d frames", (int)done);
+    }
+    if (result == DBG_RESUME_NO_MACHINE) {
+        return ctrlReplyErrorf(call, "no_machine", "%s, so it did not run a frame%s",
+                               CTRL_TEXT_NO_MACHINE, after);
+    }
+    return ctrlReplyErrorf(call, "busy", "the emulator window has a menu, a dialog or a question "
+                           "about a folder disk open or is changing the machine, or a frame step, "
+                           "a step back, reverse play or a hold begun from a pause is under way, "
+                           "so it did not run a frame%s; call again once it is over "
+                           "(bmsx_run_until waits for a step under way)", after);
+}
+
+/* One frame step and its stop: 1 with *stop, 0 when none came (*timedOut while the step is
+** still under way), or -1 with the refusal in *refused. */
+static int frameAndWait(CtrlCall* call, int change, Int32 done, CtrlStop* stop, int* refused,
+                        int* timedOut)
+{
+    UInt32 from = ctrlStopSeq();
+    int    result = dbgFrameStep(change);
+    int    waited;
+
+    if (result != DBG_RESUME_OK) {
+        *refused = refuseFrameStep(call, result, done);
+        return -1;
+    }
+    for (waited = 0; waited < (change ? CTRL_RUN_CHANGE_WAIT_MS : CTRL_RUN_FRAME_WAIT_MS);
+         waited += CTRL_RUN_FRAME_WAIT_SLICE_MS) {
+        if (ctrlStopWait(from, CTRL_RUN_FRAME_WAIT_SLICE_MS, stop)) {
+            call->session->stopCursor = stop->seq;
+            return 1;
+        }
+        if (ctrlClientAllBlocked() || ctrlPeerGone()) {
+            return 0;
+        }
+        /* The request clears just before its stop posts: one more wait before calling it lost. */
+        if (!emulatorFrameStopPending()) {
+            if (ctrlStopWait(from, CTRL_RUN_FRAME_WAIT_SLICE_MS, stop)) {
+                call->session->stopCursor = stop->seq;
+                return 1;
+            }
+            return 0;
+        }
+    }
+    *timedOut = 1;
+    return 0;
+}
+
+/* how=frame (count frames) and how=change (on to the first frame whose picture differs). */
+static int runFrames(CtrlCall* call, int change, Int32 count)
+{
+    CtrlStop stop;
+    Int32 done = 0;
+    int   refused = 0;
+    int   stepped = 1;
+    int   timedOut = 0;
+    int   gaveUp = 0;
+
+    if (count < CTRL_RUN_COUNT_MIN || count > (change ? 1 : CTRL_RUN_FRAME_COUNT_MAX)) {
+        return ctrlReplyErrorf(call, "out_of_range", "count must be between 1 and %d for "
+                               "how=frame, and 1 for how=change", CTRL_RUN_FRAME_COUNT_MAX);
+    }
+    ctrlActivityNoteOn(CTRL_ACT_STEP, change ? "change" : "frame", NULL, CTRL_ACT_DONE);
+    while (done < count && !ctrlClientAllBlocked() && ctrlGateLevel() == CTRL_GATE_FULL &&
+           !ctrlPeerGone()) {
+        if ((stepped = frameAndWait(call, change, done, &stop, &refused, &timedOut)) != 1 ||
+            stop.reason != CTRL_STOP_FRAME) {
+            break;
+        }
+        done++;
+        /* Read before anything runs again, which clears it. */
+        if (change && emulatorChangeStepGaveUp()) {
+            gaveUp = 1;
+            break;
+        }
+    }
+    if (refused != 0 || (refused = refuseCutSteps(call, done, count, "frames")) != 0) {
+        return refused;
+    }
+    if (stepped != 1) {
+        ctrlTextAdd(&call->text, timedOut ?
+                    "ran %d of %d frames; the next is still under way (the machine runs, or the "
+                    "window holds it suspended): bmsx_run_until reports its stop\n" :
+                    "ran %d of %d frames; the next did not come back to a stop, so the machine "
+                    "may have been paused, resumed or changed underneath\n", (int)done, (int)count);
+        if (!timedOut) {
+            return replyLostStep(call);
+        }
+        ctrlStatusDescribe(&call->text, CTRL_STOP_UNKNOWN, (int)emulatorGetState());
+        return ctrlReplyDone(call);
+    }
+    if (stop.reason != CTRL_STOP_FRAME) {
+        ctrlTextAdd(&call->text, "stopped by %s after %d of %d frames\n",
+                    ctrlStopReasonText(stop.reason), (int)done, (int)count);
+    }
+    else if (gaveUp) {
+        ctrlTextAdd(&call->text, "no other picture within %d frames; stopped there\n",
+                    emulatorChangeStepLimit());
+    }
+    else if (change) {
+        /* A frame step the user pressed meanwhile ends it the same way, so no claim of a change. */
+        ctrlTextAdd(&call->text, "stopped at a frame end before the %d frame limit, normally at "
+                    "the first frame with another picture\n", emulatorChangeStepLimit());
+    }
+    else {
+        ctrlTextAdd(&call->text, "ran %d frame%s\n", (int)done, done == 1 ? "" : "s");
+    }
+    ctrlTextAdd(&call->text, "machine frame %u (VDP frames since power on)\n",
+                (unsigned)emulatorGetMachineFrame());
+    jsonOutString(&call->out, "reason", ctrlStopReasonText(stop.reason));
+    jsonOutUInt(&call->out, "frames", (UInt32)done);
+    jsonOutUInt(&call->out, "machine_frame", emulatorGetMachineFrame());
+    if (change) {
+        jsonOutBool(&call->out, "gave_up", gaveUp);
+    }
+    ctrlStatusDescribe(&call->text, stop.reason,
+                       stop.reason == CTRL_STOP_MACHINE ? machineStopState(&stop) : EMU_PAUSED);
+    ctrlWatchDescribeStop(&call->text, &stop);
+    ctrlBreakCondDescribeStop(&call->text, &call->out, &stop);
+    return ctrlReplyDone(call);
 }
 
 /* Where a step out stops: the return address of the innermost call on the stack, and the
@@ -258,7 +394,7 @@ static int stepOutTarget(CtrlCall* call, UInt16* stopAt, Int32* expectSp)
 }
 
 /* No stop within the wait: says where the step was headed, and that it runs on. */
-static int reportStepTimeout(CtrlCall* call, const UInt16* stopAt, int stops, int temporary)
+static int reportStepTimeout(CtrlCall* call, const UInt16* stopAt, int stops)
 {
     if (ctrlClientAllBlocked()) {
         return ctrlReplyError(call, "revoked",
@@ -276,9 +412,7 @@ static int reportStepTimeout(CtrlCall* call, const UInt16* stopAt, int stops, in
     else {
         ctrlTextAdd(&call->text, "still running after 2000 ms; ");
     }
-    ctrlTextAdd(&call->text, temporary == 0
-                ? "the machine is left running\n"
-                : temporary == 1
+    ctrlTextAdd(&call->text, stops == 1
                 ? "the temporary breakpoint is removed and the machine is left "
                   "running\n"
                 : "the temporary breakpoints are removed and the machine is left "
@@ -289,7 +423,7 @@ static int reportStepTimeout(CtrlCall* call, const UInt16* stopAt, int stops, in
 /* The stop a step over or out came to: one of its stops, at the SP a return leaves, or
 ** something else on the way. */
 static int reportStepStop(CtrlCall* call, CtrlStop* stop, const UInt16* stopAt,
-                          int stops, const int* hadBreakpoint, Int32 expectSp, int over)
+                          int stops, const int* hadPlain, Int32 expectSp, int over)
 {
     int   reached = -1;
     int   pc = -1;
@@ -326,8 +460,8 @@ static int reportStepStop(CtrlCall* call, CtrlStop* stop, const UInt16* stopAt,
         ctrlTextAdd(&call->text, "%s to 0x%04X\n", over ? "stepped over" : "stepped out",
                     stopAt[reached]);
         jsonOutUInt(&call->out, "stopped_at", stopAt[reached]);
-        /* It was our temporary breakpoint, so this is the step finishing. */
-        if (!hadBreakpoint[reached]) {
+        /* The step finishing: no plain breakpoint was there, or none of them stopped. */
+        if (!hadPlain[reached] || !stop->breakHit.byUser) {
             ctrlStopRelabel(stop->seq, CTRL_STOP_STEP);
             stop->reason = CTRL_STOP_STEP;
         }
@@ -337,33 +471,35 @@ static int reportStepStop(CtrlCall* call, CtrlStop* stop, const UInt16* stopAt,
                        stop->reason == CTRL_STOP_MACHINE ? machineStopState(stop)
                                                          : EMU_PAUSED);
     ctrlWatchDescribeStop(&call->text, stop);
+    ctrlBreakCondDescribeStop(&call->text, &call->out, stop);
     return ctrlReplyDone(call);
 }
 
-/* Runs to the step's stops, each with a temporary breakpoint where none is set yet. */
+/* Runs to the step's stops, each a temporary stop of the step's own. */
 static int waitAtStepStops(CtrlCall* call, const UInt16* stopAt, int stops, Int32 expectSp,
                            int over)
 {
     CtrlStop stop;
-    int hadBreakpoint[2] = { 0, 0 };
-    int temporary;
+    int hadPlain[2] = { 0, 0 };
     int refused;
+    int i;
 
     call->session->stopCursor = ctrlStopSeq();
-    /* Kept, as the agent's own: the debugger window setting it meanwhile keeps its own. */
-    ctrlStepSetStops(stopAt, stops, hadBreakpoint);
-    temporary = stops - hadBreakpoint[0] - hadBreakpoint[1];
+    for (i = 0; i < stops; i++) {
+        hadPlain[i] = dbgHasBreakpoint(stopAt[i]);
+    }
+    ctrlStepSetStops(stopAt, stops);
     if ((refused = refuseResume(call, dbgResume())) != 0) {
-        ctrlStepClearStops(stopAt, stops, hadBreakpoint);
+        ctrlStepClearStops(stopAt, stops);
         return refused;
     }
     /* Bounded so a call that never returns does not hang the client. */
     if (!ctrlStopWait(call->session->stopCursor, 2000, &stop)) {
-        ctrlStepClearStops(stopAt, stops, hadBreakpoint);
-        return reportStepTimeout(call, stopAt, stops, temporary);
+        ctrlStepClearStops(stopAt, stops);
+        return reportStepTimeout(call, stopAt, stops);
     }
-    ctrlStepClearStops(stopAt, stops, hadBreakpoint);
-    return reportStepStop(call, &stop, stopAt, stops, hadBreakpoint, expectSp, over);
+    ctrlStepClearStops(stopAt, stops);
+    return reportStepStop(call, &stop, stopAt, stops, hadPlain, expectSp, over);
 }
 
 /* how=step_over or step_out. Returns 0 when it stepped once and the run state is to be
@@ -458,8 +594,8 @@ int ctrlOpRun(CtrlCall* call)
 
     if (how == NULL) {
         return ctrlReplyError(call, "missing_how",
-                              "\"how\" is needed: pause, resume, step, step_over or "
-                              "step_out");
+                              "\"how\" is needed: pause, resume, step, step_over, "
+                              "step_out, frame or change");
     }
 
     if (strcmp(how, "pause") == 0) {
@@ -479,10 +615,13 @@ int ctrlOpRun(CtrlCall* call)
     else if (strcmp(how, "step_over") == 0 || strcmp(how, "step_out") == 0) {
         replied = runStepOverOrOut(call, how);
     }
+    else if (strcmp(how, "frame") == 0 || strcmp(how, "change") == 0) {
+        return runFrames(call, strcmp(how, "change") == 0, count);
+    }
     else {
         return ctrlReplyError(call, "bad_how",
-                              "\"how\" must be pause, resume, step, step_over or "
-                              "step_out");
+                              "\"how\" must be pause, resume, step, step_over, step_out, "
+                              "frame or change");
     }
     return replied != 0 ? replied : reportRunState(call, how);
 }
@@ -505,6 +644,7 @@ static int reportUnreadStop(CtrlCall* call)
                 "call again to run on\n");
     ctrlStatusDescribe(&call->text, stop.reason, EMU_PAUSED);
     ctrlWatchDescribeStop(&call->text, &stop);
+    ctrlBreakCondDescribeStop(&call->text, &call->out, &stop);
     return ctrlReplyDone(call);
 }
 
@@ -582,6 +722,7 @@ int ctrlOpRunUntil(CtrlCall* call)
                            stop.reason == CTRL_STOP_MACHINE ? machineStopState(&stop)
                                                             : EMU_PAUSED);
         ctrlWatchDescribeStop(&call->text, &stop);
+        ctrlBreakCondDescribeStop(&call->text, &call->out, &stop);
     }
     else if ((replied = reportNoStop(call, timeout)) != 0) {
         return replied;
@@ -629,6 +770,10 @@ int ctrlOpStatus(CtrlCall* call)
     }
     if (reason == CTRL_STOP_WATCH) {
         ctrlWatchDescribeStop(&call->text, &stop);
+    }
+    /* Seen here, the stop is read, so its counts are told here too. */
+    if (reason != CTRL_STOP_UNKNOWN) {
+        ctrlBreakCondDescribeStop(&call->text, &call->out, &stop);
     }
     jsonOutUInt(&call->out, "stop_seq", ctrlStopSeq());
     jsonOutUInt(&call->out, "machine_generation", dbgMachineGeneration());

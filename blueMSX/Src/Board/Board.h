@@ -109,6 +109,13 @@ int boardRewindTo(UInt32 loadAt, UInt32 dropAfter);
 int boardRewindReaches(UInt32 at);
 /* Drops the snapshots taken after the board time given, keeping at least one. */
 void boardRewindForget(UInt32 after);
+/* Non-zero while the machine runs again, after a rewind, through time it has run
+** before, reading the input it read then. Emulation thread only. */
+int boardRewindReplaying(void);
+/* Ends such a replay now, dropping what was recorded after; requeue queues again the
+** agent's keys done after now. Returns the ms dropped (rounded up), 0 when nothing
+** was being replayed. Emulation thread. */
+UInt32 boardRewindTakeOver(int requeue);
 void boardEnableSnapshots(int enable);
 
 BoardType boardGetType();
@@ -146,7 +153,30 @@ int         boardGetMissingFileCount(void);
 const char* boardGetMissingFile(int idx);
 void        boardReportMissingFile(const char* file, const char* inZip);
 
+/* Files a device reads on its own. Unlike the list above they only warn, once a
+** build or a cartridge change has succeeded. */
+typedef enum { DEVICE_FILE_MISSING, DEVICE_FILE_UNUSABLE } DeviceFileProblem;
+typedef struct {
+    RomType device;
+    int     problem;
+    int     userInsert;   /* from a cartridge the user has just inserted */
+    char    path[512];
+} BoardDeviceFile;
+typedef void (*BoardDeviceFilesHandler)(const BoardDeviceFile* files, int count);
+
+void boardSetDeviceFilesHandler(BoardDeviceFilesHandler handler);
+void boardReportDeviceFile(RomType device, const char* path, DeviceFileProblem problem);
+/* Moves what device reported into the missing-file list, for a machine it cannot be built without. */
+void boardDeviceFilesFatal(RomType device);
+/* The next build of cartNo comes from the user, so its files are told again. */
+void boardNoteUserCartridge(int cartNo);
+
 UInt8 boardCaptureUInt8(UInt8 logId, UInt8 value);
+/* Input read outside boardCaptureUInt8, kept for rewind replay only: a .cap file
+** counts the reads it plays back, so these stay out of it. */
+#define BOARD_REWIND_ID_PAUSE 0xe0
+#define BOARD_REWIND_ID_COIN  0xe1
+UInt8 boardRewindInput(UInt8 logId, UInt8 value);
 
 /* Zero when the state could not be stored whole, as when a part did not fit. */
 int boardSaveState(const char* stateFile, int screenshot);
@@ -172,7 +202,8 @@ void boardSetBreakpoint(UInt16 address);
 void boardClearBreakpoint(UInt16 address);
 
 /* One bit per kind of /INT source; two sources on one bit drop each other's
-** request. A new bit goes here and into the overlap check in Board.c. */
+** request. A new bit goes here and gets one row, with its name, in
+** BOARD_INT_EACH in Board.c. */
 #define BOARD_INT_VDP_IE0           0x00000001
 #define BOARD_INT_VDP_IE1           0x00000002
 #define BOARD_INT_VDP_IE2           0x00000004
@@ -199,6 +230,16 @@ void boardClearBreakpoint(UInt16 address);
 void   boardSetInt(UInt32 irq);
 void   boardClearInt(UInt32 irq);
 UInt32 boardGetInt(UInt32 irq);
+/* What the status calls one BOARD_INT_* bit; NULL for a bit without a name. */
+const char* boardIntName(UInt32 bit);
+
+/* Bits of device kinds that can exist more than once: each unit holds its own
+** request and the bit stays set while any unit holds it. Plain set/clear never take these. */
+#define BOARD_INT_UNIT_BITS (BOARD_INT_YM2151 | BOARD_INT_YM2148)
+void   boardSetIntUnit(UInt32 irq, const void* unit);
+void   boardClearIntUnit(UInt32 irq, const void* unit);
+/* How many units hold one unit bit; 0 after a state load, which forgets the holders. */
+int    boardGetIntUnitCount(UInt32 irq);
 
 UInt8* boardGetRamPage(int page);
 UInt32 boardGetRamSize();
@@ -225,6 +266,10 @@ void boardCheckFdcBoostKill(UInt16 port, UInt8 value);
 ** called from sccWrite() because SCC is memory-mapped (the I/O hook
 ** doesn't see it).  address is the SCC register offset. */
 void boardCheckSccBoostKill(UInt8 address, UInt8 value);
+
+/* The same for the Makoto (YM2608) FM, SSG, rhythm and ADPCM-B; offset is
+** the port number within 14h-17h. */
+void boardCheckOpnaBoostKill(UInt8 offset, UInt8 value);
 
 /* Drop the boost once the picture starts moving; called once per frame with
 ** the scroll registers packed into origin. */

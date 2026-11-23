@@ -103,7 +103,6 @@
 #include "romMapperF4device.h"
 #include "romMapperBunsetu.h"
 #include "romMapperTurboRTimer.h"
-#include "romMapperY8960.h"
 #include "romMapperTurboRPcm.h"
 #include "TurboRIO.h"
 #include "romMapperSonyHBI55.h"
@@ -158,7 +157,6 @@
 #include "romMapperOpcodeMegaRam.h"
 #include "romMapperOpcodeSaveRam.h"
 #include "romMapperOpcodeSlotManager.h"
-#include "SlotManager.h"
 #include "romMapperDooly.h"
 #include "romMapperMuPack.h"
 
@@ -435,15 +433,7 @@ static int readMachine(Machine* machine, const char* machineName, const char* fi
         
         if (!machine->isZipped)
         {
-            // Convert the relative path into absolute
-			
-            if (strcasestr(machine->slotInfo[i].name, "Machines/") == machine->slotInfo[i].name ||
-                strcasestr(machine->slotInfo[i].name, "Machines\\") == machine->slotInfo[i].name)
-            {
-                char expandedPath[1024];
-                sprintf(expandedPath, "%s/%s", machinesDir, machine->slotInfo[i].name + 9);
-                strcpy(machine->slotInfo[i].name, expandedPath);
-            }
+            machineExpandPath(machine->slotInfo[i].name, (int)sizeof(machine->slotInfo[i].name));
         }
         else if (*machine->slotInfo[i].name)
         {
@@ -1124,8 +1114,6 @@ int machineInitialize(Machine* machine, UInt8** mainRam, UInt32* mainRamSize, UI
     UInt8* buf;
     int size;
     int i;
-    int deviceSlot    = -1;
-    int deviceSubslot = 0;
 
     // Prioritize 1kB Mirrored ram as main ram (works good with coleco style
     // systems with expansion ram but maybe main ram type should be an arg instead?).
@@ -1244,14 +1232,22 @@ int machineInitialize(Machine* machine, UInt8** mainRam, UInt32* mainRamSize, UI
         startPage = machine->slotInfo[i].startPage;
         size      = 0x2000 * machine->slotInfo[i].pageCount;
 
-        /* The entries leave this body by many continues, so each device is
-        ** ended when the next one begins, and the last after the loop. */
-        if (deviceSlot >= 0) {
-            mixerEndDevice(boardGetMixer(), slotGetRegistrationCount(deviceSlot, deviceSubslot));
+        /* I/O-port devices list a slot they do not occupy. */
+        switch (machine->slotInfo[i].romType) {
+        case ROM_MSXAUDIODEV:
+        case ROM_JOYREXPSG:
+        case ROM_OPCODEPSG:
+        case ROM_TURBORPCM:
+        case ROM_MOONSOUND:
+        case ROM_MSXPRN:
+        case ROM_SVI328PRN:
+        case ROM_SVI328FDC:
+            mixerSetCreateSlot(boardGetMixer(), -1, -1);
+            break;
+        default:
+            mixerSetCreateSlot(boardGetMixer(), slot, subslot);
+            break;
         }
-        deviceSlot    = slot;
-        deviceSubslot = subslot;
-        mixerBeginDevice(boardGetMixer(), slot, subslot, slotGetRegistrationCount(slot, subslot));
 
         if (machine->slotInfo[i].romType == RAM_1KB_MIRRORED) {
             continue;
@@ -1335,41 +1331,6 @@ int machineInitialize(Machine* machine, UInt8** mainRam, UInt32* mainRamSize, UI
             continue;
         }
 
-        if (machine->slotInfo[i].romType == ROM_Y8960OPLLEX) {
-            success &= romMapperY8960OpllexCreate();
-            continue;
-        }
-
-        if (machine->slotInfo[i].romType == ROM_Y8960OPL2EX) {
-            success &= romMapperY8960Opl2exCreate();
-            continue;
-        }
-
-        if (machine->slotInfo[i].romType == ROM_Y8960SSGS) {
-            success &= romMapperY8960SsgsCreate();
-            continue;
-        }
-
-        if (machine->slotInfo[i].romType == ROM_Y8960TIMER) {
-            success &= romMapperY8960TimerCreate();
-            continue;
-        }
-
-        if (machine->slotInfo[i].romType == ROM_Y8960MIXER) {
-            success &= romMapperY8960MixerCreate();
-            continue;
-        }
-
-        if (machine->slotInfo[i].romType == ROM_Y8960OPM) {
-            success &= romMapperY8960OpmCreate();
-            continue;
-        }
-
-        if (machine->slotInfo[i].romType == ROM_Y8960SYSCTRL) {
-            success &= romMapperY8960SysCtrlCreate();
-            continue;
-        }
-
         if (machine->slotInfo[i].romType == ROM_TURBORIO) {
             success &= romMapperTurboRIOCreate();
             continue;
@@ -1411,7 +1372,7 @@ int machineInitialize(Machine* machine, UInt8** mainRam, UInt32* mainRamSize, UI
         }
 
         if (machine->slotInfo[i].romType == ROM_MSXAUDIODEV) {
-            success &= romMapperMsxAudioCreate(NULL, NULL, 0, 0, 0, 0);
+            success &= romMapperMsxAudioCreate(NULL, NULL, 0, -1, 0, 0);
             continue;
         }
 
@@ -1840,10 +1801,6 @@ int machineInitialize(Machine* machine, UInt8** mainRam, UInt32* mainRamSize, UI
             success &= romMapperFMPACCreate(romName, buf, size, slot, subslot, startPage);
             break;
             
-        case ROM_Y8960SCC:
-            success &= romMapperY8960SccCreate(romName, buf, size, slot, subslot, startPage);
-            break;
-
         case ROM_MSXMUSIC:
             success &= romMapperMsxMusicCreate(romName, buf, size, slot, subslot, startPage);
             break;
@@ -1909,7 +1866,10 @@ int machineInitialize(Machine* machine, UInt8** mainRam, UInt32* mainRamSize, UI
             break;
 
         case ROM_SVI707FDC:
-            success &= romMapperSvi707FdcCreate(romName, buf, size, slot, subslot, startPage);
+            if (!romMapperSvi707FdcCreate(romName, buf, size, slot, subslot, startPage)) {
+                boardDeviceFilesFatal(ROM_SVI707FDC);
+                success = 0;
+            }
             break;
 
         case ROM_SVI738FDC:
@@ -1968,7 +1928,10 @@ int machineInitialize(Machine* machine, UInt8** mainRam, UInt32* mainRamSize, UI
                 strcat(charName, "_char.rom");
                     
                 charData = romLoad(charName, NULL, &charSize);
-                success &= romMapperMicrosolVmx80Create(romName, buf, size, 
+                if (charData == NULL) {
+                    boardReportDeviceFile(ROM_MICROSOL80, charName, DEVICE_FILE_MISSING);
+                }
+                success &= romMapperMicrosolVmx80Create(romName, buf, size,
                                                         slot, subslot, startPage,
                                                         charData, charSize);
                 if (charData != NULL) {
@@ -1985,10 +1948,7 @@ int machineInitialize(Machine* machine, UInt8** mainRam, UInt32* mainRamSize, UI
             free(buf);
         }
     }
-
-    if (deviceSlot >= 0) {
-        mixerEndDevice(boardGetMixer(), slotGetRegistrationCount(deviceSlot, deviceSubslot));
-    }
+    mixerSetCreateSlot(boardGetMixer(), -1, -1);
 
     if (jisyoRom != NULL) {
         free(jisyoRom);
@@ -2017,6 +1977,31 @@ void machineSetDirectory(const char* dir)
 const char* machineGetDirectory(void)
 {
     return machinesDir;
+}
+
+void machineExpandPath(char* path, int size)
+{
+    if (strcasestr(path, "Machines/") == path || strcasestr(path, "Machines\\") == path) {
+        char expandedPath[1024];
+        snprintf(expandedPath, sizeof(expandedPath), "%s/%s", machinesDir, path + 9);
+        snprintf(path, size, "%s", expandedPath);
+    }
+}
+
+int machineHasRomType(const char* machineName, RomType romType)
+{
+    Machine* machine = machineCreate(machineName);
+    int found = 0;
+    int i;
+
+    if (machine == NULL) {
+        return 0;
+    }
+    for (i = 0; i < machine->slotInfoCount; i++) {
+        found |= machine->slotInfo[i].romType == romType;
+    }
+    machineDestroy(machine);
+    return found;
 }
 
 MachineLoadReason machineDiagnose(const char* machineName)

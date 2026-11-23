@@ -23,7 +23,9 @@
 #include "ControlSession.h"
 #include "ControlBreak.h"
 #include "ControlStopLog.h"
+#include "DebugTrace.h"
 #include "Emulator.h"
+#include "VdpDebug.h"
 #include <string.h>
 
 static CtrlSession sessions[CTRL_CLIENT_MAX];
@@ -74,8 +76,25 @@ void ctrlSessionClose(CtrlClient client)
             if (sessions[i].hunt != NULL) {
                 ctrlHuntAbandon(sessions[i].hunt);
             }
+            ctrlSessionTraceDrop(&sessions[i], sessions[i].traceMask);
+            if (sessions[i].rasterHeld) {
+                vdpRasterArm(0);
+            }
             memset(&sessions[i], 0, sizeof(CtrlSession));
             return;
         }
     }
+}
+
+UInt32 ctrlSessionTraceDrop(CtrlSession* session, UInt32 mask)
+{
+    mask &= session->traceMask;
+    if (mask != 0) {
+        debugTraceArm(mask, 0);
+        session->traceMask &= ~mask;
+    }
+    if ((session->traceMask & DEBUG_TRACE_BIT(DEBUG_TRACE_IO)) == 0) {
+        debugTracePortsRelease(session->tracePorts);
+    }
+    return mask;
 }

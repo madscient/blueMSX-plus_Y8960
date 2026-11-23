@@ -303,6 +303,9 @@ char* langErrorCreateTapeImage() { return ls->errorCreateTapeImage; }
 char* langErrorNoCasInZip() { return ls->errorNoCasInZip; }
 char* langErrorUnknownFileType() { return ls->errorUnknownFileType; }
 char* langErrorCartV9968WithV9990() { return ls->errorCartV9968WithV9990; }
+char* langErrorCartTwice() { return ls->errorCartTwice; }
+char* langErrorCartBuiltIn() { return ls->errorCartBuiltIn; }
+char* langErrorCartBuiltInRemoved() { return ls->errorCartBuiltInRemoved; }
 char* langErrorDirDiskTooLarge() { return ls->errorDirDiskTooLarge; }
 char* langErrorDirDiskOnline() { return ls->errorDirDiskOnline; }
 char* langErrorDirDiskSubdirs() { return ls->errorDirDiskSubdirs; }
@@ -324,6 +327,8 @@ char* langErrorStartEmuMachinesDirMissing() { return ls->errorStartEmuMachinesDi
 char* langErrorStartEmuMachineNotFound()    { return ls->errorStartEmuMachineNotFound; }
 char* langErrorStartEmuConfigInvalid()      { return ls->errorStartEmuConfigInvalid; }
 char* langErrorMissingFiles() { return ls->errorMissingFiles; }
+char* langErrorSharedRomsFailed() { return ls->errorSharedRomsFailed; }
+char* langErrorFileUnusable() { return ls->errorFileUnusable; }
 char* langErrorFlashInvalid()      { return ls->errorFlashInvalid; }
 char* langErrorFlashSramSize()     { return ls->errorFlashSramSize; }
 char* langErrorFlashUnreadable()   { return ls->errorFlashUnreadable; }
@@ -420,6 +425,8 @@ char* langMenuCartEseRam() { return ls->menuCartEseRam; }
 char* langMenuCartEseSCC() { return ls->menuCartEseSCC; }
 char* langMenuCartMegaFlashRom() { return ls->menuCartMegaFlashRom; }
 char* langMenuCartFlashCart() { return ls->menuCartFlashCart; }
+char* langMenuCartSound() { return ls->menuCartSound; }
+char* langMenuCartVdp() { return ls->menuCartVdp; }
 
 char* langMenuDiskInsertNew() { return ls->menuDiskInsertNew; }
 char* langMenuDiskInsertPhysical() { return ls->menuDiskInsertPhysical; }
@@ -508,15 +515,7 @@ char* langMenuToolsMachine() { return ls->menuToolsMachine; }
 char* langMenuToolsShortcuts() { return ls->menuToolsShortcuts; }
 char* langMenuToolsCtrlEditor() { return ls->menuToolsCtrlEditor; }
 char* langMenuToolsMixer() { return ls->menuToolsMixer; }
-char* langMenuToolsMixerDevices() { return ls->menuToolsMixerDevices; }
-char* langMixerDevicesTitle() { return ls->mixerDevicesTitle; }
-char* langMixerDevicesNone() { return ls->mixerDevicesNone; }
-char* langMixerDevicesEnable() { return ls->mixerDevicesEnable; }
-char* langMixerDevicesVolume() { return ls->mixerDevicesVolume; }
-char* langMixerDevicesPan() { return ls->mixerDevicesPan; }
-char* langMixerDevicesLevel() { return ls->mixerDevicesLevel; }
-char* langMixerDevicesSlot() { return ls->mixerDevicesSlot; }
-char* langMixerDevicesBoard() { return ls->mixerDevicesBoard; }
+char* langMenuToolsMixerDetailed() { return ls->menuToolsMixerDetailed; }
 char* langMenuToolsVdpViewer() { return ls->menuToolsVdpViewer; }
 char* langMenuToolsControlDeck() { return ls->menuToolsControlDeck; }
 char* langMenuToolsLoadMemory() { return ls->menuToolsLoadMemory; }
@@ -1105,7 +1104,6 @@ char* langShortcutShowMachines() { return ls->shortcutShowMachines; }
 char* langShortcutShowShortcuts() { return ls->shortcutShowShortcuts; }
 char* langShortcutShowKeyboard() { return ls->shortcutShowKeyboard; }
 char* langShortcutShowMixer() { return ls->shortcutShowMixer; }
-char* langShortcutShowMixerDevices() { return ls->shortcutShowMixerDevices; }
 char* langShortcutShowDebugger() { return ls->shortcutShowDebugger; }
 char* langShortcutShowTrainer() { return ls->shortcutShowTrainer; }
 char* langShortcutShowHelp() { return ls->shortcutShowHelp; }
@@ -1242,6 +1240,7 @@ char* langRomTypeColecoCart() { return ls->romTypeColecoCart; }
 char* langRomTypeSg1000Cart() { return ls->romTypeSg1000Cart; }
 char* langRomTypeSc3000Cart() { return ls->romTypeSc3000Cart; }
 char* langRomTypeV9968Cart() { return ls->romTypeV9968Cart; }
+char* langRomTypeY8960Cart() { return ls->romTypeY8960Cart; }
 char* langRomTypeTheCastle() { return "SG-1000 The Castle"; }
 char* langRomTypeSonyHbi55() { return "Sony HBI-55"; }
 char* langRomTypeMsxPrinter() { return ls->romTypeMsxPrinter; }

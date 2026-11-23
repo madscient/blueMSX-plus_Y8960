@@ -24,6 +24,7 @@
 extern "C" {
 #include "Emu2413/emu2413.h"
 #include "../Utils/SaveState.h"
+#include "AudioMixer.h"
 }
 #include <cstring>
 
@@ -31,7 +32,7 @@ extern "C" {
 
 Emu2413Backend::Emu2413Backend(const std::string& /*name*/, short volume,
                                const EmuTime& /*time*/)
-    : opll(NULL), maxVolume(volume)
+    : opll(NULL), voices(NULL), voicesActive(false), voicesMetered(false), maxVolume(volume)
 {
     memset(regCache, 0, sizeof(regCache));
     memset(buffer,   0, sizeof(buffer));
@@ -78,9 +79,43 @@ void Emu2413Backend::setInternalVolume(short newVolume)
 ** switches don't rebalance the mixer. */
 #define EMU2413_OUTPUT_RMS_MATCH_DIV 1024
 
+bool Emu2413Backend::setVoices(struct MixerVoices* v, bool active)
+{
+    voices = active ? v : NULL;
+    OPLL_setVoiceHook(opll, voices != NULL ? voiceHook : NULL, this);
+    return true;
+}
+
+/* Called for every chip sample with a copy of the 14 channel outputs. */
+void Emu2413Backend::voiceHook(void* ref, short* chOut, int count)
+{
+    Emu2413Backend* self = (Emu2413Backend*)ref;
+    MixerVoices* voices = self->voices;
+    int i;
+
+    for (i = 0; i < count && i < voices->count; i++) {
+        if (self->voicesActive) {
+            chOut[i] = (short)(((Int64)chOut[i] * voices->gain[i]) >> 12);
+        }
+        if (self->voicesMetered) {
+            mixerMeterVoice(voices, i, chOut[i]);
+        }
+    }
+    if (self->voicesMetered) {
+        voices->samples++;
+    }
+}
+
 int* Emu2413Backend::updateBuffer(int length)
 {
     int* dst = buffer;
+    if (voices != NULL) {
+        voicesActive  = voices->active != 0;
+        voicesMetered = voices->metering != 0;
+        voices->scale = (float)maxVolume / EMU2413_OUTPUT_RMS_MATCH_DIV;
+        /* Rhythm mode takes FM 7-9; without it the rhythm voices are idle. */
+        voices->idle  = opll->rhythm_mode ? 0x1C0u : 0x3E00u;
+    }
     for (int i = 0; i < length; i++) {
         int s = (int)OPLL_calc(opll);
         *(dst++) = s * (int)maxVolume / EMU2413_OUTPUT_RMS_MATCH_DIV;
@@ -193,13 +228,13 @@ void Emu2413Backend::loadState()
 
     if (saveStateGet(sBack, "hasChip", 0)) {
         OPLL* p = opll;
-        p->clk             = saveStateGet(sBack, "clk",             p->clk);
-        p->rate            = saveStateGet(sBack, "rate",            p->rate);
+        /* The clock, rate and steps keep the values this build set up, not
+        ** the file's: the resampler was built for them. out_time must lie
+        ** within one step. */
         p->chip_type       = (uint8_t)saveStateGet(sBack, "chip_type",       p->chip_type);
         p->adr             = saveStateGet(sBack, "adr",             p->adr);
-        saveStateGetBuffer(sBack, "inp_step", &p->inp_step, sizeof(p->inp_step));
-        saveStateGetBuffer(sBack, "out_step", &p->out_step, sizeof(p->out_step));
         saveStateGetBuffer(sBack, "out_time", &p->out_time, sizeof(p->out_time));
+        if (!(p->out_time >= 0 && p->out_time <= p->inp_step)) p->out_time = 0;
         saveStateGetBuffer(sBack, "reg",      p->reg, sizeof(p->reg));
         p->test_flag       = (uint8_t)saveStateGet(sBack, "test_flag",       p->test_flag);
         p->slot_key_status = saveStateGet(sBack, "slot_key_status", p->slot_key_status);
@@ -212,32 +247,37 @@ void Emu2413Backend::loadState()
         p->short_noise     = (uint8_t)saveStateGet(sBack, "short_noise",     p->short_noise);
         saveStateGetBuffer(sBack, "patch_number", p->patch_number, sizeof(p->patch_number));
 
+        /* Values that index tables, count shifts or pick the paired slot are
+        ** cut to what the core can produce: type is the slot parity or 3. */
         for (int i = 0; i < 18; i++) {
             OPLL_SLOT* sl = &p->slot[i];
             sprintf(t, "s%02d_number",  i); sl->number          = (uint8_t) saveStateGet(sBack, t, sl->number);
             sprintf(t, "s%02d_type",    i); sl->type            = (uint8_t) saveStateGet(sBack, t, sl->type);
+            if (sl->type != 3) sl->type = (uint8_t)(i & 1);
             sprintf(t, "s%02d_out0",    i); sl->output[0]       = (int32_t) saveStateGet(sBack, t, (UInt32)sl->output[0]);
             sprintf(t, "s%02d_out1",    i); sl->output[1]       = (int32_t) saveStateGet(sBack, t, (UInt32)sl->output[1]);
             sprintf(t, "s%02d_pgph",    i); sl->pg_phase        = saveStateGet(sBack, t, sl->pg_phase);
             sprintf(t, "s%02d_pgout",   i); sl->pg_out          = saveStateGet(sBack, t, sl->pg_out);
             sprintf(t, "s%02d_pgkeep",  i); sl->pg_keep         = (uint8_t) saveStateGet(sBack, t, sl->pg_keep);
-            sprintf(t, "s%02d_blkfnum", i); sl->blk_fnum        = (uint16_t)saveStateGet(sBack, t, sl->blk_fnum);
+            sprintf(t, "s%02d_blkfnum", i); sl->blk_fnum        = (uint16_t)(saveStateGet(sBack, t, sl->blk_fnum) & 0xfff);
             sprintf(t, "s%02d_fnum",    i); sl->fnum            = (uint16_t)saveStateGet(sBack, t, sl->fnum);
-            sprintf(t, "s%02d_blk",     i); sl->blk             = (uint8_t) saveStateGet(sBack, t, sl->blk);
+            sprintf(t, "s%02d_blk",     i); sl->blk             = (uint8_t) (saveStateGet(sBack, t, sl->blk) & 7);
             sprintf(t, "s%02d_egst",    i); sl->eg_state        = (uint8_t) saveStateGet(sBack, t, sl->eg_state);
-            sprintf(t, "s%02d_vol",     i); sl->volume          = (int32_t) saveStateGet(sBack, t, (UInt32)sl->volume);
+            sprintf(t, "s%02d_vol",     i); sl->volume          = (int32_t) (saveStateGet(sBack, t, (UInt32)sl->volume) & 63);
             sprintf(t, "s%02d_key",     i); sl->key_flag        = (uint8_t) saveStateGet(sBack, t, sl->key_flag);
             sprintf(t, "s%02d_sus",     i); sl->sus_flag        = (uint8_t) saveStateGet(sBack, t, sl->sus_flag);
             sprintf(t, "s%02d_tll",     i); sl->tll             = (uint16_t)saveStateGet(sBack, t, sl->tll);
             sprintf(t, "s%02d_rks",     i); sl->rks             = (uint8_t) saveStateGet(sBack, t, sl->rks);
             sprintf(t, "s%02d_egrh",    i); sl->eg_rate_h       = (uint8_t) saveStateGet(sBack, t, sl->eg_rate_h);
-            sprintf(t, "s%02d_egrl",    i); sl->eg_rate_l       = (uint8_t) saveStateGet(sBack, t, sl->eg_rate_l);
-            sprintf(t, "s%02d_egsh",    i); sl->eg_shift        = saveStateGet(sBack, t, sl->eg_shift);
+            sprintf(t, "s%02d_egrl",    i); sl->eg_rate_l       = (uint8_t) (saveStateGet(sBack, t, sl->eg_rate_l) & 3);
+            sprintf(t, "s%02d_egsh",    i); sl->eg_shift        = saveStateGet(sBack, t, sl->eg_shift) & 15;
             sprintf(t, "s%02d_egout",   i); sl->eg_out          = saveStateGet(sBack, t, sl->eg_out);
             sprintf(t, "s%02d_upd",     i); sl->update_requests = saveStateGet(sBack, t, sl->update_requests);
         }
 
-        saveStateGetBuffer(sBack, "patch",    p->patch,    sizeof(p->patch));
+        /* The voices are not read back: the user voice is rebuilt from its
+        ** registers and the ROM voices are the build's own. */
+        OPLL_dumpToPatch(p->reg, p->patch);
         saveStateGetBuffer(sBack, "pan",      p->pan,      sizeof(p->pan));
         saveStateGetBuffer(sBack, "pan_fine", p->pan_fine, sizeof(p->pan_fine));
         p->mask = saveStateGet(sBack, "mask", p->mask);

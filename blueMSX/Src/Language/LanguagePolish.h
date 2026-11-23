@@ -86,6 +86,9 @@ void langInitPolish(LanguageStrings* ls)
     ls->errorNoCasInZip         = "Nie znaleziono pliku .cas w archiwum zip.";
     ls->errorUnknownFileType    = "Nie można otworzyć pliku: nieznany typ pliku.";
     ls->errorCartV9968WithV9990 = "Kartridża V9968 nie można włożyć razem z GFX9000 ani Video9000, ponieważ oba przejmują obraz. Najpierw wyjmij drugi kartridż.";
+    ls->errorCartTwice          = "Kartridża %s nie można włożyć do obu gniazd jednocześnie, ponieważ oba używałyby tych samych portów I/O. Najpierw wyjmij drugi kartridż.";
+    ls->errorCartBuiltIn        = "Ta maszyna ma wbudowany %s; nie można go włożyć jako kartridża.";
+    ls->errorCartBuiltInRemoved = "Ta maszyna ma wbudowany %s; kartridż został wyjęty.";
     ls->errorDirDiskTooLarge    = "Liczba plików, które nie zmieściły się na dysku i zostały pominięte: %d.";
     ls->errorDirDiskOnline      = "Liczba pominiętych plików dostępnych tylko online: %d. Udostępnij je na tym urządzeniu, aby je uwzględnić.";
     ls->errorDirDiskSubdirs     = "Liczba folderów pominiętych, ponieważ wybrany format ich nie obsługuje: %d.";
@@ -107,6 +110,8 @@ void langInitPolish(LanguageStrings* ls)
     ls->errorStartEmuMachineNotFound     = "Nie znaleziono wybranej konfiguracji maszyny '%s'.";
     ls->errorStartEmuConfigInvalid       = "Nie udało się odczytać pliku config.ini konfiguracji maszyny '%s'. Plik może być uszkodzony lub pochodzić z niekompatybilnej wersji.";
     ls->errorMissingFiles       = "Nie można wczytać następujących plików:";
+    ls->errorSharedRomsFailed   = "Nie można wczytać z Shared Roms:";
+    ls->errorFileUnusable       = " (niezgodna zawartość)";
     ls->errorFlashInvalid       = "Zapis dla %s jest uszkodzony i nie udało się go wczytać.";
     ls->errorFlashSramSize      = "Zapis dla %s ma nieprawidłowy rozmiar i nie udało się go wczytać.";
     ls->errorFlashUnreadable    = "Nie udało się otworzyć zapisu dla %s. Być może używa go inny program.";
@@ -203,6 +208,8 @@ void langInitPolish(LanguageStrings* ls)
     ls->menuCartEseSCC          = "Ese-SCC";             // New in 2.7
     ls->menuCartMegaFlashRom    = "Mega Flash ROM";      // New in 2.7
     ls->menuCartFlashCart       = "Kartridże Flash";
+    ls->menuCartSound           = "Kartridże dźwiękowe";
+    ls->menuCartVdp             = "Kartridże VDP";
 
     ls->menuDiskInsertNew       = "Włóż nowy obraz dysku";              
     ls->menuDiskInsertPhysical  = "Włóż dysk fizyczny";
@@ -292,6 +299,7 @@ void langInitPolish(LanguageStrings* ls)
     ls->menuToolsCtrlEditor     = "Controllers / Keyboard Editor"; // New in 2.6
     ls->menuToolsKeyboard       = "Edytor klawiatury";
     ls->menuToolsMixer          = "Mikser";
+    ls->menuToolsMixerDetailed  = "Mikser szczegółowy";
     ls->menuToolsVdpViewer      = "Podgląd VDP";
     ls->menuToolsControlDeck    = "Sterowanie emulacją";
     ls->menuToolsLoadMemory     = "Wczytaj do pamięci";

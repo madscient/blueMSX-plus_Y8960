@@ -23,6 +23,8 @@
 #ifndef CONTROL_TEXT_H
 #define CONTROL_TEXT_H
 
+#include "MsxTypes.h"
+
 /* Fixed-size text buffer: an append that does not fit is dropped whole and sets full. */
 typedef struct {
     char* data;
@@ -43,8 +45,14 @@ typedef struct {
 CtrlTextMark ctrlTextMark(const CtrlText* text);
 /* Drops what came after the mark, leaving the text as it was there, full or not. */
 void ctrlTextCut(CtrlText* text, CtrlTextMark mark);
+/* Replaces the first character added after the mark, if one was. */
+void ctrlTextSetAt(CtrlText* text, CtrlTextMark mark, char c);
 
 /* The value of a hex digit, 0-15, or -1 when c is none. */
 int  ctrlTextHexDigit(int c);
+
+/* "N bytes", then 16 bytes to a line, hex and ASCII, numbered from first; runs of one
+** repeated byte collapse to one line. */
+void ctrlTextHexDump(CtrlText* text, UInt32 first, const UInt8* data, UInt32 size);
 
 #endif

@@ -49,6 +49,9 @@
 /* The longest "at", in bytes: a long @name with an offset fits. */
 #define CTRL_AT_MAX 255
 
+/* The longest "when" of bp.set, in bytes. */
+#define CTRL_BREAK_WHEN_MAX 255
+
 /* A path in a request, in UTF-8 bytes: MAX_PATH characters at 3 bytes each, and the NUL. */
 #define CTRL_PATH_MAX 1024
 
@@ -66,15 +69,22 @@
 #define CTRL_STACK_COUNT_DEFAULT          16
 #define CTRL_STACK_COUNT_MIN              1
 #define CTRL_STACK_COUNT_MAX              64
+#define CTRL_STACK_HISTORY_DEFAULT        0
+#define CTRL_STACK_HISTORY_MIN            0
+#define CTRL_STACK_HISTORY_MAX            256
 #define CTRL_UNDO_COUNT_DEFAULT           1
 #define CTRL_UNDO_COUNT_MIN               1
 #define CTRL_UNDO_COUNT_MAX               32
 #define CTRL_RUN_COUNT_DEFAULT            1
 #define CTRL_RUN_COUNT_MIN                1
 #define CTRL_RUN_COUNT_MAX                100000
+/* how=frame: each posts a stop, and the stop log holds 256. */
+#define CTRL_RUN_FRAME_COUNT_MAX          100
 #define CTRL_RUN_UNTIL_TIMEOUT_MS_DEFAULT 5000
 #define CTRL_RUN_UNTIL_TIMEOUT_MS_MIN     1
 #define CTRL_RUN_UNTIL_TIMEOUT_MS_MAX     600000
+#define CTRL_BREAK_SKIP_MIN               0
+#define CTRL_BREAK_SKIP_MAX               2147483647
 #define CTRL_WP_PORT_MIN                  0
 #define CTRL_WP_PORT_MAX                  255
 #define CTRL_WP_SIZE_DEFAULT              1
@@ -102,12 +112,20 @@
 #define CTRL_TYPE_GAP_DEFAULT             4
 #define CTRL_TYPE_GAP_MIN                 4
 #define CTRL_TYPE_GAP_MAX                 60
+#define CTRL_TRACE_AFTER_MIN              0
+#define CTRL_TRACE_COUNT_DEFAULT          200
+#define CTRL_TRACE_COUNT_MIN              1
+#define CTRL_TRACE_COUNT_MAX              2000
 
 /* The defaults of the text arguments that have one. */
 #define CTRL_WP_CONDITION_DEFAULT         "any"
+#define CTRL_WP_ON_DEFAULT                "write"
 #define CTRL_HUNT_START_WIDTH_DEFAULT     "u8"
+#define CTRL_TRACE_CLASS_DEFAULT          "geo3d,vdpcmd,vdpreg"
 #define CTRL_KEY_HOW_DEFAULT              "tap"
 #define CTRL_SCREEN_AS_DEFAULT            "auto"
+#define CTRL_VDP_SHOW_DEFAULT             "registers"
+#define CTRL_VDP_CHIP_DEFAULT             "machine"
 
 /* What an argument of each kind must be, after "\"name\" must be ". */
 #define CTRL_TEXT_WANT_INT            "a whole number, as in 16 or \"0x10\""
