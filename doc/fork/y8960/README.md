@@ -35,19 +35,15 @@ Y8960 対応は upstream には存在しない、このフォーク固有の機�
 | `tests/v099test.asm` + `make-v099test.py` | ハードウェアの v0.9.5〜v0.9.9 で変わったポートの読み。System Controller、C1h、PCM_BSY、MSX-TIMER のレジスタと刻み、A2h での SSG2 と本体 PSG。特殊カートリッジに挿す。16KB |
 | `tests/timer100.asm` + `make-timer100.py` | MSX-TIMER の最長のカウント（終端値 255・分解能 7）で、約 100 秒後に割り込みが来るか。VDP のフレーム割り込みを切り、フレームは状態レジスタで数える。実時間で約 2 分かかるので、ほかの試験と分けてある。特殊カートリッジに挿す。16KB |
 | `tests/run-screen.ps1` | 試験 ROM を `/hidden` で走らせ、決めた時刻に画面を撮る。構成が ROM を持つなら `-Rom` は要らない |
-| `tests/check-irq-lines.py` | 割り込みの線（`boardSetInt` のビット）を立てるファイルを全ソースから並べ、フォークのファイルの線が上流のものと重なれば終了コード 1。名前は `Board.h` の表（`BOARD_INT_*`）から読み、表にあって `Board.c` の `BOARD_INT_ALL` に無い名前も 1 で報告する（上流のビルド時の検査はその名前を見ない）。上流を取り込むたびに走らせる（`../README.md` の「上流との関係」）。別の枝の木にも `--src` で向けられる |
+| `tests/check-irq-lines.py` | 割り込みの線（`boardSetInt` のビット）を立てるファイルを全ソースから並べ、フォークのファイルの線が上流のものと重なれば終了コード 1。名前は `Board.h` の表（`BOARD_INT_*`）から読み、表にあって `Board.c` の `BOARD_INT_EACH` に無い 1 ビットの名前も 1 で報告する（上流のビルド時の検査はその名前を見ない）。上流を取り込むたびに走らせる（`../README.md` の「上流との関係」）。別の枝の木にも `--src` で向けられる |
 | `tests/run-dos.ps1` + `dsk-extract.py` + `wav-envelope.py` | MSX-DOS をフォルダから起動し、カード一式を挿してハードウェア側のサンプル曲（`y8960_fm_sample/`）を流して録る。DOS のシステムファイルは手元の起動ディスクから取り出す。録音は 1 秒ごとの大きさで読む |
-| `level/make-tones-rom.py` | openMSX_Y8960 の音量測定の音列（`doc/fork/y8960/level/`）を、Y8960 SCC に挿す ROM にする。音源どうしの音量比を測るための道具で、回帰テストではない |
+| `level/make-tones-rom.py` | openMSX_Y8960 の音量測定の音列（`doc/fork/y8960/level/`）を、カード一式に載せる ROM にする。音源どうしの音量比を測るための道具で、回帰テストではない |
 | `tests/opllex-bank-probe.c` | OPLLEX のコア単体試験（ヘッドレス）。バンクとパン |
 | `tests/opl2ex-probe.cpp` + `opl2ex-host-stub.c` | OPL2EX のコア単体試験（ヘッドレス） |
 | `tests/ssgs-probe.c` + `ssgs-host-stub.c` | SSGS のコア単体試験（ヘッドレス）。配置・音量・パン・GPIO・6 ビットの番号・A2h の読み |
 | `tests/opllex-state-probe.c` | OPLLEX のステートの単体試験（ヘッドレス）。ラッパーのソースを取り込む |
 | `tests/msx-timer-probe.c` + `opl2ex-host-stub.c` | MSX-TIMER の単体試験（ヘッドレス）。分解能を下げたときの終わり |
-| `tests/MSX2+ - C-BIOS + Y8960/` | 8 ブロックを置いた構成。**`y8960bas.rom` が要る** |
-| `tests/MSX2+ - C-BIOS + Y8960 (banktest)/` | 同じ構成で、Y8960 SCC に `banktest.rom` を載せたもの。本体 MSX-MUSIC は外してある |
-| `tests/MSX2+ - C-BIOS + Y8960 (cartridge)/` | Y8960 SCC を**外した**構成。`/rom1 <rom> /romtype1 Y8960SCC` でカートリッジとして挿す |
-| `tests/MSX2+ - C-BIOS + Y8960 (whole cart)/` | Y8960 を**一つも持たない**構成。`/rom1 <rom> /romtype1 Y8960` でカード一式をカートリッジとして挿す。`(banktest)` と突き合わせる相手 |
-| `tests/MSX2 - Y8960 (firmware)/` | 汎用 `MSX2`（MSX BASIC 2.1）に Y8960 の 8 ブロックを載せ、Y8960 SCC に `y8960bas.rom` を載せたもの。**`Machines/Shared Roms/` の BIOS と `y8960bas.rom` が要る** |
+| `tests/MSX2+ - C-BIOS + Y8960 (whole cart)/` | Y8960 を**持たない** C-BIOS の MSX2+。`/rom1 <rom> /romtype1 Y8960` で、試験 ROM をカード一式に載せて挿す。Y8960 の試験はすべてこれで回す（ブロックごとの RomType は無い） |
 | `tests/MSX2+ - C-BIOS + MSX-AUDIO/` | Y8960 を**持たず**、本体に MSX-AUDIO（ROM 無しの Y8950）を置いた構成。`adpcmtest.rom` を素の ROM として挿し、本体の MSX-AUDIO のバックエンドを試す |
 
 コア単体試験のビルド手順は各ファイルの冒頭にある。
@@ -60,23 +56,27 @@ System Controller（識別だけ）は、ハードウェアの v0.9.9 に追随�
 本体内蔵の `MSX2++` は別のハードウェアになるとの回答で、2026-10-17 に撤去した。
 MSX-MIXER だけは実機側が未実装で、入口（値を憶える）までで止まっている。
 
+**Y8960 は blueMSX+ に入り（#152）、2026-11-23 からこの枝のコードは上流と同じである**（`../README.md` の「上流との関係」）。
+ミキサーは上流のもので、ブロックごとの RomType は無い。
+
 **現在地・次の一手・確かめずに残してあることは `implementation-plan.md` §0。**
 セッションをまたぐときはそこを最初に読む。残る未決は同 §9。
 
 **カートリッジ内の音源ブロックは等価回路であって、本体のチップではない。**
-だから本体のコアを共有せず、フォークとして実装している（同 §11 の 2026-09-12 (10)）。
+フォークではそのため本体のコアを共有しなかった（同 §11 の 2026-09-12 (10)）。上流は SCC と OPM を共有のコアで動かす形にした。
 
 **ハードウェア仕様は `hardware-notes.md` だけを見ないこと。**
 写しより新しい情報が `implementation-plan.md` §3.3 にある。
 
 ## テストの回し方
 
-構成フォルダをビルド出力の `Machines/` にコピーし、ROM を置いて起動する。
+構成フォルダをビルド出力の `Machines/` にコピーし、試験 ROM をカード一式に載せて挿す。
 
 ```sh
 DEST=blueMSX/Make/msvc2022/x64/Release/Machines
-cp -r "doc/fork/y8960/tests/MSX2+ - C-BIOS + Y8960 (banktest)" "$DEST/"
-py "doc/fork/y8960/tests/make-banktest.py" <pasmo.exe> "$DEST/MSX2+ - C-BIOS + Y8960 (banktest)/banktest.rom"
+cp -r "doc/fork/y8960/tests/MSX2+ - C-BIOS + Y8960 (whole cart)" "$DEST/"
+py "doc/fork/y8960/tests/make-banktest.py" <pasmo.exe> <dir>/banktest.rom
+powershell -File doc/fork/y8960/tests/run-screen.ps1 -Exe <ビルド出力>/blueMSX+.exe -Rom <dir>/banktest.rom -Shot <dir>/banktest.png -Seconds "16 60"
 ```
 
 `banktest` の画面に出る行のうち、**`OK` / `NG` のものは機械判定**、
@@ -95,7 +95,7 @@ py "doc/fork/y8960/tests/make-banktest.py" <pasmo.exe> "$DEST/MSX2+ - C-BIOS + Y
 画面がスクロールするので、1 から 12 は起動後 16 秒ほど、
 残りは 60 秒ほどで撮る。
 
-`sndtest` はカートリッジ構成に挿して起動し、その間の音を WAV に書き出して判定する。
+`sndtest` はカード一式に載せて挿して起動し、その間の音を WAV に書き出して判定する。
 書き出しの開始と停止はウィンドウへの `WM_COMMAND`（`doc/fork/build/README.md` §5.2）。
 
 `run-sndtest.ps1` が `/hidden` で起動して録音し、WAV を指定の場所に置く。ウィンドウも音も出ない。
@@ -106,24 +106,11 @@ powershell -File doc/fork/y8960/tests/run-sndtest.ps1 -Exe <ビルド出力>/blu
 py "doc/fork/y8960/tests/analyze-sndtest.py" <dir>/sndtest.wav
 ```
 
-カード一式をカートリッジとして挿す経路は、同じ `banktest.rom` を 2 通りに挿して
-突き合わせる。画面は `PrintWindow` で撮って MD5 を比べ、音は `/hidden` で WAV に
-録って 200ms ごとの RMS 包絡を比べる（手順と結果は `implementation-plan.md` §11 の (30)）。
-
-```sh
-cp -r "doc/fork/y8960/tests/MSX2+ - C-BIOS + Y8960 (whole cart)" "$DEST/"
-blueMSX+.exe /machine "MSX2+ - C-BIOS + Y8960 (banktest)"                                    # 対照
-blueMSX+.exe /machine "MSX2+ - C-BIOS + Y8960 (whole cart)" /rom1 <banktest.rom> /romtype1 Y8960
-```
-
-**判別力を見るには `/romtype1 Y8960SCC` で同じ ROM を挿す。** SCC ブロックだけが
-入るので、5-7 と 10 が NG になり、音は全編無音になる。
-
 `adpcmtest` は 2 行を出す。どちらも機械判定で、`/hidden` で回せる。
 
 ```sh
 py "doc/fork/y8960/tests/make-adpcmtest.py" <pasmo.exe> <dir>/adpcmtest.rom
-blueMSX+.exe /machine "MSX2+ - C-BIOS + Y8960 (cartridge)" /rom1 <dir>/adpcmtest.rom /romtype1 Y8960SCC
+powershell -File doc/fork/y8960/tests/run-screen.ps1 -Exe <ビルド出力>/blueMSX+.exe -Rom <dir>/adpcmtest.rom -Shot <dir>/adpcmtest.png
 ```
 
 ```

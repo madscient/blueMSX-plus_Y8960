@@ -2,10 +2,10 @@ param(
     [Parameter(Mandatory = $true)][string]$Exe,     # blueMSX+.exe of the tree under test
     [Parameter(Mandatory = $true)][string]$Rom,     # built by make-sndtest.py
     [Parameter(Mandatory = $true)][string]$Wav,     # where the recording goes
-    [string]$Machine = "MSX2+ - C-BIOS + Y8960 (cartridge)",
-    # Y8960 for the whole card in a machine without the blocks, which is the
-    # only way in where the blocks have no RomType of their own.
-    [string]$RomType = "Y8960SCC",
+    [string]$Machine = "MSX2+ - C-BIOS + Y8960 (whole cart)",
+    # The whole card in a machine without it; the blocks have no RomType of
+    # their own.
+    [string]$RomType = "Y8960",
     [string]$Root = (Join-Path ([IO.Path]::GetTempPath()) "bluemsx-sndtest"),
     [int]$Seconds = 30                              # boot plus the 17 steps
 )
