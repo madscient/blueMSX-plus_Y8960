@@ -8,9 +8,10 @@ boardClearInt (Board.c) drops a bit for everyone, and lets the line go once
 no bit is left. Two devices on one bit therefore lose each other's
 interrupts. Upstream names the bits in one table in Board.h (BOARD_INT_*),
 and Board.c fails the build when two of the names listed in its
-BOARD_INT_ALL overlap. That check sees only the names in that list: a bit
-given as a number, or a name left out of the list, passes it. Run this after
-every merge of upstream.
+BOARD_INT_EACH (earlier BOARD_INT_ALL) overlap. That check sees only the
+names in that list: a bit given as a number, or a name left out of the list,
+passes it. A name for more than one bit is a mask of others, not a line, and
+need not be listed. Run this after every merge of upstream.
 
 A file is the fork's own when <ref> (default upstream/develop) does not have
 it. Bits shared only among upstream's files are listed but do not fail: this
@@ -21,10 +22,12 @@ not show: ym2151.c raises 0x40 for both the SFG cartridges and Yamaha NET,
 and two cartridges of one kind share whatever bit their file raises. Each
 Y8960 block raises its bit in a file of its own, and the card goes in once.
 
-Exit status: 0 when no bit of a fork file is shared and every BOARD_INT_*
-name is in BOARD_INT_ALL, 1 when either fails, 2 when a call could not be
-resolved to a value. For 2, add a rule to PASS_THROUGH rather than skip the
-call: a value read from elsewhere is still a bit someone holds.
+Exit status: 0 when no bit of a fork file is shared and every single-bit
+BOARD_INT_* name is in the build check's list, 1 when either fails, 2 when a
+call could not be resolved to a value. For 2, add a rule to PASS_THROUGH
+rather than skip the call: a value read from elsewhere is still a bit someone
+holds. Only a read of every bit at once, which no one holds, goes in
+READ_ALL.
 """
 import argparse
 import ast
@@ -38,6 +41,11 @@ import sys
 PASS_THROUGH = {
     ("SoundChips/Y8960Opl2Core.h", "mask"): [("SoundChips/Y8960Opl2ex.cpp", "BOARD_INT_Y8960_OPL2EX")],
     ("SoundChips/YM2608.cpp", "ym2608->irqMask"): [("Memory/romMapperMakoto.c", "BOARD_INT_MAKOTO")],
+}
+
+# boardGetInt calls that read every bit, to show them; no bit is held by them.
+READ_ALL = {
+    ("Control/ControlStatus.c", "~(UInt32)0"),
 }
 
 # Where the functions are defined; their argument is the parameter itself.
@@ -166,12 +174,20 @@ def main():
         if table(name) is None:
             unresolved.append((TABLE_FILE, 0, name))
 
-    # Every table name has to be in BOARD_INT_ALL, or the build check skips it.
-    m = re.search(r"#\s*define\s+BOARD_INT_ALL\s*\(\s*op\s*\)(.*?)\n\s*typedef", texts.get(CHECK_FILE, ""), re.S)
-    listed = set(TABLE_NAME.findall(m.group(1))) if m else set()
+    # Every single-bit table name has to be in the build check's list, or the
+    # check skips it. The list is a macro whose lines end in a backslash.
+    check_text = texts.get(CHECK_FILE, "")
+    m = re.search(r"#\s*define\s+(BOARD_INT_EACH|BOARD_INT_ALL)\s*\(\s*\w+\s*\)((?:[^\n]*\\\r?\n)*[^\n]*)", check_text)
+    list_name = m.group(1) if m else "BOARD_INT_EACH"
+    listed = set(TABLE_NAME.findall(m.group(2))) if m else set()
     if not m:
-        print("no BOARD_INT_ALL in %s" % CHECK_FILE)
-    missing = [n for n in table_names if n != "BOARD_INT_ALL" and n not in listed]
+        print("no BOARD_INT_EACH or BOARD_INT_ALL in %s" % CHECK_FILE)
+
+    def single_bit(name):
+        v = table(name)
+        return v is not None and v != 0 and v & (v - 1) == 0
+
+    missing = [n for n in table_names if single_bit(n) and n not in listed]
 
     # The machine's own VDP takes the table's IE bits. A second VDP's owner
     # hands in intBase; the VDP raises it, << 1 and << 2.
@@ -198,6 +214,8 @@ def main():
             continue
         for line, arg in call_args(text):
             for term in arg.split("|"):
+                if (rel, term.strip()) in READ_ALL:
+                    continue
                 term = term.strip().strip("()").strip()
                 found = []
                 v = evaluate(term, lambda n: define(rel, n))
@@ -232,7 +250,7 @@ def main():
         print("0x%08X   %s%s" % (bit, ", ".join(f + ("*" if f in fork else "") for f in files), note))
 
     for name in missing:
-        print("NOT IN BOARD_INT_ALL  %s (%s)" % (name, CHECK_FILE))
+        print("NOT IN %s  %s (%s)" % (list_name, name, CHECK_FILE))
     for rel, line, term in unresolved:
         print("UNRESOLVED  %s:%d  %s" % (rel, line, term))
     if unresolved:

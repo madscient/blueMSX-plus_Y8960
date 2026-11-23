@@ -34,6 +34,14 @@ Int32 mixerRegisterChannelNamed(Mixer* mixer, Int32 audioType, Int32 stereo,
 void mixerUnregisterChannel(Mixer* mixer, Int32 handle) { (void)mixer; (void)handle; }
 void mixerSync(Mixer* mixer) { (void)mixer; }
 
+/* No voice table is left to borrow, so the chip runs without one. */
+MixerVoices* mixerAttachVoices(Mixer* mixer, Int32 handle, Int32 count,
+                               const char* const* names, float scale)
+{
+    (void)mixer; (void)handle; (void)count; (void)names; (void)scale;
+    return 0;
+}
+
 int  debugDeviceRegister(DbgDeviceType type, const char* name, DebugCallbacks* callbacks, void* ref)
 {
     (void)type; (void)name; (void)callbacks; (void)ref;
